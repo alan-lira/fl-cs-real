@@ -24,6 +24,7 @@ class FlowerServerLauncher:
         self._grpc_settings = None
         self._fit_config_settings = None
         self._evaluate_config_settings = None
+        self._output_settings = None
         self._logger = None
         self._server_strategy = None
 
@@ -78,6 +79,9 @@ class FlowerServerLauncher:
         # Parse and set the evaluate_config settings.
         evaluate_config_settings = parse_config_section(config_file, "Evaluate_Config Settings")
         self._set_attribute("_evaluate_config_settings", evaluate_config_settings)
+        # Parse and set the output settings.
+        output_settings = parse_config_section(config_file, "Output Settings")
+        self._set_attribute("_output_settings", output_settings)
 
     def _set_logger(self) -> None:
         # Get the necessary attributes.
@@ -249,6 +253,243 @@ class FlowerServerLauncher:
                      grpc_max_message_length=grpc_max_message_length,
                      certificates=certificates)
 
+    def _generate_selected_fit_clients_history_output_file(self) -> None:
+        # Get the necessary attributes.
+        server_strategy = self.get_attribute("_server_strategy")
+        client_selection_settings = server_strategy.get_attribute("_client_selection_settings")
+        client_selection_approach = client_selection_settings["approach"]
+        selected_fit_clients_history = server_strategy.get_attribute("_selected_fit_clients_history")
+        output_settings = self.get_attribute("_output_settings")
+        remove_output_files = output_settings["remove_output_files"]
+        selected_fit_clients_history_file = Path(output_settings["selected_fit_clients_history_file"])
+        # Remove the history output file (if it exists and if removing is enabled).
+        if remove_output_files:
+            selected_fit_clients_history_file.unlink(missing_ok=True)
+        # Create the parents directories of the output file (if not exist yet).
+        selected_fit_clients_history_file.parent.mkdir(exist_ok=True, parents=True)
+        # Set the header line.
+        selected_fit_clients_history_file_header = "{0},{1},{2},{3}" \
+                                                   .format("comm_round",
+                                                           "client_selection_approach",
+                                                           "selection_duration",
+                                                           "selected_fit_clients")
+        # Write the header line to the output file (if not exist yet).
+        if not selected_fit_clients_history_file.exists():
+            with open(file=selected_fit_clients_history_file, mode="a", encoding="utf-8") as file:
+                header_line = selected_fit_clients_history_file_header + "\n"
+                file.write(header_line)
+        # Write the history data lines to the output file.
+        with open(file=selected_fit_clients_history_file, mode="a", encoding="utf-8") as file:
+            for comm_round, comm_round_selected_fit_metrics_dict in selected_fit_clients_history.items():
+                selection_duration = comm_round_selected_fit_metrics_dict["selection_duration"]
+                selected_fit_clients = comm_round_selected_fit_metrics_dict["selected_fit_clients"]
+                data_line = comm_round + "," + client_selection_approach + "," + str(selection_duration) + "," + \
+                    "|".join(selected_fit_clients) + "\n"
+                file.write(data_line)
+
+    def _generate_selected_evaluate_clients_history_output_file(self) -> None:
+        # Get the necessary attributes.
+        server_strategy = self.get_attribute("_server_strategy")
+        client_selection_settings = server_strategy.get_attribute("_client_selection_settings")
+        client_selection_approach = client_selection_settings["approach"]
+        selected_evaluate_clients_history = server_strategy.get_attribute("_selected_evaluate_clients_history")
+        output_settings = self.get_attribute("_output_settings")
+        remove_output_files = output_settings["remove_output_files"]
+        selected_evaluate_clients_history_file = Path(output_settings["selected_evaluate_clients_history_file"])
+        # Remove the history output file (if it exists and if removing is enabled).
+        if remove_output_files:
+            selected_evaluate_clients_history_file.unlink(missing_ok=True)
+        # Create the parents directories of the output file (if not exist yet).
+        selected_evaluate_clients_history_file.parent.mkdir(exist_ok=True, parents=True)
+        # Set the header line.
+        selected_evaluate_clients_history_file_header = "{0},{1},{2},{3}" \
+                                                        .format("comm_round",
+                                                                "client_selection_approach",
+                                                                "selection_duration",
+                                                                "selected_evaluate_clients")
+        # Write the header line to the output file (if not exist yet).
+        if not selected_evaluate_clients_history_file.is_file():
+            with open(file=selected_evaluate_clients_history_file, mode="a", encoding="utf-8") as file:
+                header_line = selected_evaluate_clients_history_file_header + "\n"
+                file.write(header_line)
+        # Write the history data lines to the output file.
+        with open(file=selected_evaluate_clients_history_file, mode="a", encoding="utf-8") as file:
+            for comm_round, comm_round_selected_evaluate_metrics_dict in selected_evaluate_clients_history.items():
+                selection_duration = comm_round_selected_evaluate_metrics_dict["selection_duration"]
+                selected_evaluate_clients = comm_round_selected_evaluate_metrics_dict["selected_evaluate_clients"]
+                data_line = comm_round + "," + client_selection_approach + "," + str(selection_duration) + "," + \
+                    "|".join(selected_evaluate_clients) + "\n"
+                file.write(data_line)
+
+    def _generate_individual_fit_metrics_history_output_file(self) -> None:
+        # Get the necessary attributes.
+        server_strategy = self.get_attribute("_server_strategy")
+        individual_fit_metrics_history = server_strategy.get_attribute("_individual_fit_metrics_history")
+        output_settings = self.get_attribute("_output_settings")
+        remove_output_files = output_settings["remove_output_files"]
+        individual_fit_metrics_history_file = Path(output_settings["individual_fit_metrics_history_file"])
+        # Remove the history output file (if it exists and if removing is enabled).
+        if remove_output_files:
+            individual_fit_metrics_history_file.unlink(missing_ok=True)
+        # Create the parents directories of the output file (if not exist yet).
+        individual_fit_metrics_history_file.parent.mkdir(exist_ok=True, parents=True)
+        # Get the ordered set of fit metrics.
+        fit_metrics = []
+        for _, comm_round_individual_fit_metrics_list in individual_fit_metrics_history.items():
+            for comm_round_individual_fit_metrics in comm_round_individual_fit_metrics_list:
+                for _, client_fit_metrics in comm_round_individual_fit_metrics.items():
+                    fit_metrics.extend(client_fit_metrics.keys())
+        fit_metrics = sorted(set(fit_metrics))
+        # Set the header line.
+        individual_fit_metrics_history_file_header = "{0},{1},{2}" \
+                                                     .format("comm_round",
+                                                             "client_id",
+                                                             ",".join(fit_metrics))
+        # Write the header line to the output file (if not exist yet).
+        if not individual_fit_metrics_history_file.is_file():
+            with open(file=individual_fit_metrics_history_file, mode="a", encoding="utf-8") as file:
+                header_line = individual_fit_metrics_history_file_header + "\n"
+                file.write(header_line)
+        # Write the history data lines to the output file.
+        with open(file=individual_fit_metrics_history_file, mode="a", encoding="utf-8") as file:
+            for comm_round, comm_round_individual_fit_metrics_list in individual_fit_metrics_history.items():
+                for comm_round_individual_fit_metrics in comm_round_individual_fit_metrics_list:
+                    for client_id, client_fit_metrics in comm_round_individual_fit_metrics.items():
+                        client_fit_metrics_values = []
+                        for fit_metric in fit_metrics:
+                            fit_metric_value = "N/A"
+                            if fit_metric in client_fit_metrics:
+                                fit_metric_value = str(client_fit_metrics[fit_metric])
+                            client_fit_metrics_values.append(fit_metric_value)
+                        data_line = comm_round + "," + client_id + "," + ",".join(client_fit_metrics_values) + "\n"
+                        file.write(data_line)
+
+    def _generate_aggregated_fit_metrics_history_output_file(self) -> None:
+        # Get the necessary attributes.
+        server_strategy = self.get_attribute("_server_strategy")
+        metrics_aggregation_settings = server_strategy.get_attribute("_metrics_aggregation_settings")
+        metrics_aggregation_approach = metrics_aggregation_settings["approach"]
+        aggregated_fit_metrics_history = server_strategy.get_attribute("_aggregated_fit_metrics_history")
+        output_settings = self.get_attribute("_output_settings")
+        remove_output_files = output_settings["remove_output_files"]
+        aggregated_fit_metrics_history_file = Path(output_settings["aggregated_fit_metrics_history_file"])
+        # Remove the history output file (if it exists and if removing is enabled).
+        if remove_output_files:
+            aggregated_fit_metrics_history_file.unlink(missing_ok=True)
+        # Create the parents directories of the output file (if not exist yet).
+        aggregated_fit_metrics_history_file.parent.mkdir(exist_ok=True, parents=True)
+        # Get the ordered set of fit metrics.
+        fit_metrics = []
+        for _, comm_round_aggregated_fit_metrics in aggregated_fit_metrics_history.items():
+            fit_metrics.extend(comm_round_aggregated_fit_metrics.keys())
+        fit_metrics = sorted(set(fit_metrics))
+        # Set the header line.
+        aggregated_fit_metrics_history_file_header = "{0},{1},{2}" \
+                                                     .format("comm_round",
+                                                             "metrics_aggregation_approach",
+                                                             ",".join(fit_metrics))
+        # Write the header line to the output file (if not exist yet).
+        if not aggregated_fit_metrics_history_file.is_file():
+            with open(file=aggregated_fit_metrics_history_file, mode="a", encoding="utf-8") as file:
+                header_line = aggregated_fit_metrics_history_file_header + "\n"
+                file.write(header_line)
+        # Write the history data lines to the output file.
+        with open(file=aggregated_fit_metrics_history_file, mode="a", encoding="utf-8") as file:
+            for comm_round, comm_round_aggregated_fit_metrics in aggregated_fit_metrics_history.items():
+                fit_metrics_values = []
+                for fit_metric in fit_metrics:
+                    fit_metric_value = "N/A"
+                    if fit_metric in comm_round_aggregated_fit_metrics:
+                        fit_metric_value = str(comm_round_aggregated_fit_metrics[fit_metric])
+                    fit_metrics_values.append(fit_metric_value)
+                data_line = comm_round + "," + metrics_aggregation_approach + "," + ",".join(fit_metrics_values) + "\n"
+                file.write(data_line)
+
+    def _generate_individual_evaluate_metrics_history_output_file(self) -> None:
+        # Get the necessary attributes.
+        server_strategy = self.get_attribute("_server_strategy")
+        individual_evaluate_metrics_history = server_strategy.get_attribute("_individual_evaluate_metrics_history")
+        output_settings = self.get_attribute("_output_settings")
+        remove_output_files = output_settings["remove_output_files"]
+        individual_evaluate_metrics_history_file = Path(output_settings["individual_evaluate_metrics_history_file"])
+        # Remove the history output file (if it exists and if removing is enabled).
+        if remove_output_files:
+            individual_evaluate_metrics_history_file.unlink(missing_ok=True)
+        # Create the parents directories of the output file (if not exist yet).
+        individual_evaluate_metrics_history_file.parent.mkdir(exist_ok=True, parents=True)
+        # Get the ordered set of evaluate metrics.
+        evaluate_metrics = []
+        for _, comm_round_individual_evaluate_metrics_list in individual_evaluate_metrics_history.items():
+            for comm_round_individual_evaluate_metrics in comm_round_individual_evaluate_metrics_list:
+                for _, client_evaluate_metrics in comm_round_individual_evaluate_metrics.items():
+                    evaluate_metrics.extend(client_evaluate_metrics.keys())
+        evaluate_metrics = sorted(set(evaluate_metrics))
+        # Set the header line.
+        individual_evaluate_metrics_history_file_header = "{0},{1},{2}" \
+                                                          .format("comm_round",
+                                                                  "client_id",
+                                                                  ",".join(evaluate_metrics))
+        # Write the header line to the output file (if not exist yet).
+        if not individual_evaluate_metrics_history_file.is_file():
+            with open(file=individual_evaluate_metrics_history_file, mode="a", encoding="utf-8") as file:
+                header_line = individual_evaluate_metrics_history_file_header + "\n"
+                file.write(header_line)
+        # Write the history data lines to the output file.
+        with open(file=individual_evaluate_metrics_history_file, mode="a", encoding="utf-8") as file:
+            for comm_round, comm_round_individual_evaluate_metrics_list in individual_evaluate_metrics_history.items():
+                for comm_round_individual_evaluate_metrics in comm_round_individual_evaluate_metrics_list:
+                    for client_id, client_evaluate_metrics in comm_round_individual_evaluate_metrics.items():
+                        client_evaluate_metrics_values = []
+                        for evaluate_metric in evaluate_metrics:
+                            evaluate_metric_value = "N/A"
+                            if evaluate_metric in client_evaluate_metrics:
+                                evaluate_metric_value = str(client_evaluate_metrics[evaluate_metric])
+                            client_evaluate_metrics_values.append(evaluate_metric_value)
+                        data_line = comm_round + "," + client_id + "," + ",".join(client_evaluate_metrics_values) + "\n"
+                        file.write(data_line)
+
+    def _generate_aggregated_evaluate_metrics_history_output_file(self) -> None:
+        # Get the necessary attributes.
+        server_strategy = self.get_attribute("_server_strategy")
+        metrics_aggregation_settings = server_strategy.get_attribute("_metrics_aggregation_settings")
+        metrics_aggregation_approach = metrics_aggregation_settings["approach"]
+        aggregated_evaluate_metrics_history = server_strategy.get_attribute("_aggregated_evaluate_metrics_history")
+        output_settings = self.get_attribute("_output_settings")
+        remove_output_files = output_settings["remove_output_files"]
+        aggregated_evaluate_metrics_history_file = Path(output_settings["aggregated_evaluate_metrics_history_file"])
+        # Remove the history output file (if it exists and if removing is enabled).
+        if remove_output_files:
+            aggregated_evaluate_metrics_history_file.unlink(missing_ok=True)
+        # Create the parents directories of the output file (if not exist yet).
+        aggregated_evaluate_metrics_history_file.parent.mkdir(exist_ok=True, parents=True)
+        # Get the ordered set of evaluate metrics.
+        evaluate_metrics = []
+        for _, comm_round_aggregated_evaluate_metrics in aggregated_evaluate_metrics_history.items():
+            evaluate_metrics.extend(comm_round_aggregated_evaluate_metrics.keys())
+        evaluate_metrics = sorted(set(evaluate_metrics))
+        # Set the header line.
+        aggregated_evaluate_metrics_history_file_header = "{0},{1},{2}" \
+                                                          .format("comm_round",
+                                                                  "metrics_aggregation_approach",
+                                                                  ",".join(evaluate_metrics))
+        # Write the header line to the output file (if not exist yet).
+        if not aggregated_evaluate_metrics_history_file.is_file():
+            with open(file=aggregated_evaluate_metrics_history_file, mode="a", encoding="utf-8") as file:
+                header_line = aggregated_evaluate_metrics_history_file_header + "\n"
+                file.write(header_line)
+        # Write the history data lines to the output file.
+        with open(file=aggregated_evaluate_metrics_history_file, mode="a", encoding="utf-8") as file:
+            for comm_round, comm_round_aggregated_evaluate_metrics in aggregated_evaluate_metrics_history.items():
+                evaluate_metrics_values = []
+                for evaluate_metric in evaluate_metrics:
+                    evaluate_metric_value = "N/A"
+                    if evaluate_metric in comm_round_aggregated_evaluate_metrics:
+                        evaluate_metric_value = str(comm_round_aggregated_evaluate_metrics[evaluate_metric])
+                    evaluate_metrics_values.append(evaluate_metric_value)
+                data_line = \
+                    comm_round + "," + metrics_aggregation_approach + "," + ",".join(evaluate_metrics_values) + "\n"
+                file.write(data_line)
+
     def launch_server(self) -> None:
         # Parse the settings.
         self._parse_settings()
@@ -283,19 +524,17 @@ class FlowerServerLauncher:
                                   flower_server_config,
                                   max_message_length_in_bytes,
                                   ssl_certificates)
-        # Get the server strategy.
-        server_strategy = self.get_attribute("_server_strategy")
-        selected_fit_clients_history = server_strategy.get_attribute("_selected_fit_clients_history")
-        selected_evaluate_clients_history = server_strategy.get_attribute("_selected_evaluate_clients_history")
-        individual_fit_metrics_history = server_strategy.get_attribute("_individual_fit_metrics_history")
-        aggregated_fit_metrics_history = server_strategy.get_attribute("_aggregated_fit_metrics_history")
-        individual_evaluate_metrics_history = server_strategy.get_attribute("_individual_evaluate_metrics_history")
-        aggregated_evaluate_metrics_history = server_strategy.get_attribute("_aggregated_evaluate_metrics_history")
-        print("Selected training clients history:\n{0}".format(selected_fit_clients_history))
-        print("Selected testing clients history:\n{0}".format(selected_evaluate_clients_history))
-        print("Individual training metrics history:\n{0}".format(individual_fit_metrics_history))
-        print("Aggregated training metrics history:\n{0}".format(aggregated_fit_metrics_history))
-        print("Individual testing metrics history:\n{0}".format(individual_evaluate_metrics_history))
-        print("Aggregated testing metrics history:\n{0}".format(aggregated_evaluate_metrics_history))
+        # Generate the output file for the selected fit clients' history.
+        self._generate_selected_fit_clients_history_output_file()
+        # Generate the output file for the selected evaluate clients' history.
+        self._generate_selected_evaluate_clients_history_output_file()
+        # Generate the output file for the individual fit metrics history.
+        self._generate_individual_fit_metrics_history_output_file()
+        # Generate the output file for the aggregated fit metrics history.
+        self._generate_aggregated_fit_metrics_history_output_file()
+        # Generate the output file for the individual evaluate metrics history.
+        self._generate_individual_evaluate_metrics_history_output_file()
+        # Generate the output file for the aggregated evaluate metrics history.
+        self._generate_aggregated_evaluate_metrics_history_output_file()
         # End.
         exit(0)

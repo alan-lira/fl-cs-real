@@ -1,14 +1,17 @@
+from copy import deepcopy
 from logging import Logger
+from time import perf_counter
 from typing import Dict, List, Optional, Tuple, Union
 
-from client_selection_approaches.flower.ecmtc import select_clients_using_ecmtc
-from client_selection_approaches.flower.mec import select_clients_using_mec
-from client_selection_approaches.flower.random import select_clients_randomly
 from flwr.common import EvaluateIns, EvaluateRes, FitIns, FitRes, GetPropertiesIns, Metrics, NDArrays, Parameters, \
     parameters_to_ndarrays, Scalar
 from flwr.server.client_manager import ClientManager
 from flwr.server.client_proxy import ClientProxy
 from flwr.server.strategy.strategy import Strategy
+
+from client_selection_approaches.flower.ecmtc import select_clients_using_ecmtc
+from client_selection_approaches.flower.mec import select_clients_using_mec
+from client_selection_approaches.flower.random import select_clients_randomly
 from metrics_aggregation_approaches.flower.weighted_average import aggregate_loss_by_weighted_average, \
     aggregate_metrics_by_weighted_average
 from model_aggregation_approaches.flower.weighted_average import aggregate_parameters_by_weighted_average
@@ -42,7 +45,6 @@ class FlowerGOFFLSServer(Strategy):
         self._evaluate_config = evaluate_config
         self._initial_parameters = initial_parameters
         self._logger = logger
-        self._comm_round = 0
         self._selected_fit_clients_history = {}
         self._selected_evaluate_clients_history = {}
         self._individual_fit_metrics_history = {}
@@ -74,11 +76,8 @@ class FlowerGOFFLSServer(Strategy):
                            comm_round: int) -> Optional[dict]:
         """Updates the training configuration (fit_config) that will be sent to clients.
         \nCalled by Flower prior to each training phase."""
-        # Update the current communication round value (necessary workaround on Flower).
-        self._set_attribute("_comm_round", comm_round)
         # Get the necessary attributes.
         server_id = self.get_attribute("_server_id")
-        comm_round = self.get_attribute("_comm_round")
         logger = self.get_attribute("_logger")
         # Get the training configuration.
         fit_config = self.get_attribute("_fit_config")
@@ -101,28 +100,33 @@ class FlowerGOFFLSServer(Strategy):
     def _map_available_clients(available_clients: dict) -> dict:
         available_clients_map = {}
         for _, client_proxy in available_clients.items():
-            gpi = GetPropertiesIns({"client_id": "?"})
-            client_prompted_properties = client_proxy.get_properties(gpi, timeout=9999)
-            client_id = client_prompted_properties.properties["client_id"]
+            client_id_property = "client_id"
+            gpi = GetPropertiesIns({client_id_property: "?"})
+            client_prompted = client_proxy.get_properties(gpi, timeout=9999)
+            client_id = client_prompted.properties[client_id_property]
             available_clients_map.update({"client_{0}".format(client_id): client_proxy})
         return available_clients_map
 
     def _update_selected_fit_clients_history(self,
                                              comm_round: int,
                                              available_fit_clients_map: dict,
-                                             selected_fit_clients: list[ClientProxy]) -> None:
+                                             selection_duration: float,
+                                             selected_fit_clients: list) -> None:
         selected_fit_clients_history = self.get_attribute("_selected_fit_clients_history")
         available_fit_clients_map_keys = list(available_fit_clients_map.keys())
         available_fit_clients_map_values = list(available_fit_clients_map.values())
         for selected_fit_client in selected_fit_clients:
-            client_index = available_fit_clients_map_values.index(selected_fit_client)
+            client_proxy = selected_fit_client["client_proxy"]
+            client_index = available_fit_clients_map_values.index(client_proxy)
             client_id_str = available_fit_clients_map_keys[client_index]
             comm_round_key = "comm_round_{0}".format(comm_round)
             if comm_round_key not in selected_fit_clients_history:
-                comm_round_individual_fit_metrics_dict = {comm_round_key: [client_id_str]}
-                selected_fit_clients_history.update(comm_round_individual_fit_metrics_dict)
+                comm_round_selected_fit_metrics_dict = {comm_round_key:
+                                                        {"selection_duration": selection_duration,
+                                                         "selected_fit_clients": [client_id_str]}}
+                selected_fit_clients_history.update(comm_round_selected_fit_metrics_dict)
             else:
-                selected_fit_clients_history[comm_round_key].append(client_id_str)
+                selected_fit_clients_history[comm_round_key]["selected_fit_clients"].append(client_id_str)
         self._set_attribute("_selected_fit_clients_history", selected_fit_clients_history)
 
     def configure_fit(self,
@@ -140,9 +144,6 @@ class FlowerGOFFLSServer(Strategy):
             return []
         # Set the base training configuration (fit_config).
         fit_config = self._update_fit_config(server_round)
-        # Set the base training instructions (fit_instructions), which is formed by: 1) the current model
-        # parameters and 2) the training configuration just set.
-        fit_instructions = FitIns(parameters, fit_config)
         # Initialize the list of the selected clients for training (selected_fit_clients).
         selected_fit_clients = []
         # Get the available fit clients.
@@ -151,42 +152,71 @@ class FlowerGOFFLSServer(Strategy):
         num_available_fit_clients = len(available_fit_clients)
         # Map the available fit clients.
         available_fit_clients_map = self._map_available_clients(available_fit_clients)
+        # Start the clients selection duration timer.
+        selection_duration_start = perf_counter()
         if client_selection_approach == "Random":
             # Select clients for training randomly.
             min_available_clients = client_selection_settings["min_available_clients"]
-            fraction_fit = client_selection_settings["fraction_fit"]
+            fit_clients_fraction = client_selection_settings["fit_clients_fraction"]
             selected_fit_clients = select_clients_randomly(client_manager,
                                                            num_available_fit_clients,
                                                            min_available_clients,
-                                                           fraction_fit)
+                                                           fit_clients_fraction)
         elif client_selection_approach == "MEC":
             # Select clients using the MEC algorithm.
             phase = "train"
-            num_tasks_fit = client_selection_settings["num_tasks_fit"]
+            num_fit_tasks = client_selection_settings["num_fit_tasks"]
+            allow_complementary_clients_random_selection \
+                = client_selection_settings["allow_complementary_clients_random_selection"]
+            complementary_fit_tasks_fraction = client_selection_settings["complementary_fit_tasks_fraction"]
+            complementary_fit_clients_fraction = client_selection_settings["complementary_fit_clients_fraction"]
             individual_fit_metrics_history = self.get_attribute("_individual_fit_metrics_history")
             selected_fit_clients = select_clients_using_mec(server_round,
                                                             phase,
-                                                            num_tasks_fit,
+                                                            num_fit_tasks,
+                                                            allow_complementary_clients_random_selection,
+                                                            complementary_fit_tasks_fraction,
+                                                            complementary_fit_clients_fraction,
                                                             available_fit_clients_map,
                                                             individual_fit_metrics_history)
         elif client_selection_approach == "ECMTC":
             # Select clients using the ECMTC algorithm.
             phase = "train"
-            num_tasks_fit = client_selection_settings["num_tasks_fit"]
-            deadline_fit = client_selection_settings["deadline_fit"]
+            num_fit_tasks = client_selection_settings["num_fit_tasks"]
+            fit_deadline = client_selection_settings["fit_deadline"]
+            allow_complementary_clients_random_selection \
+                = client_selection_settings["allow_complementary_clients_random_selection"]
+            complementary_fit_tasks_fraction = client_selection_settings["complementary_fit_tasks_fraction"]
+            complementary_fit_clients_fraction = client_selection_settings["complementary_fit_clients_fraction"]
             individual_fit_metrics_history = self.get_attribute("_individual_fit_metrics_history")
             selected_fit_clients = select_clients_using_ecmtc(server_round,
                                                               phase,
-                                                              num_tasks_fit,
-                                                              deadline_fit,
+                                                              num_fit_tasks,
+                                                              fit_deadline,
+                                                              allow_complementary_clients_random_selection,
+                                                              complementary_fit_tasks_fraction,
+                                                              complementary_fit_clients_fraction,
                                                               available_fit_clients_map,
                                                               individual_fit_metrics_history)
+        # Get the clients selection duration.
+        selection_duration = perf_counter() - selection_duration_start
         # Update the history of selected clients for training (selected_fit_clients).
         self._update_selected_fit_clients_history(server_round,
                                                   available_fit_clients_map,
+                                                  selection_duration,
                                                   selected_fit_clients)
-        # Return the list of (fit_client, fit_instructions) pairs.
-        return [(fit_client, fit_instructions) for fit_client in selected_fit_clients]
+        # Set the list of (fit_client_proxy, fit_client_instructions) pairs.
+        fit_pairs = []
+        for selected_fit_client in selected_fit_clients:
+            selected_fit_client_proxy = selected_fit_client["client_proxy"]
+            selected_fit_client_config = deepcopy(fit_config)
+            if "client_num_tasks" in selected_fit_client:
+                num_training_examples = selected_fit_client["client_num_tasks"]
+                selected_fit_client_config.update({"num_training_examples": num_training_examples})
+            selected_fit_client_instructions = FitIns(parameters, selected_fit_client_config)
+            fit_pairs.append((selected_fit_client_proxy, selected_fit_client_instructions))
+        # Return the list of (fit_client_proxy, fit_client_instructions) pairs.
+        return fit_pairs
 
     def _update_individual_fit_metrics_history(self,
                                                comm_round: int,
@@ -226,6 +256,7 @@ class FlowerGOFFLSServer(Strategy):
         self._set_attribute("_aggregated_fit_metrics_history", aggregated_fit_metrics_history)
 
     def _aggregate_fit_metrics(self,
+                               comm_round: int,
                                fit_metrics: list[tuple[int, Metrics]]) -> Optional[Metrics]:
         """Aggregates the training metrics (fit_metrics).
         \nCalled by Flower after each training phase."""
@@ -233,7 +264,6 @@ class FlowerGOFFLSServer(Strategy):
         metrics_aggregation_settings = self.get_attribute("_metrics_aggregation_settings")
         metrics_aggregation_approach = metrics_aggregation_settings["approach"]
         server_id = self.get_attribute("_server_id")
-        comm_round = self.get_attribute("_comm_round")
         logger = self.get_attribute("_logger")
         # Update the individual training metrics history.
         self._update_individual_fit_metrics_history(comm_round, fit_metrics)
@@ -278,9 +308,9 @@ class FlowerGOFFLSServer(Strategy):
             # Aggregate the model parameters by weighted average.
             inplace_aggregation = model_aggregation_settings["inplace_aggregation"]
             aggregated_model_parameters = aggregate_parameters_by_weighted_average(results, inplace_aggregation)
-        # Set the aggregated training metrics.
+        # Aggregate the training metrics.
         fit_metrics = [(result.num_examples, result.metrics) for _, result in results]
-        aggregated_fit_metrics = self._aggregate_fit_metrics(fit_metrics)
+        aggregated_fit_metrics = self._aggregate_fit_metrics(server_round, fit_metrics)
         # Return the aggregated model parameters and aggregated training metrics.
         return aggregated_model_parameters, aggregated_fit_metrics
 
@@ -288,11 +318,8 @@ class FlowerGOFFLSServer(Strategy):
                                 comm_round: int) -> Optional[dict]:
         """Updates the testing configuration (evaluate_config) that will be sent to clients.
         \nCalled by Flower prior to each testing phase."""
-        # Update the current communication round value (necessary workaround on Flower).
-        self._set_attribute("_comm_round", comm_round)
         # Get the necessary attributes.
         server_id = self.get_attribute("_server_id")
-        comm_round = self.get_attribute("_comm_round")
         logger = self.get_attribute("_logger")
         # Get the testing configuration.
         evaluate_config = self.get_attribute("_evaluate_config")
@@ -314,19 +341,23 @@ class FlowerGOFFLSServer(Strategy):
     def _update_selected_evaluate_clients_history(self,
                                                   comm_round: int,
                                                   available_evaluate_clients_map: dict,
-                                                  selected_evaluate_clients: list[ClientProxy]) -> None:
+                                                  selection_duration: float,
+                                                  selected_evaluate_clients: list) -> None:
         selected_evaluate_clients_history = self.get_attribute("_selected_evaluate_clients_history")
         available_evaluate_clients_map_keys = list(available_evaluate_clients_map.keys())
         available_evaluate_clients_map_values = list(available_evaluate_clients_map.values())
         for selected_evaluate_client in selected_evaluate_clients:
-            client_index = available_evaluate_clients_map_values.index(selected_evaluate_client)
+            client_proxy = selected_evaluate_client["client_proxy"]
+            client_index = available_evaluate_clients_map_values.index(client_proxy)
             client_id_str = available_evaluate_clients_map_keys[client_index]
             comm_round_key = "comm_round_{0}".format(comm_round)
             if comm_round_key not in selected_evaluate_clients_history:
-                comm_round_individual_evaluate_metrics_dict = {comm_round_key: [client_id_str]}
-                selected_evaluate_clients_history.update(comm_round_individual_evaluate_metrics_dict)
+                comm_round_selected_evaluate_metrics_dict = {comm_round_key:
+                                                             {"selection_duration": selection_duration,
+                                                              "selected_evaluate_clients": [client_id_str]}}
+                selected_evaluate_clients_history.update(comm_round_selected_evaluate_metrics_dict)
             else:
-                selected_evaluate_clients_history[comm_round_key].append(client_id_str)
+                selected_evaluate_clients_history[comm_round_key]["selected_evaluate_clients"].append(client_id_str)
         self._set_attribute("_selected_evaluate_clients_history", selected_evaluate_clients_history)
 
     def configure_evaluate(self,
@@ -344,9 +375,6 @@ class FlowerGOFFLSServer(Strategy):
             return []
         # Set the base testing configuration (evaluate_config).
         evaluate_config = self._update_evaluate_config(server_round)
-        # Set the base testing instructions (evaluate_instructions), which is formed by: 1) the current model
-        # parameters and 2) the testing configuration just set.
-        evaluate_instructions = EvaluateIns(parameters, evaluate_config)
         # Initialize the list of the selected clients for testing (selected_evaluate_clients).
         selected_evaluate_clients = []
         # Get the available evaluate clients.
@@ -355,42 +383,73 @@ class FlowerGOFFLSServer(Strategy):
         num_available_evaluate_clients = len(available_evaluate_clients)
         # Map the available evaluate clients.
         available_evaluate_clients_map = self._map_available_clients(available_evaluate_clients)
+        # Start the clients selection duration timer.
+        selection_duration_start = perf_counter()
         if client_selection_approach == "Random":
             # Select clients for testing randomly.
             min_available_clients = client_selection_settings["min_available_clients"]
-            fraction_evaluate = client_selection_settings["fraction_evaluate"]
+            evaluate_clients_fraction = client_selection_settings["evaluate_clients_fraction"]
             selected_evaluate_clients = select_clients_randomly(client_manager,
                                                                 num_available_evaluate_clients,
                                                                 min_available_clients,
-                                                                fraction_evaluate)
+                                                                evaluate_clients_fraction)
         elif client_selection_approach == "MEC":
             # Select clients using the MEC algorithm.
             phase = "test"
-            num_tasks_evaluate = client_selection_settings["num_tasks_evaluate"]
+            num_evaluate_tasks = client_selection_settings["num_evaluate_tasks"]
+            allow_complementary_clients_random_selection \
+                = client_selection_settings["allow_complementary_clients_random_selection"]
+            complementary_evaluate_tasks_fraction = client_selection_settings["complementary_evaluate_tasks_fraction"]
+            complementary_evaluate_clients_fraction \
+                = client_selection_settings["complementary_evaluate_clients_fraction"]
             individual_evaluate_metrics_history = self.get_attribute("_individual_evaluate_metrics_history")
             selected_evaluate_clients = select_clients_using_mec(server_round,
                                                                  phase,
-                                                                 num_tasks_evaluate,
+                                                                 num_evaluate_tasks,
+                                                                 allow_complementary_clients_random_selection,
+                                                                 complementary_evaluate_tasks_fraction,
+                                                                 complementary_evaluate_clients_fraction,
                                                                  available_evaluate_clients_map,
                                                                  individual_evaluate_metrics_history)
         elif client_selection_approach == "ECMTC":
             # Select clients using the ECMTC algorithm.
             phase = "test"
-            num_tasks_evaluate = client_selection_settings["num_tasks_evaluate"]
-            deadline_evaluate = client_selection_settings["deadline_evaluate"]
+            num_evaluate_tasks = client_selection_settings["num_evaluate_tasks"]
+            evaluate_deadline = client_selection_settings["evaluate_deadline"]
+            allow_complementary_clients_random_selection \
+                = client_selection_settings["allow_complementary_clients_random_selection"]
+            complementary_evaluate_tasks_fraction = client_selection_settings["complementary_evaluate_tasks_fraction"]
+            complementary_evaluate_clients_fraction \
+                = client_selection_settings["complementary_evaluate_clients_fraction"]
             individual_evaluate_metrics_history = self.get_attribute("_individual_evaluate_metrics_history")
             selected_evaluate_clients = select_clients_using_ecmtc(server_round,
                                                                    phase,
-                                                                   num_tasks_evaluate,
-                                                                   deadline_evaluate,
+                                                                   num_evaluate_tasks,
+                                                                   evaluate_deadline,
+                                                                   allow_complementary_clients_random_selection,
+                                                                   complementary_evaluate_tasks_fraction,
+                                                                   complementary_evaluate_clients_fraction,
                                                                    available_evaluate_clients_map,
                                                                    individual_evaluate_metrics_history)
+        # Get the clients selection duration.
+        selection_duration = perf_counter() - selection_duration_start
         # Update the history of selected clients for testing (selected_evaluate_clients).
         self._update_selected_evaluate_clients_history(server_round,
                                                        available_evaluate_clients_map,
+                                                       selection_duration,
                                                        selected_evaluate_clients)
-        # Return the list of (evaluate_client, evaluate_instructions) pairs.
-        return [(evaluate_client, evaluate_instructions) for evaluate_client in selected_evaluate_clients]
+        # Set the list of (evaluate_client_proxy, evaluate_client_instructions) pairs.
+        evaluate_pairs = []
+        for selected_evaluate_client in selected_evaluate_clients:
+            selected_evaluate_client_proxy = selected_evaluate_client["client_proxy"]
+            selected_evaluate_client_config = deepcopy(evaluate_config)
+            if "client_num_tasks" in selected_evaluate_client:
+                num_testing_examples = selected_evaluate_client["client_num_tasks"]
+                selected_evaluate_client_config.update({"num_testing_examples": num_testing_examples})
+            selected_evaluate_client_instructions = EvaluateIns(parameters, selected_evaluate_client_config)
+            evaluate_pairs.append((selected_evaluate_client_proxy, selected_evaluate_client_instructions))
+        # Return the list of (evaluate_client_proxy, evaluate_client_instructions) pairs.
+        return evaluate_pairs
 
     def _update_individual_evaluate_metrics_history(self,
                                                     comm_round: int,
@@ -420,6 +479,7 @@ class FlowerGOFFLSServer(Strategy):
         self._set_attribute("_aggregated_evaluate_metrics_history", aggregated_evaluate_metrics_history)
 
     def _aggregate_evaluate_metrics(self,
+                                    comm_round: int,
                                     evaluate_metrics: list[tuple[int, Metrics]]) -> Optional[Metrics]:
         """Aggregates the testing metrics (evaluate_metrics).
         \nCalled by Flower after each testing phase."""
@@ -427,7 +487,6 @@ class FlowerGOFFLSServer(Strategy):
         metrics_aggregation_settings = self.get_attribute("_metrics_aggregation_settings")
         metrics_aggregation_approach = metrics_aggregation_settings["approach"]
         server_id = self.get_attribute("_server_id")
-        comm_round = self.get_attribute("_comm_round")
         logger = self.get_attribute("_logger")
         # Update the individual testing metrics history.
         self._update_individual_evaluate_metrics_history(comm_round, evaluate_metrics)
@@ -471,9 +530,9 @@ class FlowerGOFFLSServer(Strategy):
         if model_aggregation_approach == "FedAvg":
             # Aggregate the loss by weighted average.
             aggregated_loss = aggregate_loss_by_weighted_average(results)
-        # Set the aggregated testing metrics.
+        # Aggregate the testing metrics.
         evaluate_metrics = [(result.num_examples, result.metrics) for _, result in results]
-        aggregated_evaluate_metrics = self._aggregate_evaluate_metrics(evaluate_metrics)
+        aggregated_evaluate_metrics = self._aggregate_evaluate_metrics(server_round, evaluate_metrics)
         # Return the aggregated loss and aggregated testing metrics.
         return aggregated_loss, aggregated_evaluate_metrics
 

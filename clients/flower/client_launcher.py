@@ -13,9 +13,10 @@ from pyJoules.exception import NoSuchDeviceError, NoSuchDomainError
 from time import perf_counter
 from typing import Optional
 
-from clients.flower.numpy_client import FlowerNumpyClient
 from flwr.client import Client, start_client
 from flwr.common import NDArray
+
+from clients.flower.numpy_client import FlowerNumpyClient
 from utils.configparser_util import parse_config_section
 from utils.logger_util import load_logger, log_message
 

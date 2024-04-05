@@ -20,9 +20,9 @@ Modifications made by Alan L. Nunes (base version of Flower: 1.7.0):
 2) Line 45: Imported 'GetPropertiesIns' from 'flwr.common.typing'.
 3) Lines 65-73: Implemented the '_time_function_execution' function, used to measure the elapsed time of a RPC task.
 4) Line 353: Used the '_time_function_execution' function to measure the elapsed time of 'fit_client' function.
-5) Lines 392-403: Addition that allows to get the 'communication_time' and 'client_id' metrics of 'fit' clients.
-6) Line 423: Used the '_time_function_execution' function to measure the elapsed time of 'evaluate_client' function.
-7) Lines 464-475: Addition that allows to get the 'communication_time' and 'client_id' metrics of 'evaluate' clients.
+5) Lines 392-404: Addition that allows to get the 'communication_time' and 'client_id' metrics of 'fit' clients.
+6) Line 424: Used the '_time_function_execution' function to measure the elapsed time of 'evaluate_client' function.
+7) Lines 465-477: Addition that allows to get the 'communication_time' and 'client_id' metrics of 'evaluate' clients.
 """
 
 import concurrent.futures
@@ -392,9 +392,10 @@ def _handle_finished_future_after_fit(
     result, elapsed_time = future.result()
     result: Tuple[ClientProxy, FitRes]
     client_id_prompt_start = timeit.default_timer()
-    gpi = GetPropertiesIns({"client_id": "?"})
-    client_prompted_properties = result[0].get_properties(gpi, timeout=9999)
-    client_id = client_prompted_properties.properties["client_id"]
+    client_id_property = "client_id"
+    gpi = GetPropertiesIns({client_id_property: "?"})
+    client_prompted = result[0].get_properties(gpi, timeout=9999)
+    client_id = client_prompted.properties[client_id_property]
     client_id_prompt_duration = timeit.default_timer() - client_id_prompt_start
     elapsed_time += client_id_prompt_duration
     client_training_time = result[1].metrics["training_time"]
@@ -464,9 +465,10 @@ def _handle_finished_future_after_evaluate(
     result, elapsed_time = future.result()
     result: Tuple[ClientProxy, EvaluateRes]
     client_id_prompt_start = timeit.default_timer()
-    gpi = GetPropertiesIns({"client_id": "?"})
-    client_prompted_properties = result[0].get_properties(gpi, timeout=9999)
-    client_id = client_prompted_properties.properties["client_id"]
+    client_id_property = "client_id"
+    gpi = GetPropertiesIns({client_id_property: "?"})
+    client_prompted = result[0].get_properties(gpi, timeout=9999)
+    client_id = client_prompted.properties[client_id_property]
     client_id_prompt_duration = timeit.default_timer() - client_id_prompt_start
     elapsed_time += client_id_prompt_duration
     client_testing_time = result[1].metrics["testing_time"]

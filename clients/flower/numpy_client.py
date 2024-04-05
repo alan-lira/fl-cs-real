@@ -1,9 +1,11 @@
 from logging import Logger
+from numpy.random import randint
 from pyJoules.energy_meter import EnergyMeter
 from time import perf_counter
 
 from flwr.client import NumPyClient
 from flwr.common import NDArray, NDArrays
+
 from utils.logger_util import log_message
 
 
@@ -64,6 +66,20 @@ class FlowerNumpyClient(NumPyClient):
         self._set_attribute("_model", model)
 
     @staticmethod
+    def _get_slice_indices(num_examples_available: int,
+                           num_examples_to_use: int) -> list:
+        if num_examples_to_use == num_examples_available:
+            slice_indices = list(range(0, num_examples_available))
+        else:
+            lower_index = 0
+            higher_index = 0
+            while (higher_index - lower_index) != (num_examples_to_use - 1):
+                lower_index = randint(low=0, high=num_examples_available)
+                higher_index = randint(low=lower_index, high=num_examples_available)
+            slice_indices = list(range(lower_index, higher_index + 1))
+        return slice_indices
+
+    @staticmethod
     def _get_pyjoules_energy_consumption_measurements(last_trace: any,
                                                       tag: str) -> dict:
         energy_consumption_measurements = {}
@@ -118,10 +134,20 @@ class FlowerNumpyClient(NumPyClient):
         training_metrics = {}
         # Get the current communication round.
         comm_round = fit_config["comm_round"]
+        # Get the number of training examples available.
+        num_training_examples_available = len(x_train)
         # Get the number of training examples to use.
-        num_training_examples = len(x_train)
+        if "num_training_examples" in fit_config:
+            num_training_examples_to_use = fit_config["num_training_examples"]
+        else:
+            num_training_examples_to_use = len(x_train)
+        # Get the indices that will be used to slice the training dataset.
+        slice_indices = self._get_slice_indices(num_training_examples_available, num_training_examples_to_use)
+        # Slice the training dataset.
+        x_train_sliced = x_train[slice_indices]
+        y_train_sliced = y_train[slice_indices]
         # Add the number of training examples to the training metrics.
-        training_metrics.update({"num_training_examples": num_training_examples})
+        training_metrics.update({"num_training_examples": num_training_examples_to_use})
         # Replace 'None' values to None (necessary workaround on Flower).
         fit_config = {k: (None if v == "None" else v) for k, v in fit_config.items()}
         # Log the training configuration (fit_config) received from the server.
@@ -131,8 +157,8 @@ class FlowerNumpyClient(NumPyClient):
         message = "[Client {0} | Round {1}] Training the model...".format(client_id, comm_round)
         log_message(logger, message, "INFO")
         # Train the local model with updated global parameters (weights) using the local training dataset.
-        history = model.fit(x=x_train,
-                            y=y_train,
+        history = model.fit(x=x_train_sliced,
+                            y=y_train_sliced,
                             shuffle=fit_config["shuffle"],
                             batch_size=fit_config["batch_size"],
                             initial_epoch=fit_config["initial_epoch"],
@@ -168,7 +194,7 @@ class FlowerNumpyClient(NumPyClient):
                   .format(client_id, comm_round, model_training_duration)
         log_message(logger, message, "INFO")
         # Send to the server the local model parameters (weights), number of training examples, and training metrics.
-        return local_model_parameters, num_training_examples, training_metrics
+        return local_model_parameters, num_training_examples_to_use, training_metrics
 
     def evaluate(self,
                  global_model_parameters: NDArrays,
@@ -192,10 +218,20 @@ class FlowerNumpyClient(NumPyClient):
         testing_metrics = {}
         # Get the current communication round.
         comm_round = evaluate_config["comm_round"]
+        # Get the number of testing examples available.
+        num_testing_examples_available = len(x_test)
         # Get the number of testing examples to use.
-        num_testing_examples = len(x_test)
+        if "num_testing_examples" in evaluate_config:
+            num_testing_examples_to_use = evaluate_config["num_testing_examples"]
+        else:
+            num_testing_examples_to_use = len(x_test)
+        # Get the indices that will be used to slice the testing dataset.
+        slice_indices = self._get_slice_indices(num_testing_examples_available, num_testing_examples_to_use)
+        # Slice the testing dataset.
+        x_test_sliced = x_test[slice_indices]
+        y_test_sliced = y_test[slice_indices]
         # Add the number of testing examples to the testing metrics.
-        testing_metrics.update({"num_testing_examples": num_testing_examples})
+        testing_metrics.update({"num_testing_examples": num_testing_examples_to_use})
         # Replace 'None' values to None (necessary workaround on Flower).
         evaluate_config = {k: (None if v == "None" else v) for k, v in evaluate_config.items()}
         # Log the testing configuration (evaluate_config) received from the server.
@@ -206,8 +242,8 @@ class FlowerNumpyClient(NumPyClient):
         message = "[Client {0} | Round {1}] Testing the model...".format(client_id, comm_round)
         log_message(logger, message, "INFO")
         # Test the local model with updated global parameters (weights) using the local testing dataset.
-        history = model.evaluate(x=x_test,
-                                 y=y_test,
+        history = model.evaluate(x=x_test_sliced,
+                                 y=y_test_sliced,
                                  batch_size=evaluate_config["batch_size"],
                                  steps=evaluate_config["steps"])
         # Get the testing metrics names.
@@ -236,4 +272,4 @@ class FlowerNumpyClient(NumPyClient):
                   .format(client_id, comm_round, model_testing_duration)
         log_message(logger, message, "INFO")
         # Send to the server the loss, number of testing examples, and testing metrics.
-        return loss, num_testing_examples, testing_metrics
+        return loss, num_testing_examples_to_use, testing_metrics
