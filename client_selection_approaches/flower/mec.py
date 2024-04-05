@@ -2,8 +2,18 @@ from numpy import array, inf
 from random import sample
 
 from flwr.common import GetPropertiesIns
+from flwr.server.client_proxy import ClientProxy
 
 from schedulers.mec import mec
+
+
+def _get_client_assignment_capacity(phase: str,
+                                    client_proxy: ClientProxy) -> int:
+    num_examples_available_property = "num_{0}ing_examples_available".format(phase)
+    gpi = GetPropertiesIns({num_examples_available_property: "?"})
+    client_prompted = client_proxy.get_properties(gpi, timeout=9999)
+    client_assignment_capacity = client_prompted.properties[num_examples_available_property]
+    return client_assignment_capacity
 
 
 def select_clients_using_mec(comm_round: int,
@@ -46,10 +56,7 @@ def select_clients_using_mec(comm_round: int,
                 client_id_str = list(individual_metrics_previous_comm_round.keys())[0]
                 client_metrics = individual_metrics_previous_comm_round[client_id_str]
                 client_proxy = available_clients_map[client_id_str]
-                num_examples_available_property = "num_{0}ing_examples_available".format(phase)
-                gpi = GetPropertiesIns({num_examples_available_property: "?"})
-                client_prompted = client_proxy.get_properties(gpi, timeout=9999)
-                client_assignment_capacity = client_prompted.properties[num_examples_available_property]
+                client_assignment_capacity = _get_client_assignment_capacity(phase, client_proxy)
                 previous_comm_round_available_clients_map.update({client_id_str: client_proxy})
                 previous_comm_round_individual_metrics.update({client_id_str: client_metrics})
                 previous_comm_round_available_clients_capacities.update({client_id_str: client_assignment_capacity})
@@ -64,10 +71,7 @@ def select_clients_using_mec(comm_round: int,
                 if len(complementary_available_clients_ids_str) > 0:
                     for complementary_available_client_id_str in complementary_available_clients_ids_str:
                         client_proxy = available_clients_map[complementary_available_client_id_str]
-                        num_examples_available_property = "num_{0}ing_examples_available".format(phase)
-                        gpi = GetPropertiesIns({num_examples_available_property: "?"})
-                        client_prompted = client_proxy.get_properties(gpi, timeout=9999)
-                        client_assignment_capacity = client_prompted.properties[num_examples_available_property]
+                        client_assignment_capacity = _get_client_assignment_capacity(phase, client_proxy)
                         complementary_available_clients_map.update({complementary_available_client_id_str:
                                                                     client_proxy})
                         complementary_available_clients_capacities.update({complementary_available_client_id_str:
@@ -97,8 +101,8 @@ def select_clients_using_mec(comm_round: int,
                         selected_client_num_tasks = complementary_available_clients_schedule[selected_client_index]
                         selected_clients.append({"client_proxy": selected_client_proxy,
                                                  "client_num_tasks": selected_client_num_tasks})
-            # Set the number of resources.
-            # (Based on the number of available clients that participated on the previous communication round).
+            # Set the number of resources,
+            # based on the number of available clients that participated on the previous communication round.
             num_resources = len(previous_comm_round_available_clients_map)
             # Initialize the global lists that will be transformed to array and be used by the MEC algorithm.
             client_ids = []
@@ -107,10 +111,10 @@ def select_clients_using_mec(comm_round: int,
             energy_costs = []
             # For each available client that participated on the previous communication round...
             for client_id_str, client_proxy in previous_comm_round_available_clients_map.items():
-                # Initialize his assignment capacities list (based on his number of examples available).
-                client_assignment_capacity = previous_comm_round_available_clients_capacities[client_id_str]
+                # Initialize his assignment capacities list, based on his number of examples available.
+                client_assignment_capacity = _get_client_assignment_capacity(phase, client_proxy)
                 assignment_capacities_client = [i for i in range(0, client_assignment_capacity+1)]
-                # Initialize his costs lists (based on the number of examples required).
+                # Initialize his costs lists, based on the number of tasks (examples) required.
                 time_costs_client = [inf for _ in range(0, num_tasks+1)]
                 energy_costs_client = [inf for _ in range(0, num_tasks+1)]
                 # Get his metrics from the previous communication round.
