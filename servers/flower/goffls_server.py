@@ -139,6 +139,7 @@ class FlowerGOFFLSServer(Strategy):
         enable_training = self.get_attribute("_enable_training")
         client_selection_settings = self.get_attribute("_client_selection_settings")
         client_selection_approach = client_selection_settings["approach"]
+        individual_fit_metrics_history = self.get_attribute("_individual_fit_metrics_history")
         # Do not configure federated training if it is not enabled.
         if not enable_training:
             return []
@@ -166,38 +167,34 @@ class FlowerGOFFLSServer(Strategy):
             # Select clients using the MEC algorithm.
             phase = "train"
             num_fit_tasks = client_selection_settings["num_fit_tasks"]
-            allow_complementary_clients_random_selection \
-                = client_selection_settings["allow_complementary_clients_random_selection"]
-            complementary_fit_tasks_fraction = client_selection_settings["complementary_fit_tasks_fraction"]
-            complementary_fit_clients_fraction = client_selection_settings["complementary_fit_clients_fraction"]
-            individual_fit_metrics_history = self.get_attribute("_individual_fit_metrics_history")
+            history_check_approach = client_selection_settings["history_check_approach"]
+            enable_complementary_selection = client_selection_settings["enable_complementary_selection"]
+            complementary_selection_settings = client_selection_settings["complementary_selection_settings"]
             selected_fit_clients = select_clients_using_mec(server_round,
                                                             phase,
                                                             num_fit_tasks,
-                                                            allow_complementary_clients_random_selection,
-                                                            complementary_fit_tasks_fraction,
-                                                            complementary_fit_clients_fraction,
                                                             available_fit_clients_map,
-                                                            individual_fit_metrics_history)
+                                                            individual_fit_metrics_history,
+                                                            history_check_approach,
+                                                            enable_complementary_selection,
+                                                            complementary_selection_settings)
         elif client_selection_approach == "ECMTC":
             # Select clients using the ECMTC algorithm.
             phase = "train"
             num_fit_tasks = client_selection_settings["num_fit_tasks"]
             fit_deadline = client_selection_settings["fit_deadline"]
-            allow_complementary_clients_random_selection \
-                = client_selection_settings["allow_complementary_clients_random_selection"]
-            complementary_fit_tasks_fraction = client_selection_settings["complementary_fit_tasks_fraction"]
-            complementary_fit_clients_fraction = client_selection_settings["complementary_fit_clients_fraction"]
-            individual_fit_metrics_history = self.get_attribute("_individual_fit_metrics_history")
+            history_check_approach = client_selection_settings["history_check_approach"]
+            enable_complementary_selection = client_selection_settings["enable_complementary_selection"]
+            complementary_selection_settings = client_selection_settings["complementary_selection_settings"]
             selected_fit_clients = select_clients_using_ecmtc(server_round,
                                                               phase,
                                                               num_fit_tasks,
                                                               fit_deadline,
-                                                              allow_complementary_clients_random_selection,
-                                                              complementary_fit_tasks_fraction,
-                                                              complementary_fit_clients_fraction,
                                                               available_fit_clients_map,
-                                                              individual_fit_metrics_history)
+                                                              individual_fit_metrics_history,
+                                                              history_check_approach,
+                                                              enable_complementary_selection,
+                                                              complementary_selection_settings)
         # Get the clients selection duration.
         selection_duration = perf_counter() - selection_duration_start
         # Update the history of selected clients for training (selected_fit_clients).
@@ -272,7 +269,7 @@ class FlowerGOFFLSServer(Strategy):
         fit_metrics = self._remove_undesired_metrics(fit_metrics, undesired_metrics)
         # Initialize the aggregated training metrics dictionary (aggregated_fit_metrics).
         aggregated_fit_metrics = {}
-        # Aggregate the training metrics according to the user-defined strategy.
+        # Aggregate the training metrics according to the user-defined approach.
         if metrics_aggregation_approach == "WeightedAverage":
             aggregated_fit_metrics = aggregate_metrics_by_weighted_average(fit_metrics)
         # Update the aggregated training metrics history.
@@ -370,6 +367,7 @@ class FlowerGOFFLSServer(Strategy):
         enable_testing = self.get_attribute("_enable_testing")
         client_selection_settings = self.get_attribute("_client_selection_settings")
         client_selection_approach = client_selection_settings["approach"]
+        individual_evaluate_metrics_history = self.get_attribute("_individual_evaluate_metrics_history")
         # Do not configure federated testing if it is not enabled.
         if not enable_testing:
             return []
@@ -397,40 +395,34 @@ class FlowerGOFFLSServer(Strategy):
             # Select clients using the MEC algorithm.
             phase = "test"
             num_evaluate_tasks = client_selection_settings["num_evaluate_tasks"]
-            allow_complementary_clients_random_selection \
-                = client_selection_settings["allow_complementary_clients_random_selection"]
-            complementary_evaluate_tasks_fraction = client_selection_settings["complementary_evaluate_tasks_fraction"]
-            complementary_evaluate_clients_fraction \
-                = client_selection_settings["complementary_evaluate_clients_fraction"]
-            individual_evaluate_metrics_history = self.get_attribute("_individual_evaluate_metrics_history")
+            history_check_approach = client_selection_settings["history_check_approach"]
+            enable_complementary_selection = client_selection_settings["enable_complementary_selection"]
+            complementary_selection_settings = client_selection_settings["complementary_selection_settings"]
             selected_evaluate_clients = select_clients_using_mec(server_round,
                                                                  phase,
                                                                  num_evaluate_tasks,
-                                                                 allow_complementary_clients_random_selection,
-                                                                 complementary_evaluate_tasks_fraction,
-                                                                 complementary_evaluate_clients_fraction,
                                                                  available_evaluate_clients_map,
-                                                                 individual_evaluate_metrics_history)
+                                                                 individual_evaluate_metrics_history,
+                                                                 history_check_approach,
+                                                                 enable_complementary_selection,
+                                                                 complementary_selection_settings)
         elif client_selection_approach == "ECMTC":
             # Select clients using the ECMTC algorithm.
             phase = "test"
             num_evaluate_tasks = client_selection_settings["num_evaluate_tasks"]
             evaluate_deadline = client_selection_settings["evaluate_deadline"]
-            allow_complementary_clients_random_selection \
-                = client_selection_settings["allow_complementary_clients_random_selection"]
-            complementary_evaluate_tasks_fraction = client_selection_settings["complementary_evaluate_tasks_fraction"]
-            complementary_evaluate_clients_fraction \
-                = client_selection_settings["complementary_evaluate_clients_fraction"]
-            individual_evaluate_metrics_history = self.get_attribute("_individual_evaluate_metrics_history")
+            history_check_approach = client_selection_settings["history_check_approach"]
+            enable_complementary_selection = client_selection_settings["enable_complementary_selection"]
+            complementary_selection_settings = client_selection_settings["complementary_selection_settings"]
             selected_evaluate_clients = select_clients_using_ecmtc(server_round,
                                                                    phase,
                                                                    num_evaluate_tasks,
                                                                    evaluate_deadline,
-                                                                   allow_complementary_clients_random_selection,
-                                                                   complementary_evaluate_tasks_fraction,
-                                                                   complementary_evaluate_clients_fraction,
                                                                    available_evaluate_clients_map,
-                                                                   individual_evaluate_metrics_history)
+                                                                   individual_evaluate_metrics_history,
+                                                                   history_check_approach,
+                                                                   enable_complementary_selection,
+                                                                   complementary_selection_settings)
         # Get the clients selection duration.
         selection_duration = perf_counter() - selection_duration_start
         # Update the history of selected clients for testing (selected_evaluate_clients).
@@ -495,7 +487,7 @@ class FlowerGOFFLSServer(Strategy):
         evaluate_metrics = self._remove_undesired_metrics(evaluate_metrics, undesired_metrics)
         # Initialize the aggregated testing metrics dictionary (aggregated_evaluate_metrics).
         aggregated_evaluate_metrics = {}
-        # Aggregate the testing metrics according to the user-defined strategy.
+        # Aggregate the testing metrics according to the user-defined approach.
         if metrics_aggregation_approach == "WeightedAverage":
             aggregated_evaluate_metrics = aggregate_metrics_by_weighted_average(evaluate_metrics)
         # Update the aggregated testing metrics history.

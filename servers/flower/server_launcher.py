@@ -27,6 +27,10 @@ class FlowerServerLauncher:
         self._output_settings = None
         self._logger = None
         self._server_strategy = None
+        # Parse the settings.
+        self._parse_settings()
+        # Set the logger.
+        self._set_logger()
 
     def _set_attribute(self,
                        attribute_name: str,
@@ -41,23 +45,37 @@ class FlowerServerLauncher:
         # Get the necessary attributes.
         config_file = self.get_attribute("_server_config_file")
         # Parse and set the logging settings.
-        logging_settings = parse_config_section(config_file, "Logging Settings")
+        logging_section = "Logging Settings"
+        logging_settings = parse_config_section(config_file, logging_section)
         self._set_attribute("_logging_settings", logging_settings)
         # Parse and set the fl settings.
-        fl_settings = parse_config_section(config_file, "FL Settings")
+        fl_section = "FL Settings"
+        fl_settings = parse_config_section(config_file, fl_section)
         self._set_attribute("_fl_settings", fl_settings)
         # Parse and set the server strategy settings.
-        server_strategy_settings = parse_config_section(config_file, "Server Strategy Settings")
+        server_strategy_section = "Server Strategy Settings"
+        server_strategy_settings = parse_config_section(config_file, server_strategy_section)
         server_strategy = server_strategy_settings["strategy"]
-        server_strategy_implementation_settings \
-            = parse_config_section(config_file, "{0} Server Strategy Settings".format(server_strategy))
+        server_strategy_implementation_section = "{0} Server Strategy Settings".format(server_strategy)
+        server_strategy_implementation_settings = parse_config_section(config_file,
+                                                                       server_strategy_implementation_section)
         client_selection_approach = server_strategy_implementation_settings["client_selection_approach"]
-        client_selection_approach_settings \
-            = parse_config_section(config_file, "{0} Client Selection Settings".format(client_selection_approach))
+        client_selection_approach_section = "{0} Client Selection Settings".format(client_selection_approach)
+        client_selection_approach_settings = parse_config_section(config_file,
+                                                                  client_selection_approach_section)
+        if "complementary_selection_approach" in client_selection_approach_settings:
+            complementary_selection_approach = client_selection_approach_settings["complementary_selection_approach"]
+            complementary_selection_section = "{0} Client Selection Settings".format(complementary_selection_approach)
+            complementary_selection_settings = parse_config_section(config_file,
+                                                                    complementary_selection_section)
+            complementary_selection_settings.update({"approach": complementary_selection_approach})
+            client_selection_approach_settings.update({"complementary_selection_settings":
+                                                       complementary_selection_settings})
+            client_selection_approach_settings.pop("complementary_selection_approach")
         client_selection_approach_settings.update({"approach": client_selection_approach})
         model_aggregation_approach = server_strategy_implementation_settings["model_aggregation_approach"]
-        model_aggregation_approach_settings \
-            = parse_config_section(config_file, "{0} Model Aggregation Settings".format(model_aggregation_approach))
+        model_aggregation_approach_section = "{0} Model Aggregation Settings".format(model_aggregation_approach)
+        model_aggregation_approach_settings = parse_config_section(config_file, model_aggregation_approach_section)
         model_aggregation_approach_settings.update({"approach": model_aggregation_approach})
         server_strategy_settings = {}
         server_strategy_settings.update({"strategy": server_strategy})
@@ -65,22 +83,28 @@ class FlowerServerLauncher:
         server_strategy_settings.update({"model_aggregation": model_aggregation_approach_settings})
         self._set_attribute("_server_strategy_settings", server_strategy_settings)
         # Parse and set the metrics aggregation settings.
-        metrics_aggregation_settings = parse_config_section(config_file, "Metrics Aggregation Settings")
+        metrics_aggregation_section = "Metrics Aggregation Settings"
+        metrics_aggregation_settings = parse_config_section(config_file, metrics_aggregation_section)
         self._set_attribute("_metrics_aggregation_settings", metrics_aggregation_settings)
         # Parse and set the ssl settings.
-        ssl_settings = parse_config_section(config_file, "SSL Settings")
+        ssl_section = "SSL Settings"
+        ssl_settings = parse_config_section(config_file, ssl_section)
         self._set_attribute("_ssl_settings", ssl_settings)
         # Parse and set the grpc settings.
-        grpc_settings = parse_config_section(config_file, "gRPC Settings")
+        grpc_section = "gRPC Settings"
+        grpc_settings = parse_config_section(config_file, grpc_section)
         self._set_attribute("_grpc_settings", grpc_settings)
         # Parse and set the fit_config settings.
-        fit_config_settings = parse_config_section(config_file, "Fit_Config Settings")
+        fit_config_section = "Fit_Config Settings"
+        fit_config_settings = parse_config_section(config_file, fit_config_section)
         self._set_attribute("_fit_config_settings", fit_config_settings)
         # Parse and set the evaluate_config settings.
-        evaluate_config_settings = parse_config_section(config_file, "Evaluate_Config Settings")
+        evaluate_config_section = "Evaluate_Config Settings"
+        evaluate_config_settings = parse_config_section(config_file, evaluate_config_section)
         self._set_attribute("_evaluate_config_settings", evaluate_config_settings)
         # Parse and set the output settings.
-        output_settings = parse_config_section(config_file, "Output Settings")
+        output_section = "Output Settings"
+        output_settings = parse_config_section(config_file, output_section)
         self._set_attribute("_output_settings", output_settings)
 
     def _set_logger(self) -> None:
@@ -491,10 +515,6 @@ class FlowerServerLauncher:
                 file.write(data_line)
 
     def launch_server(self) -> None:
-        # Parse the settings.
-        self._parse_settings()
-        # Set the logger.
-        self._set_logger()
         # Get the Secure Socket Layer (SSL) certificates (SSL-enabled secure connection).
         ssl_certificates = self._get_ssl_certificates()
         # Get the flower server address (listen IP address and port).

@@ -34,6 +34,10 @@ class FlowerClientLauncher:
         self._energy_consumption_monitoring_settings = None
         self._model_settings = None
         self._logger = None
+        # Parse the settings.
+        self._parse_settings()
+        # Set the logger.
+        self._set_logger()
 
     def _set_attribute(self,
                        attribute_name: str,
@@ -48,38 +52,48 @@ class FlowerClientLauncher:
         # Get the necessary attributes.
         config_file = self.get_attribute("_client_config_file")
         # Parse and set the logging settings.
-        logging_settings = parse_config_section(config_file, "Logging Settings")
+        logging_section = "Logging Settings"
+        logging_settings = parse_config_section(config_file, logging_section)
         self._set_attribute("_logging_settings", logging_settings)
         # Parse and set the ssl settings.
-        ssl_settings = parse_config_section(config_file, "SSL Settings")
+        ssl_section = "SSL Settings"
+        ssl_settings = parse_config_section(config_file, ssl_section)
         self._set_attribute("_ssl_settings", ssl_settings)
         # Parse and set the grpc settings.
-        grpc_settings = parse_config_section(config_file, "gRPC Settings")
+        grpc_section = "gRPC Settings"
+        grpc_settings = parse_config_section(config_file, grpc_section)
         self._set_attribute("_grpc_settings", grpc_settings)
         # Parse and set the dataset settings.
-        dataset_settings = parse_config_section(config_file, "Dataset Settings")
+        dataset_section = "Dataset Settings"
+        dataset_settings = parse_config_section(config_file, dataset_section)
         self._set_attribute("_dataset_settings", dataset_settings)
         # Parse and set the energy consumption monitoring settings.
+        energy_consumption_monitoring_section = "Energy Consumption Monitoring Settings"
         energy_consumption_monitoring_settings = parse_config_section(config_file,
-                                                                      "Energy Consumption Monitoring Settings")
+                                                                      energy_consumption_monitoring_section)
         monitor_implementation = energy_consumption_monitoring_settings["implementation"]
+        monitor_implementation_section = "{0} Monitor Settings".format(monitor_implementation)
         monitor_implementation_settings = parse_config_section(config_file,
-                                                               "{0} Monitor Settings".format(monitor_implementation))
+                                                               monitor_implementation_section)
         energy_consumption_monitoring_settings.update({monitor_implementation: monitor_implementation_settings})
         self._set_attribute("_energy_consumption_monitoring_settings", energy_consumption_monitoring_settings)
         # Parse and set the model settings.
-        model_settings = parse_config_section(config_file, "Model Settings")
+        model_section = "Model Settings"
+        model_settings = parse_config_section(config_file, model_section)
         model_provider = model_settings["provider"]
-        provider_model_settings = parse_config_section(config_file, "{0} Model Settings".format(model_provider))
-        model_name = provider_model_settings["name"]
-        provider_model_specific_settings \
-            = parse_config_section(config_file, "{0} {1} Settings".format(model_provider, model_name))
-        optimizer = provider_model_settings["optimizer"]
-        optimizer_settings = parse_config_section(config_file, "{0} {1} Settings".format(model_provider, optimizer))
-        loss = provider_model_settings["loss"]
-        loss_settings = parse_config_section(config_file, "{0} {1} Settings".format(model_provider, loss))
-        model_settings.update({model_provider: provider_model_settings,
-                               model_name: provider_model_specific_settings,
+        model_provider_section = "{0} Model Settings".format(model_provider)
+        model_provider_settings = parse_config_section(config_file, model_provider_section)
+        model_name = model_provider_settings["name"]
+        model_provider_specific_section = "{0} {1} Settings".format(model_provider, model_name)
+        model_provider_specific_settings = parse_config_section(config_file, model_provider_specific_section)
+        optimizer = model_provider_settings["optimizer"]
+        optimizer_section = "{0} {1} Settings".format(model_provider, optimizer)
+        optimizer_settings = parse_config_section(config_file, optimizer_section)
+        loss = model_provider_settings["loss"]
+        loss_section = "{0} {1} Settings".format(model_provider, loss)
+        loss_settings = parse_config_section(config_file, loss_section)
+        model_settings.update({model_provider: model_provider_settings,
+                               model_name: model_provider_specific_settings,
                                optimizer: optimizer_settings,
                                loss: loss_settings})
         self._set_attribute("_model_settings", model_settings)
@@ -267,8 +281,8 @@ class FlowerClientLauncher:
         # Get the necessary attributes.
         model_settings = self.get_attribute("_model_settings")
         model_provider = model_settings["provider"]
-        provider_model_settings = model_settings[model_provider]
-        optimizer_name = provider_model_settings["optimizer"]
+        model_provider_settings = model_settings[model_provider]
+        optimizer_name = model_provider_settings["optimizer"]
         optimizer_settings = model_settings[optimizer_name]
         # Initialize the optimizer.
         optimizer = None
@@ -286,8 +300,8 @@ class FlowerClientLauncher:
         # Get the necessary attributes.
         model_settings = self.get_attribute("_model_settings")
         model_provider = model_settings["provider"]
-        provider_model_settings = model_settings[model_provider]
-        loss_name = provider_model_settings["loss"]
+        model_provider_settings = model_settings[model_provider]
+        loss_name = model_provider_settings["loss"]
         loss_settings = model_settings[loss_name]
         # Initialize the loss.
         loss = None
@@ -307,30 +321,30 @@ class FlowerClientLauncher:
         # Get the necessary attributes.
         model_settings = self.get_attribute("_model_settings")
         model_provider = model_settings["provider"]
-        provider_model_settings = model_settings[model_provider]
-        model_name = provider_model_settings["name"]
-        provider_model_specific_settings = model_settings[model_name]
+        model_provider_settings = model_settings[model_provider]
+        model_name = model_provider_settings["name"]
+        model_provider_specific_settings = model_settings[model_name]
         # Initialize the model.
         model = None
         if model_provider == "Keras":
             if model_name == "MobileNetV2":
                 # Instantiate the Kera's MobileNetV2 model (Image Classification Architecture).
-                model = MobileNetV2(input_shape=provider_model_specific_settings["input_shape"],
-                                    alpha=provider_model_specific_settings["alpha"],
-                                    include_top=provider_model_specific_settings["include_top"],
-                                    weights=provider_model_specific_settings["weights"],
-                                    input_tensor=provider_model_specific_settings["input_tensor"],
-                                    pooling=provider_model_specific_settings["pooling"],
-                                    classes=provider_model_specific_settings["classes"],
-                                    classifier_activation=provider_model_specific_settings["classifier_activation"])
+                model = MobileNetV2(input_shape=model_provider_specific_settings["input_shape"],
+                                    alpha=model_provider_specific_settings["alpha"],
+                                    include_top=model_provider_specific_settings["include_top"],
+                                    weights=model_provider_specific_settings["weights"],
+                                    input_tensor=model_provider_specific_settings["input_tensor"],
+                                    pooling=model_provider_specific_settings["pooling"],
+                                    classes=model_provider_specific_settings["classes"],
+                                    classifier_activation=model_provider_specific_settings["classifier_activation"])
             # Compile the Kera's model.
-            loss_weights = provider_model_settings["loss_weights"]
-            metrics = provider_model_settings["metrics"]
-            weighted_metrics = provider_model_settings["weighted_metrics"]
-            run_eagerly = provider_model_settings["run_eagerly"]
-            steps_per_execution = provider_model_settings["steps_per_execution"]
-            jit_compile = provider_model_settings["jit_compile"]
-            auto_scale_loss = provider_model_settings["auto_scale_loss"]
+            loss_weights = model_provider_settings["loss_weights"]
+            metrics = model_provider_settings["metrics"]
+            weighted_metrics = model_provider_settings["weighted_metrics"]
+            run_eagerly = model_provider_settings["run_eagerly"]
+            steps_per_execution = model_provider_settings["steps_per_execution"]
+            jit_compile = model_provider_settings["jit_compile"]
+            auto_scale_loss = model_provider_settings["auto_scale_loss"]
             model.compile(optimizer=optimizer,
                           loss=loss_function,
                           loss_weights=loss_weights,
@@ -377,10 +391,6 @@ class FlowerClientLauncher:
                      root_certificates=root_certificates)
 
     def launch_client(self) -> None:
-        # Parse the settings.
-        self._parse_settings()
-        # Set the logger.
-        self._set_logger()
         # Get the Secure Socket Layer (SSL) certificates (SSL-enabled secure connection).
         ssl_certificates = self._get_ssl_certificates()
         # Get the flower server address (IP address and port).
