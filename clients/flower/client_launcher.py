@@ -197,10 +197,13 @@ class FlowerClientLauncher:
         # Get the necessary attributes.
         dataset_settings = self.get_attribute("_dataset_settings")
         storage_location = dataset_settings["storage_location"]
-        root_folder = dataset_settings["root_folder"]
         category = dataset_settings["category"]
         client_id = self.get_attribute("_client_id")
         logger = self.get_attribute("_logger")
+        # Update the dataset root folder with the partition number that is associated to the client id.
+        dataset_settings["root_folder"] = dataset_settings["root_folder"] + "partition_{0}".format(client_id)
+        self._set_attribute("_dataset_settings", dataset_settings)
+        root_folder = dataset_settings["root_folder"]
         # Log a 'loading the dataset' message.
         message = "[Client {0}] Loading the '{1}' dataset ({2} storage)..." \
                   .format(client_id, root_folder, storage_location)

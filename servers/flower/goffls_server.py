@@ -101,10 +101,20 @@ class FlowerGOFFLSServer(Strategy):
         available_clients_map = {}
         for _, client_proxy in available_clients.items():
             client_id_property = "client_id"
-            gpi = GetPropertiesIns({client_id_property: "?"})
+            num_training_examples_available_property = "num_training_examples_available"
+            num_testing_examples_available_property = "num_testing_examples_available"
+            gpi = GetPropertiesIns({client_id_property: "?",
+                                    num_training_examples_available_property: "?",
+                                    num_testing_examples_available_property: "?"})
             client_prompted = client_proxy.get_properties(gpi, timeout=9999)
             client_id = client_prompted.properties[client_id_property]
-            available_clients_map.update({"client_{0}".format(client_id): client_proxy})
+            num_training_examples_available = client_prompted.properties[num_training_examples_available_property]
+            num_testing_examples_available = client_prompted.properties[num_testing_examples_available_property]
+            client_id_str = "client_{0}".format(client_id)
+            client_map = {"client_proxy": client_proxy,
+                          "num_training_examples_available": num_training_examples_available,
+                          "num_testing_examples_available": num_testing_examples_available}
+            available_clients_map.update({client_id_str: client_map})
         return available_clients_map
 
     def _update_selected_fit_clients_history(self,
@@ -113,12 +123,13 @@ class FlowerGOFFLSServer(Strategy):
                                              selection_duration: float,
                                              selected_fit_clients: list) -> None:
         selected_fit_clients_history = self.get_attribute("_selected_fit_clients_history")
-        available_fit_clients_map_keys = list(available_fit_clients_map.keys())
-        available_fit_clients_map_values = list(available_fit_clients_map.values())
-        for selected_fit_client in selected_fit_clients:
-            client_proxy = selected_fit_client["client_proxy"]
-            client_index = available_fit_clients_map_values.index(client_proxy)
-            client_id_str = available_fit_clients_map_keys[client_index]
+        available_fit_clients_ids = list(available_fit_clients_map.keys())
+        available_fit_clients_proxies = [client_values["client_proxy"]
+                                         for client_values in list(available_fit_clients_map.values())]
+        for client in selected_fit_clients:
+            client_proxy = client["client_proxy"]
+            client_index = available_fit_clients_proxies.index(client_proxy)
+            client_id_str = available_fit_clients_ids[client_index]
             comm_round_key = "comm_round_{0}".format(comm_round)
             if comm_round_key not in selected_fit_clients_history:
                 comm_round_selected_fit_metrics_dict = {comm_round_key:
@@ -140,6 +151,7 @@ class FlowerGOFFLSServer(Strategy):
         client_selection_settings = self.get_attribute("_client_selection_settings")
         client_selection_approach = client_selection_settings["approach"]
         individual_fit_metrics_history = self.get_attribute("_individual_fit_metrics_history")
+        logger = self.get_attribute("_logger")
         # Do not configure federated training if it is not enabled.
         if not enable_training:
             return []
@@ -194,7 +206,8 @@ class FlowerGOFFLSServer(Strategy):
                                                               individual_fit_metrics_history,
                                                               history_check_approach,
                                                               enable_complementary_selection,
-                                                              complementary_selection_settings)
+                                                              complementary_selection_settings,
+                                                              logger)
         # Get the clients selection duration.
         selection_duration = perf_counter() - selection_duration_start
         # Update the history of selected clients for training (selected_fit_clients).
@@ -207,8 +220,8 @@ class FlowerGOFFLSServer(Strategy):
         for selected_fit_client in selected_fit_clients:
             selected_fit_client_proxy = selected_fit_client["client_proxy"]
             selected_fit_client_config = deepcopy(fit_config)
-            if "client_num_tasks" in selected_fit_client:
-                num_training_examples = selected_fit_client["client_num_tasks"]
+            if "client_num_tasks_scheduled" in selected_fit_client:
+                num_training_examples = selected_fit_client["client_num_tasks_scheduled"]
                 selected_fit_client_config.update({"num_training_examples": num_training_examples})
             selected_fit_client_instructions = FitIns(parameters, selected_fit_client_config)
             fit_pairs.append((selected_fit_client_proxy, selected_fit_client_instructions))
@@ -222,8 +235,9 @@ class FlowerGOFFLSServer(Strategy):
         for metric_tuple in fit_metrics:
             client_metrics = metric_tuple[1]
             client_id = client_metrics["client_id"]
+            client_id_str = "client_{0}".format(client_id)
             del client_metrics["client_id"]
-            client_metrics_dict = {"client_{0}".format(client_id): client_metrics}
+            client_metrics_dict = {client_id_str: client_metrics}
             comm_round_key = "comm_round_{0}".format(comm_round)
             if comm_round_key not in individual_fit_metrics_history:
                 comm_round_individual_fit_metrics_dict = {comm_round_key: [client_metrics_dict]}
@@ -341,12 +355,13 @@ class FlowerGOFFLSServer(Strategy):
                                                   selection_duration: float,
                                                   selected_evaluate_clients: list) -> None:
         selected_evaluate_clients_history = self.get_attribute("_selected_evaluate_clients_history")
-        available_evaluate_clients_map_keys = list(available_evaluate_clients_map.keys())
-        available_evaluate_clients_map_values = list(available_evaluate_clients_map.values())
-        for selected_evaluate_client in selected_evaluate_clients:
-            client_proxy = selected_evaluate_client["client_proxy"]
-            client_index = available_evaluate_clients_map_values.index(client_proxy)
-            client_id_str = available_evaluate_clients_map_keys[client_index]
+        available_evaluate_clients_ids = list(available_evaluate_clients_map.keys())
+        available_evaluate_clients_proxies = [client_values["client_proxy"]
+                                              for client_values in list(available_evaluate_clients_map.values())]
+        for client in selected_evaluate_clients:
+            client_proxy = client["client_proxy"]
+            client_index = available_evaluate_clients_proxies.index(client_proxy)
+            client_id_str = available_evaluate_clients_ids[client_index]
             comm_round_key = "comm_round_{0}".format(comm_round)
             if comm_round_key not in selected_evaluate_clients_history:
                 comm_round_selected_evaluate_metrics_dict = {comm_round_key:
@@ -368,6 +383,7 @@ class FlowerGOFFLSServer(Strategy):
         client_selection_settings = self.get_attribute("_client_selection_settings")
         client_selection_approach = client_selection_settings["approach"]
         individual_evaluate_metrics_history = self.get_attribute("_individual_evaluate_metrics_history")
+        logger = self.get_attribute("_logger")
         # Do not configure federated testing if it is not enabled.
         if not enable_testing:
             return []
@@ -422,7 +438,8 @@ class FlowerGOFFLSServer(Strategy):
                                                                    individual_evaluate_metrics_history,
                                                                    history_check_approach,
                                                                    enable_complementary_selection,
-                                                                   complementary_selection_settings)
+                                                                   complementary_selection_settings,
+                                                                   logger)
         # Get the clients selection duration.
         selection_duration = perf_counter() - selection_duration_start
         # Update the history of selected clients for testing (selected_evaluate_clients).
@@ -435,8 +452,8 @@ class FlowerGOFFLSServer(Strategy):
         for selected_evaluate_client in selected_evaluate_clients:
             selected_evaluate_client_proxy = selected_evaluate_client["client_proxy"]
             selected_evaluate_client_config = deepcopy(evaluate_config)
-            if "client_num_tasks" in selected_evaluate_client:
-                num_testing_examples = selected_evaluate_client["client_num_tasks"]
+            if "client_num_tasks_scheduled" in selected_evaluate_client:
+                num_testing_examples = selected_evaluate_client["client_num_tasks_scheduled"]
                 selected_evaluate_client_config.update({"num_testing_examples": num_testing_examples})
             selected_evaluate_client_instructions = EvaluateIns(parameters, selected_evaluate_client_config)
             evaluate_pairs.append((selected_evaluate_client_proxy, selected_evaluate_client_instructions))
@@ -450,8 +467,9 @@ class FlowerGOFFLSServer(Strategy):
         for metric_tuple in evaluate_metrics:
             client_metrics = metric_tuple[1]
             client_id = client_metrics["client_id"]
+            client_id_str = "client_{0}".format(client_id)
             del client_metrics["client_id"]
-            client_metrics_dict = {"client_{0}".format(client_id): client_metrics}
+            client_metrics_dict = {client_id_str: client_metrics}
             comm_round_key = "comm_round_{0}".format(comm_round)
             if comm_round_key not in individual_evaluate_metrics_history:
                 comm_round_individual_evaluate_metrics_dict = {comm_round_key: [client_metrics_dict]}
