@@ -6,7 +6,7 @@ from time import perf_counter
 from flwr.client import NumPyClient
 from flwr.common import NDArray, NDArrays
 
-from goffls.utils.logger_util import log_message
+from goffls.util.logger_util import log_message
 
 
 class FlowerNumpyClient(NumPyClient):

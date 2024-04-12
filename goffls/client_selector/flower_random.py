@@ -2,7 +2,7 @@ from logging import Logger
 
 from flwr.server import ClientManager
 
-from goffls.utils.logger_util import log_message
+from goffls.util.logger_util import log_message
 
 
 def select_clients_using_random(client_manager: ClientManager,

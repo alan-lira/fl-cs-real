@@ -15,7 +15,7 @@ from goffls.client_selector.flower_random import select_clients_using_random
 from goffls.metrics_aggregator.flower_weighted_average import aggregate_loss_by_weighted_average, \
     aggregate_metrics_by_weighted_average
 from goffls.model_aggregator.flower_weighted_average import aggregate_parameters_by_weighted_average
-from goffls.utils.logger_util import log_message
+from goffls.util.logger_util import log_message
 
 
 class FlowerGOFFLSServer(Strategy):
@@ -126,6 +126,7 @@ class FlowerGOFFLSServer(Strategy):
         client_selection_approach = client_selection_settings["approach"]
         selected_fit_clients_history = self.get_attribute("_selected_fit_clients_history")
         available_fit_clients_ids = list(available_fit_clients_map.keys())
+        num_available_fit_clients = len(available_fit_clients_ids)
         available_fit_clients_proxies = [client_values["client_proxy"]
                                          for client_values in list(available_fit_clients_map.values())]
         for client in selected_fit_clients:
@@ -137,10 +138,11 @@ class FlowerGOFFLSServer(Strategy):
                 comm_round_selected_fit_metrics_dict = {comm_round_key:
                                                         {"selection_approach": client_selection_approach,
                                                          "selection_duration": selection_duration,
-                                                         "selected_fit_clients": [client_id_str]}}
+                                                         "num_available_clients": num_available_fit_clients,
+                                                         "selected_clients": [client_id_str]}}
                 selected_fit_clients_history.update(comm_round_selected_fit_metrics_dict)
             else:
-                selected_fit_clients_history[comm_round_key]["selected_fit_clients"].append(client_id_str)
+                selected_fit_clients_history[comm_round_key]["selected_clients"].append(client_id_str)
         self._set_attribute("_selected_fit_clients_history", selected_fit_clients_history)
 
     def configure_fit(self,
@@ -364,6 +366,7 @@ class FlowerGOFFLSServer(Strategy):
         client_selection_approach = client_selection_settings["approach"]
         selected_evaluate_clients_history = self.get_attribute("_selected_evaluate_clients_history")
         available_evaluate_clients_ids = list(available_evaluate_clients_map.keys())
+        num_available_evaluate_clients = len(available_evaluate_clients_ids)
         available_evaluate_clients_proxies = [client_values["client_proxy"]
                                               for client_values in list(available_evaluate_clients_map.values())]
         for client in selected_evaluate_clients:
@@ -375,10 +378,11 @@ class FlowerGOFFLSServer(Strategy):
                 comm_round_selected_evaluate_metrics_dict = {comm_round_key:
                                                              {"selection_approach": client_selection_approach,
                                                               "selection_duration": selection_duration,
-                                                              "selected_evaluate_clients": [client_id_str]}}
+                                                              "num_available_clients": num_available_evaluate_clients,
+                                                              "selected_clients": [client_id_str]}}
                 selected_evaluate_clients_history.update(comm_round_selected_evaluate_metrics_dict)
             else:
-                selected_evaluate_clients_history[comm_round_key]["selected_evaluate_clients"].append(client_id_str)
+                selected_evaluate_clients_history[comm_round_key]["selected_clients"].append(client_id_str)
         self._set_attribute("_selected_evaluate_clients_history", selected_evaluate_clients_history)
 
     def configure_evaluate(self,

@@ -17,8 +17,8 @@ from flwr.client import Client, start_client
 from flwr.common import NDArray
 
 from goffls.client.flower_numpy_client import FlowerNumpyClient
-from goffls.utils.config_parser_util import parse_config_section
-from goffls.utils.logger_util import load_logger, log_message
+from goffls.util.config_parser_util import parse_config_section
+from goffls.util.logger_util import load_logger, log_message
 
 
 class FlowerClientLauncher:
