@@ -11,11 +11,11 @@ from flwr.server.strategy.strategy import Strategy
 
 from goffls.client_selector.flower_ecmtc import select_clients_using_ecmtc
 from goffls.client_selector.flower_mec import select_clients_using_mec
-from goffls.client_selector.flower_random import select_clients_randomly
+from goffls.client_selector.flower_random import select_clients_using_random
 from goffls.metrics_aggregator.flower_weighted_average import aggregate_loss_by_weighted_average, \
     aggregate_metrics_by_weighted_average
 from goffls.model_aggregator.flower_weighted_average import aggregate_parameters_by_weighted_average
-from goffls.utils.logger_util import log_message
+from goffls.util.logger_util import log_message
 
 
 class FlowerGOFFLSServer(Strategy):
@@ -126,6 +126,7 @@ class FlowerGOFFLSServer(Strategy):
         client_selection_approach = client_selection_settings["approach"]
         selected_fit_clients_history = self.get_attribute("_selected_fit_clients_history")
         available_fit_clients_ids = list(available_fit_clients_map.keys())
+        num_available_fit_clients = len(available_fit_clients_ids)
         available_fit_clients_proxies = [client_values["client_proxy"]
                                          for client_values in list(available_fit_clients_map.values())]
         for client in selected_fit_clients:
@@ -137,10 +138,11 @@ class FlowerGOFFLSServer(Strategy):
                 comm_round_selected_fit_metrics_dict = {comm_round_key:
                                                         {"selection_approach": client_selection_approach,
                                                          "selection_duration": selection_duration,
-                                                         "selected_fit_clients": [client_id_str]}}
+                                                         "num_available_clients": num_available_fit_clients,
+                                                         "selected_clients": [client_id_str]}}
                 selected_fit_clients_history.update(comm_round_selected_fit_metrics_dict)
             else:
-                selected_fit_clients_history[comm_round_key]["selected_fit_clients"].append(client_id_str)
+                selected_fit_clients_history[comm_round_key]["selected_clients"].append(client_id_str)
         self._set_attribute("_selected_fit_clients_history", selected_fit_clients_history)
 
     def configure_fit(self,
@@ -168,19 +170,22 @@ class FlowerGOFFLSServer(Strategy):
         num_available_fit_clients = len(available_fit_clients)
         # Map the available fit clients.
         available_fit_clients_map = self._map_available_clients(available_fit_clients)
+        # Set the phase value.
+        phase = "train"
         # Start the clients selection duration timer.
         selection_duration_start = perf_counter()
         if client_selection_approach == "Random":
-            # Select clients for training randomly.
+            # Select clients using the Random algorithm.
             min_available_clients = client_selection_settings["min_available_clients"]
             fit_clients_fraction = client_selection_settings["fit_clients_fraction"]
-            selected_fit_clients = select_clients_randomly(client_manager,
-                                                           num_available_fit_clients,
-                                                           min_available_clients,
-                                                           fit_clients_fraction)
+            selected_fit_clients = select_clients_using_random(client_manager,
+                                                               phase,
+                                                               num_available_fit_clients,
+                                                               min_available_clients,
+                                                               fit_clients_fraction,
+                                                               logger)
         elif client_selection_approach == "MEC":
             # Select clients using the MEC algorithm.
-            phase = "train"
             num_fit_tasks = client_selection_settings["num_fit_tasks"]
             history_check_approach = client_selection_settings["history_check_approach"]
             enable_complementary_selection = client_selection_settings["enable_complementary_selection"]
@@ -196,7 +201,6 @@ class FlowerGOFFLSServer(Strategy):
                                                             logger)
         elif client_selection_approach == "ECMTC":
             # Select clients using the ECMTC algorithm.
-            phase = "train"
             num_fit_tasks = client_selection_settings["num_fit_tasks"]
             fit_deadline = client_selection_settings["fit_deadline"]
             history_check_approach = client_selection_settings["history_check_approach"]
@@ -362,6 +366,7 @@ class FlowerGOFFLSServer(Strategy):
         client_selection_approach = client_selection_settings["approach"]
         selected_evaluate_clients_history = self.get_attribute("_selected_evaluate_clients_history")
         available_evaluate_clients_ids = list(available_evaluate_clients_map.keys())
+        num_available_evaluate_clients = len(available_evaluate_clients_ids)
         available_evaluate_clients_proxies = [client_values["client_proxy"]
                                               for client_values in list(available_evaluate_clients_map.values())]
         for client in selected_evaluate_clients:
@@ -373,10 +378,11 @@ class FlowerGOFFLSServer(Strategy):
                 comm_round_selected_evaluate_metrics_dict = {comm_round_key:
                                                              {"selection_approach": client_selection_approach,
                                                               "selection_duration": selection_duration,
-                                                              "selected_evaluate_clients": [client_id_str]}}
+                                                              "num_available_clients": num_available_evaluate_clients,
+                                                              "selected_clients": [client_id_str]}}
                 selected_evaluate_clients_history.update(comm_round_selected_evaluate_metrics_dict)
             else:
-                selected_evaluate_clients_history[comm_round_key]["selected_evaluate_clients"].append(client_id_str)
+                selected_evaluate_clients_history[comm_round_key]["selected_clients"].append(client_id_str)
         self._set_attribute("_selected_evaluate_clients_history", selected_evaluate_clients_history)
 
     def configure_evaluate(self,
@@ -404,19 +410,22 @@ class FlowerGOFFLSServer(Strategy):
         num_available_evaluate_clients = len(available_evaluate_clients)
         # Map the available evaluate clients.
         available_evaluate_clients_map = self._map_available_clients(available_evaluate_clients)
+        # Set the phase value.
+        phase = "test"
         # Start the clients selection duration timer.
         selection_duration_start = perf_counter()
         if client_selection_approach == "Random":
             # Select clients for testing randomly.
             min_available_clients = client_selection_settings["min_available_clients"]
             evaluate_clients_fraction = client_selection_settings["evaluate_clients_fraction"]
-            selected_evaluate_clients = select_clients_randomly(client_manager,
-                                                                num_available_evaluate_clients,
-                                                                min_available_clients,
-                                                                evaluate_clients_fraction)
+            selected_evaluate_clients = select_clients_using_random(client_manager,
+                                                                    phase,
+                                                                    num_available_evaluate_clients,
+                                                                    min_available_clients,
+                                                                    evaluate_clients_fraction,
+                                                                    logger)
         elif client_selection_approach == "MEC":
             # Select clients using the MEC algorithm.
-            phase = "test"
             num_evaluate_tasks = client_selection_settings["num_evaluate_tasks"]
             history_check_approach = client_selection_settings["history_check_approach"]
             enable_complementary_selection = client_selection_settings["enable_complementary_selection"]
@@ -432,7 +441,6 @@ class FlowerGOFFLSServer(Strategy):
                                                                  logger)
         elif client_selection_approach == "ECMTC":
             # Select clients using the ECMTC algorithm.
-            phase = "test"
             num_evaluate_tasks = client_selection_settings["num_evaluate_tasks"]
             evaluate_deadline = client_selection_settings["evaluate_deadline"]
             history_check_approach = client_selection_settings["history_check_approach"]

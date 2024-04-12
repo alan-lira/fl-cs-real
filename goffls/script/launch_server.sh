@@ -1,19 +1,18 @@
-# Script Begin.
+# Script begin.
 
-# Get Number of Provided Arguments.
+# Get the number of provided arguments.
 number_of_provided_arguments=$#
 
-# Set Required Arguments Array.
-required_arguments_array=("Number of Clients to Launch [Integer]"
-                          "Config File [Path]"
+# Set the required arguments array.
+required_arguments_array=("Config File [Path]"
                           "Implementation [String]")
 number_of_required_arguments=${#required_arguments_array[@]}
 
-# Set Optional Arguments Array.
+# Set the optional arguments array.
 optional_arguments_array=()
 number_of_optional_arguments=${#optional_arguments_array[@]}
 
-# Parse Provided Arguments.
+# Parse the provided arguments.
 if [ $number_of_provided_arguments -lt $number_of_required_arguments ]; then
     if [ $number_of_required_arguments -gt 0 ]; then
         echo -e "Required Arguments ($number_of_required_arguments):"
@@ -30,25 +29,21 @@ if [ $number_of_provided_arguments -lt $number_of_required_arguments ]; then
     exit 1
 fi
 
-# Script Arguments.
-num_clients=${1}
-config_file=${2}
-implementation=${3}
+# Script arguments.
+config_file=${1}
+implementation=${2}
 
-# Launch the Clients (Background Processes).
-for ((client_id = 0; client_id < $num_clients; client_id++)); do
-    python3 main.py launch_client --id $client_id --config-file $config_file --implementation $implementation &
-done
+# Set the server's id.
+server_id="0"
 
-# Print the Number of Clients Launched.
-if [ $num_clients -eq 0 ] || [ $num_clients -gt 1 ]; then
-    echo "Launched $num_clients Clients!"
-else
-    echo "Launched $num_clients Client!"
-fi
+# Launch the server (background processes).
+python3 main.py launch_server --id $server_id --config-file $config_file --implementation $implementation &
 
-# Wait for All Background Processes to Finish.
+# Print the server launched notice.
+echo "Launched the Server!"
+
+# Wait for all background processes to finish.
 wait
 
-# Script End.
+# Script end.
 exit 0

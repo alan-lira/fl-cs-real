@@ -1,8 +1,8 @@
 from logging import Logger
 from numpy import array, inf
 
-from goffls.scheduler.mec import mec
-from goffls.utils.logger_util import log_message
+from goffls.task_scheduler.mec import mec
+from goffls.util.logger_util import log_message
 
 
 def _select_all_available_clients(available_clients_map: dict,
@@ -107,6 +107,9 @@ def select_clients_using_mec(comm_round: int,
                              enable_complementary_selection: bool,
                              complementary_selection_settings: dict,
                              logger: Logger) -> list:
+    # Log a 'selecting clients' message.
+    message = "Selecting {0}ing clients using MEC...".format(phase)
+    log_message(logger, message, "INFO")
     # Initialize the list of selected clients.
     selected_clients = []
     # Verify if there are any entries in the individual metrics history.
@@ -214,4 +217,8 @@ def select_clients_using_mec(comm_round: int,
             selected_clients.append({"client_proxy": client_proxy,
                                      "client_capacity": client_capacity,
                                      "client_num_tasks_scheduled": client_num_tasks_scheduled})
+    # Log a 'number of clients selected' message.
+    message = "{0} {1} selected!".format(len(selected_clients),
+                                         "clients were" if len(selected_clients) != 1 else "client was")
+    log_message(logger, message, "INFO")
     return selected_clients
