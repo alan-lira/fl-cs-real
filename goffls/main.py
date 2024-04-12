@@ -76,7 +76,7 @@ def main() -> None:
     version = get_version(__VERSION_FILE)
     # Parse the WEKA-Wrapper arguments.
     usage = "goffls [--version] [--help] <action> [args]"
-    description = '''GOFFLS.\n'''
+    description = '''Generic Optimization Framework for Federated Learning Schedules (GOFFLS).\n'''
     epilog = ('''{0}'''.format("\n".join([tool_info for tool_info in _get_tools_info()])))
     ap = ArgumentParser(usage=usage,
                         description=description,
