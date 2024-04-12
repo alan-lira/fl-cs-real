@@ -280,8 +280,6 @@ class FlowerServerLauncher:
     def _generate_selected_fit_clients_history_output_file(self) -> None:
         # Get the necessary attributes.
         server_strategy = self.get_attribute("_server_strategy")
-        client_selection_settings = server_strategy.get_attribute("_client_selection_settings")
-        client_selection_approach = client_selection_settings["approach"]
         selected_fit_clients_history = server_strategy.get_attribute("_selected_fit_clients_history")
         output_settings = self.get_attribute("_output_settings")
         remove_output_files = output_settings["remove_output_files"]
@@ -294,7 +292,7 @@ class FlowerServerLauncher:
         # Set the header line.
         selected_fit_clients_history_file_header = "{0},{1},{2},{3}" \
                                                    .format("comm_round",
-                                                           "client_selection_approach",
+                                                           "selection_approach",
                                                            "selection_duration",
                                                            "selected_fit_clients")
         # Write the header line to the output file (if not exist yet).
@@ -304,18 +302,17 @@ class FlowerServerLauncher:
                 file.write(header_line)
         # Write the history data lines to the output file.
         with open(file=selected_fit_clients_history_file, mode="a", encoding="utf-8") as file:
-            for comm_round, comm_round_selected_fit_metrics_dict in selected_fit_clients_history.items():
-                selection_duration = comm_round_selected_fit_metrics_dict["selection_duration"]
-                selected_fit_clients = comm_round_selected_fit_metrics_dict["selected_fit_clients"]
-                data_line = comm_round + "," + client_selection_approach + "," + str(selection_duration) + "," + \
+            for comm_round_key, comm_round_values in selected_fit_clients_history.items():
+                selection_approach = comm_round_values["selection_approach"]
+                selection_duration = comm_round_values["selection_duration"]
+                selected_fit_clients = comm_round_values["selected_fit_clients"]
+                data_line = comm_round_key + "," + selection_approach + "," + str(selection_duration) + "," + \
                     "|".join(selected_fit_clients) + "\n"
                 file.write(data_line)
 
     def _generate_selected_evaluate_clients_history_output_file(self) -> None:
         # Get the necessary attributes.
         server_strategy = self.get_attribute("_server_strategy")
-        client_selection_settings = server_strategy.get_attribute("_client_selection_settings")
-        client_selection_approach = client_selection_settings["approach"]
         selected_evaluate_clients_history = server_strategy.get_attribute("_selected_evaluate_clients_history")
         output_settings = self.get_attribute("_output_settings")
         remove_output_files = output_settings["remove_output_files"]
@@ -328,7 +325,7 @@ class FlowerServerLauncher:
         # Set the header line.
         selected_evaluate_clients_history_file_header = "{0},{1},{2},{3}" \
                                                         .format("comm_round",
-                                                                "client_selection_approach",
+                                                                "selection_approach",
                                                                 "selection_duration",
                                                                 "selected_evaluate_clients")
         # Write the header line to the output file (if not exist yet).
@@ -338,10 +335,11 @@ class FlowerServerLauncher:
                 file.write(header_line)
         # Write the history data lines to the output file.
         with open(file=selected_evaluate_clients_history_file, mode="a", encoding="utf-8") as file:
-            for comm_round, comm_round_selected_evaluate_metrics_dict in selected_evaluate_clients_history.items():
-                selection_duration = comm_round_selected_evaluate_metrics_dict["selection_duration"]
-                selected_evaluate_clients = comm_round_selected_evaluate_metrics_dict["selected_evaluate_clients"]
-                data_line = comm_round + "," + client_selection_approach + "," + str(selection_duration) + "," + \
+            for comm_round_key, comm_round_values in selected_evaluate_clients_history.items():
+                selection_approach = comm_round_values["selection_approach"]
+                selection_duration = comm_round_values["selection_duration"]
+                selected_evaluate_clients = comm_round_values["selected_evaluate_clients"]
+                data_line = comm_round_key + "," + selection_approach + "," + str(selection_duration) + "," + \
                     "|".join(selected_evaluate_clients) + "\n"
                 file.write(data_line)
 
@@ -359,33 +357,34 @@ class FlowerServerLauncher:
         individual_fit_metrics_history_file.parent.mkdir(exist_ok=True, parents=True)
         # Get the ordered set of fit metrics.
         fit_metrics = []
-        for _, comm_round_individual_fit_metrics_list in individual_fit_metrics_history.items():
-            for comm_round_individual_fit_metrics in comm_round_individual_fit_metrics_list:
-                for _, client_fit_metrics in comm_round_individual_fit_metrics.items():
-                    fit_metrics.extend(client_fit_metrics.keys())
+        for _, comm_round_values in individual_fit_metrics_history.items():
+            for individual_fit_metrics in comm_round_values:
+                for _, fit_client_values in individual_fit_metrics.items():
+                    fit_metrics.extend(fit_client_values.keys())
         fit_metrics = sorted(set(fit_metrics))
-        # Set the header line.
-        individual_fit_metrics_history_file_header = "{0},{1},{2}" \
-                                                     .format("comm_round",
-                                                             "client_id",
-                                                             ",".join(fit_metrics))
         # Write the header line to the output file (if not exist yet).
         if not individual_fit_metrics_history_file.is_file():
             with open(file=individual_fit_metrics_history_file, mode="a", encoding="utf-8") as file:
-                header_line = individual_fit_metrics_history_file_header + "\n"
+                header_line = "{0},{1},{2}\n" \
+                              .format("comm_round",
+                                      "client_id",
+                                      ",".join(fit_metrics))
                 file.write(header_line)
         # Write the history data lines to the output file.
         with open(file=individual_fit_metrics_history_file, mode="a", encoding="utf-8") as file:
-            for comm_round, comm_round_individual_fit_metrics_list in individual_fit_metrics_history.items():
-                for comm_round_individual_fit_metrics in comm_round_individual_fit_metrics_list:
-                    for client_id, client_fit_metrics in comm_round_individual_fit_metrics.items():
-                        client_fit_metrics_values = []
+            for comm_round_key, comm_round_values in individual_fit_metrics_history.items():
+                for individual_fit_metrics in comm_round_values:
+                    for fit_client_key, fit_client_values in individual_fit_metrics.items():
+                        fit_client_metrics_values = []
                         for fit_metric in fit_metrics:
                             fit_metric_value = "N/A"
-                            if fit_metric in client_fit_metrics:
-                                fit_metric_value = str(client_fit_metrics[fit_metric])
-                            client_fit_metrics_values.append(fit_metric_value)
-                        data_line = comm_round + "," + client_id + "," + ",".join(client_fit_metrics_values) + "\n"
+                            if fit_metric in fit_client_values:
+                                fit_metric_value = str(fit_client_values[fit_metric])
+                            fit_client_metrics_values.append(fit_metric_value)
+                        data_line = "{0},{1},{2}\n" \
+                                    .format(comm_round_key,
+                                            fit_client_key,
+                                            ",".join(fit_client_metrics_values))
                         file.write(data_line)
 
     def _generate_aggregated_fit_metrics_history_output_file(self) -> None:
@@ -443,33 +442,34 @@ class FlowerServerLauncher:
         individual_evaluate_metrics_history_file.parent.mkdir(exist_ok=True, parents=True)
         # Get the ordered set of evaluate metrics.
         evaluate_metrics = []
-        for _, comm_round_individual_evaluate_metrics_list in individual_evaluate_metrics_history.items():
-            for comm_round_individual_evaluate_metrics in comm_round_individual_evaluate_metrics_list:
-                for _, client_evaluate_metrics in comm_round_individual_evaluate_metrics.items():
-                    evaluate_metrics.extend(client_evaluate_metrics.keys())
+        for _, comm_round_values in individual_evaluate_metrics_history.items():
+            for individual_evaluate_metrics in comm_round_values:
+                for _, evaluate_client_values in individual_evaluate_metrics.items():
+                    evaluate_metrics.extend(evaluate_client_values.keys())
         evaluate_metrics = sorted(set(evaluate_metrics))
-        # Set the header line.
-        individual_evaluate_metrics_history_file_header = "{0},{1},{2}" \
-                                                          .format("comm_round",
-                                                                  "client_id",
-                                                                  ",".join(evaluate_metrics))
         # Write the header line to the output file (if not exist yet).
         if not individual_evaluate_metrics_history_file.is_file():
             with open(file=individual_evaluate_metrics_history_file, mode="a", encoding="utf-8") as file:
-                header_line = individual_evaluate_metrics_history_file_header + "\n"
+                header_line = "{0},{1},{2}\n" \
+                              .format("comm_round",
+                                      "client_id",
+                                      ",".join(evaluate_metrics))
                 file.write(header_line)
         # Write the history data lines to the output file.
         with open(file=individual_evaluate_metrics_history_file, mode="a", encoding="utf-8") as file:
-            for comm_round, comm_round_individual_evaluate_metrics_list in individual_evaluate_metrics_history.items():
-                for comm_round_individual_evaluate_metrics in comm_round_individual_evaluate_metrics_list:
-                    for client_id, client_evaluate_metrics in comm_round_individual_evaluate_metrics.items():
-                        client_evaluate_metrics_values = []
+            for comm_round_key, comm_round_values in individual_evaluate_metrics_history.items():
+                for individual_evaluate_metrics in comm_round_values:
+                    for evaluate_client_key, evaluate_client_values in individual_evaluate_metrics.items():
+                        evaluate_client_metrics_values = []
                         for evaluate_metric in evaluate_metrics:
                             evaluate_metric_value = "N/A"
-                            if evaluate_metric in client_evaluate_metrics:
-                                evaluate_metric_value = str(client_evaluate_metrics[evaluate_metric])
-                            client_evaluate_metrics_values.append(evaluate_metric_value)
-                        data_line = comm_round + "," + client_id + "," + ",".join(client_evaluate_metrics_values) + "\n"
+                            if evaluate_metric in evaluate_client_values:
+                                evaluate_metric_value = str(evaluate_client_values[evaluate_metric])
+                            evaluate_client_metrics_values.append(evaluate_metric_value)
+                        data_line = "{0},{1},{2}\n" \
+                                    .format(comm_round_key,
+                                            evaluate_client_key,
+                                            ",".join(evaluate_client_metrics_values))
                         file.write(data_line)
 
     def _generate_aggregated_evaluate_metrics_history_output_file(self) -> None:

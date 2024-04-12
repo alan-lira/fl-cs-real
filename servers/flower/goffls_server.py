@@ -122,6 +122,8 @@ class FlowerGOFFLSServer(Strategy):
                                              available_fit_clients_map: dict,
                                              selection_duration: float,
                                              selected_fit_clients: list) -> None:
+        client_selection_settings = self.get_attribute("_client_selection_settings")
+        client_selection_approach = client_selection_settings["approach"]
         selected_fit_clients_history = self.get_attribute("_selected_fit_clients_history")
         available_fit_clients_ids = list(available_fit_clients_map.keys())
         available_fit_clients_proxies = [client_values["client_proxy"]
@@ -133,7 +135,8 @@ class FlowerGOFFLSServer(Strategy):
             comm_round_key = "comm_round_{0}".format(comm_round)
             if comm_round_key not in selected_fit_clients_history:
                 comm_round_selected_fit_metrics_dict = {comm_round_key:
-                                                        {"selection_duration": selection_duration,
+                                                        {"selection_approach": client_selection_approach,
+                                                         "selection_duration": selection_duration,
                                                          "selected_fit_clients": [client_id_str]}}
                 selected_fit_clients_history.update(comm_round_selected_fit_metrics_dict)
             else:
@@ -189,7 +192,8 @@ class FlowerGOFFLSServer(Strategy):
                                                             individual_fit_metrics_history,
                                                             history_check_approach,
                                                             enable_complementary_selection,
-                                                            complementary_selection_settings)
+                                                            complementary_selection_settings,
+                                                            logger)
         elif client_selection_approach == "ECMTC":
             # Select clients using the ECMTC algorithm.
             phase = "train"
@@ -354,6 +358,8 @@ class FlowerGOFFLSServer(Strategy):
                                                   available_evaluate_clients_map: dict,
                                                   selection_duration: float,
                                                   selected_evaluate_clients: list) -> None:
+        client_selection_settings = self.get_attribute("_client_selection_settings")
+        client_selection_approach = client_selection_settings["approach"]
         selected_evaluate_clients_history = self.get_attribute("_selected_evaluate_clients_history")
         available_evaluate_clients_ids = list(available_evaluate_clients_map.keys())
         available_evaluate_clients_proxies = [client_values["client_proxy"]
@@ -365,7 +371,8 @@ class FlowerGOFFLSServer(Strategy):
             comm_round_key = "comm_round_{0}".format(comm_round)
             if comm_round_key not in selected_evaluate_clients_history:
                 comm_round_selected_evaluate_metrics_dict = {comm_round_key:
-                                                             {"selection_duration": selection_duration,
+                                                             {"selection_approach": client_selection_approach,
+                                                              "selection_duration": selection_duration,
                                                               "selected_evaluate_clients": [client_id_str]}}
                 selected_evaluate_clients_history.update(comm_round_selected_evaluate_metrics_dict)
             else:
@@ -421,7 +428,8 @@ class FlowerGOFFLSServer(Strategy):
                                                                  individual_evaluate_metrics_history,
                                                                  history_check_approach,
                                                                  enable_complementary_selection,
-                                                                 complementary_selection_settings)
+                                                                 complementary_selection_settings,
+                                                                 logger)
         elif client_selection_approach == "ECMTC":
             # Select clients using the ECMTC algorithm.
             phase = "test"
