@@ -10,11 +10,7 @@ def _select_all_available_clients(available_clients_map: dict,
     selected_clients = []
     for client_key, client_values in available_clients_map.items():
         client_proxy = client_values["client_proxy"]
-        client_capacity = 0
-        if phase == "train":
-            client_capacity = client_values["num_training_examples_available"]
-        if phase == "test":
-            client_capacity = client_values["num_testing_examples_available"]
+        client_capacity = client_values["num_{0}ing_examples_available".format(phase)]
         selected_clients.append({"client_proxy": client_proxy,
                                  "client_capacity": client_capacity,
                                  "client_num_tasks_scheduled": 0})
@@ -89,12 +85,17 @@ def _map_available_participating_clients(comm_rounds: list,
                     num_testing_examples_available \
                         = available_clients_map[client_id_str]["num_testing_examples_available"]
                     client_metrics = participating_client_dict.values()
-                    client_map = {"client_proxy": client_proxy,
-                                  "num_training_examples_available": num_training_examples_available,
-                                  "num_testing_examples_available": num_testing_examples_available,
-                                  comm_round_key: client_metrics}
-                    # Append him to the available participating clients map.
-                    available_participating_clients_map.update({client_id_str: client_map})
+                    # Verify if the available participating client has been mapped yet...
+                    if client_id_str not in available_participating_clients_map:
+                        # If not, append his information and his metrics of the current communication round to the map.
+                        client_map = {"client_proxy": client_proxy,
+                                      "num_training_examples_available": num_training_examples_available,
+                                      "num_testing_examples_available": num_testing_examples_available,
+                                      comm_round_key: client_metrics}
+                        available_participating_clients_map.update({client_id_str: client_map})
+                    else:
+                        # If so, just append his metrics of the current communication round to the map.
+                        available_participating_clients_map[client_id_str].update({comm_round_key: client_metrics})
     return available_participating_clients_map
 
 
@@ -147,22 +148,21 @@ def select_clients_using_mec(comm_round: int,
         energy_costs = []
         # For each available client that has entries in the individual metrics history...
         for client_key, client_values in available_participating_clients_map.items():
-            # Initialize his assignment capacities list, based on his number of examples available.
-            client_assignment_capacity = 0
-            if phase == "train":
-                client_assignment_capacity = client_values["num_training_examples_available"]
-            if phase == "test":
-                client_assignment_capacity = client_values["num_testing_examples_available"]
-            assignment_capacities_client = [i for i in range(0, client_assignment_capacity+1)]
+            # Initialize his assignment capacities list, based on his previous round(s) participation.
+            assignment_capacities_client = [list(comm_round_metrics)[0]["num_{0}ing_examples_used".format(phase)]
+                                            for key, comm_round_metrics in client_values.items()
+                                            if "comm_round_" in key]
+            assignment_capacities_client = list(set(assignment_capacities_client))
             # Initialize his costs lists, based on the number of tasks (examples) to be scheduled.
             time_costs_client = [inf for _ in range(0, num_tasks_to_schedule+1)]
             energy_costs_client = [inf for _ in range(0, num_tasks_to_schedule+1)]
             # Get his individual metrics history entries...
-            individual_metrics_history_entries = [value
-                                                  for key, value in client_values.items() if "comm_round_" in key][0]
+            individual_metrics_history_entries = [list(comm_round_metrics)[0]
+                                                  for key, comm_round_metrics in client_values.items()
+                                                  if "comm_round_" in key]
             for individual_metrics_history_entry in individual_metrics_history_entries:
                 # Get the number of examples used by him.
-                num_examples_key = "num_{0}ing_examples".format(phase)
+                num_examples_key = "num_{0}ing_examples_used".format(phase)
                 num_examples = individual_metrics_history_entry[num_examples_key]
                 # Get the time spent by him (if available).
                 time_key = "{0}ing_time".format(phase)
@@ -207,12 +207,9 @@ def select_clients_using_mec(comm_round: int,
         # Append their corresponding proxies objects and numbers of tasks scheduled into the selected clients list.
         for sel_index in selected_clients_indices:
             client_id_str = client_ids[sel_index]
-            client_proxy = available_participating_clients_map[client_id_str]["client_proxy"]
-            client_capacity = 0
-            if phase == "train":
-                client_capacity = available_participating_clients_map[client_id_str]["num_training_examples_available"]
-            if phase == "test":
-                client_capacity = available_participating_clients_map[client_id_str]["num_testing_examples_available"]
+            client_map = available_participating_clients_map[client_id_str]
+            client_proxy = client_map["client_proxy"]
+            client_capacity = client_map["num_{0}ing_examples_available".format(phase)]
             client_num_tasks_scheduled = int(optimal_schedule[sel_index])
             selected_clients.append({"client_proxy": client_proxy,
                                      "client_capacity": client_capacity,

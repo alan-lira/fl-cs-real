@@ -165,13 +165,8 @@ class FlowerClientLauncher:
         # Get the necessary attributes.
         dataset_settings = self.get_attribute("_dataset_settings")
         root_folder = Path(dataset_settings["root_folder"])
-        x_phase_folder = y_phase_folder = None
-        if phase == "train":
-            x_phase_folder = root_folder.joinpath("x_train")
-            y_phase_folder = root_folder.joinpath("y_train")
-        elif phase == "test":
-            x_phase_folder = root_folder.joinpath("x_test")
-            y_phase_folder = root_folder.joinpath("y_test")
+        x_phase_folder = root_folder.joinpath("x_{0}".format(phase))
+        y_phase_folder = root_folder.joinpath("y_{0}".format(phase))
         y_phase_labels_file = y_phase_folder.joinpath("labels.txt")
         number_of_examples = self._derive_num_images(y_phase_labels_file)
         width, height, depth = self._derive_images_attributes(x_phase_folder, y_phase_labels_file)

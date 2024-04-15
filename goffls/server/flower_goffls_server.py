@@ -229,8 +229,8 @@ class FlowerGOFFLSServer(Strategy):
             selected_fit_client_proxy = selected_fit_client["client_proxy"]
             selected_fit_client_config = deepcopy(fit_config)
             if "client_num_tasks_scheduled" in selected_fit_client:
-                num_training_examples = selected_fit_client["client_num_tasks_scheduled"]
-                selected_fit_client_config.update({"num_training_examples": num_training_examples})
+                num_training_examples_to_use = selected_fit_client["client_num_tasks_scheduled"]
+                selected_fit_client_config.update({"num_training_examples_to_use": num_training_examples_to_use})
             selected_fit_client_instructions = FitIns(parameters, selected_fit_client_config)
             fit_pairs.append((selected_fit_client_proxy, selected_fit_client_instructions))
         # Return the list of (fit_client_proxy, fit_client_instructions) pairs.
@@ -469,8 +469,8 @@ class FlowerGOFFLSServer(Strategy):
             selected_evaluate_client_proxy = selected_evaluate_client["client_proxy"]
             selected_evaluate_client_config = deepcopy(evaluate_config)
             if "client_num_tasks_scheduled" in selected_evaluate_client:
-                num_testing_examples = selected_evaluate_client["client_num_tasks_scheduled"]
-                selected_evaluate_client_config.update({"num_testing_examples": num_testing_examples})
+                num_testing_examples_to_use = selected_evaluate_client["client_num_tasks_scheduled"]
+                selected_evaluate_client_config.update({"num_testing_examples_to_use": num_testing_examples_to_use})
             selected_evaluate_client_instructions = EvaluateIns(parameters, selected_evaluate_client_config)
             evaluate_pairs.append((selected_evaluate_client_proxy, selected_evaluate_client_instructions))
         # Return the list of (evaluate_client_proxy, evaluate_client_instructions) pairs.

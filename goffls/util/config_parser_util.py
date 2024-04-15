@@ -235,7 +235,7 @@ def parse_config_section(config_file: Path,
     config_section = {key: value for key, value in cp[section_name].items()}
     config_section_parsed = {}
     for key, value in config_section.items():
-        value = " ".join(value.splitlines())
+        value = " ".join(value.splitlines()).replace("\'", "").replace("\"", "")
         if is_representation_of_none_type(value):
             config_section_parsed.update({key: cast_to_none()})
         elif is_representation_of_bool_type(value):
