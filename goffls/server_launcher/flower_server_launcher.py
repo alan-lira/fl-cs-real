@@ -63,6 +63,20 @@ class FlowerServerLauncher:
         client_selection_approach_section = "{0} Client Selection Settings".format(client_selection_approach)
         client_selection_approach_settings = parse_config_section(config_file,
                                                                   client_selection_approach_section)
+        if "assignment_capacities_init_approach" in client_selection_approach_settings:
+            assignment_capacities_init_approach \
+                = client_selection_approach_settings["assignment_capacities_init_approach"]
+            assignment_capacities_init_settings = {}
+            try:
+                assignment_capacities_init_section = "{0} Settings".format(assignment_capacities_init_approach)
+                assignment_capacities_init_settings = parse_config_section(config_file,
+                                                                           assignment_capacities_init_section)
+            except KeyError:
+                pass
+            assignment_capacities_init_settings.update({"approach": assignment_capacities_init_approach})
+            client_selection_approach_settings.update({"assignment_capacities_init_settings":
+                                                       assignment_capacities_init_settings})
+            client_selection_approach_settings.pop("assignment_capacities_init_approach")
         if "complementary_selection_approach" in client_selection_approach_settings:
             complementary_selection_approach = client_selection_approach_settings["complementary_selection_approach"]
             complementary_selection_section = "{0} Client Selection Settings".format(complementary_selection_approach)
@@ -292,11 +306,12 @@ class FlowerServerLauncher:
         # Write the header line to the output file (if not exist yet).
         if not selected_fit_clients_history_file.exists():
             with open(file=selected_fit_clients_history_file, mode="a", encoding="utf-8") as file:
-                header_line = "{0},{1},{2},{3},{4}\n" \
+                header_line = "{0},{1},{2},{3},{4},{5}\n" \
                               .format("comm_round",
                                       "client_selection_approach",
                                       "selection_duration",
                                       "num_available_clients",
+                                      "num_selected_clients",
                                       "selected_clients")
                 file.write(header_line)
         # Write the history data lines to the output file.
@@ -306,11 +321,13 @@ class FlowerServerLauncher:
                 selection_duration = comm_round_values["selection_duration"]
                 num_available_clients = comm_round_values["num_available_clients"]
                 selected_clients = comm_round_values["selected_clients"]
-                data_line = "{0},{1},{2},{3},{4}\n" \
+                num_selected_clients = len(selected_clients)
+                data_line = "{0},{1},{2},{3},{4},{5}\n" \
                             .format(comm_round_key,
                                     selection_approach,
                                     selection_duration,
                                     num_available_clients,
+                                    num_selected_clients,
                                     "|".join(selected_clients))
                 file.write(data_line)
 
@@ -329,11 +346,12 @@ class FlowerServerLauncher:
         # Write the header line to the output file (if not exist yet).
         if not selected_evaluate_clients_history_file.is_file():
             with open(file=selected_evaluate_clients_history_file, mode="a", encoding="utf-8") as file:
-                header_line = "{0},{1},{2},{3},{4}\n" \
+                header_line = "{0},{1},{2},{3},{4},{5}\n" \
                               .format("comm_round",
                                       "client_selection_approach",
                                       "selection_duration",
                                       "num_available_clients",
+                                      "num_selected_clients",
                                       "selected_clients")
                 file.write(header_line)
         # Write the history data lines to the output file.
@@ -343,11 +361,13 @@ class FlowerServerLauncher:
                 selection_duration = comm_round_values["selection_duration"]
                 num_available_clients = comm_round_values["num_available_clients"]
                 selected_clients = comm_round_values["selected_clients"]
-                data_line = "{0},{1},{2},{3},{4}\n" \
+                num_selected_clients = len(selected_clients)
+                data_line = "{0},{1},{2},{3},{4},{5}\n" \
                             .format(comm_round_key,
                                     selection_approach,
                                     selection_duration,
                                     num_available_clients,
+                                    num_selected_clients,
                                     "|".join(selected_clients))
                 file.write(data_line)
 

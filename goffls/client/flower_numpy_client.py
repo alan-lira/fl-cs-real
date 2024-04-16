@@ -137,8 +137,8 @@ class FlowerNumpyClient(NumPyClient):
         # Get the number of training examples available.
         num_training_examples_available = len(x_train)
         # Get the number of training examples to use.
-        if "num_training_examples" in fit_config:
-            num_training_examples_to_use = fit_config["num_training_examples"]
+        if "num_training_examples_to_use" in fit_config:
+            num_training_examples_to_use = fit_config["num_training_examples_to_use"]
         else:
             num_training_examples_to_use = len(x_train)
         # Get the indices that will be used to slice the training dataset.
@@ -146,8 +146,6 @@ class FlowerNumpyClient(NumPyClient):
         # Slice the training dataset.
         x_train_sliced = x_train[slice_indices]
         y_train_sliced = y_train[slice_indices]
-        # Add the number of training examples to the training metrics.
-        training_metrics.update({"num_training_examples": num_training_examples_to_use})
         # Replace 'None' values to None (necessary workaround on Flower).
         fit_config = {k: (None if v == "None" else v) for k, v in fit_config.items()}
         # Log the training configuration (fit_config) received from the server.
@@ -170,6 +168,8 @@ class FlowerNumpyClient(NumPyClient):
         local_model_parameters = model.get_weights()
         # Update the parameters (weights) of the local model with those obtained from the training (local parameters).
         self._update_model_parameters(local_model_parameters)
+        # Add the number of training examples used to the training metrics.
+        training_metrics.update({"num_training_examples_used": num_training_examples_to_use})
         # Get the training metrics names.
         training_metrics_names = history.keys()
         # Store the training metrics of the last epoch.
@@ -221,8 +221,8 @@ class FlowerNumpyClient(NumPyClient):
         # Get the number of testing examples available.
         num_testing_examples_available = len(x_test)
         # Get the number of testing examples to use.
-        if "num_testing_examples" in evaluate_config:
-            num_testing_examples_to_use = evaluate_config["num_testing_examples"]
+        if "num_testing_examples_to_use" in evaluate_config:
+            num_testing_examples_to_use = evaluate_config["num_testing_examples_to_use"]
         else:
             num_testing_examples_to_use = len(x_test)
         # Get the indices that will be used to slice the testing dataset.
@@ -230,8 +230,6 @@ class FlowerNumpyClient(NumPyClient):
         # Slice the testing dataset.
         x_test_sliced = x_test[slice_indices]
         y_test_sliced = y_test[slice_indices]
-        # Add the number of testing examples to the testing metrics.
-        testing_metrics.update({"num_testing_examples": num_testing_examples_to_use})
         # Replace 'None' values to None (necessary workaround on Flower).
         evaluate_config = {k: (None if v == "None" else v) for k, v in evaluate_config.items()}
         # Log the testing configuration (evaluate_config) received from the server.
@@ -246,6 +244,8 @@ class FlowerNumpyClient(NumPyClient):
                                  y=y_test_sliced,
                                  batch_size=evaluate_config["batch_size"],
                                  steps=evaluate_config["steps"])
+        # Add the number of testing examples used to the testing metrics.
+        testing_metrics.update({"num_testing_examples_used": num_testing_examples_to_use})
         # Get the testing metrics names.
         testing_metrics_names = model.metrics_names
         # Store the testing metrics.

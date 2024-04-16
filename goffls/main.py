@@ -74,7 +74,7 @@ def main() -> None:
     perf_counter_start = perf_counter()
     # Get the version.
     version = get_version(__VERSION_FILE)
-    # Parse the WEKA-Wrapper arguments.
+    # Parse the GOFFLS arguments.
     usage = "goffls [--version] [--help] <action> [args]"
     description = '''Generic Optimization Framework for Federated Learning Schedules (GOFFLS).\n'''
     epilog = ('''{0}'''.format("\n".join([tool_info for tool_info in _get_tools_info()])))
