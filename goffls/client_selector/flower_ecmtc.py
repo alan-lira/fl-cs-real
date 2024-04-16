@@ -99,15 +99,26 @@ def _map_available_participating_clients(comm_rounds: list,
     return available_participating_clients_map
 
 
+def _calculate_linear_interpolation_or_extrapolation(x1: float,
+                                                     x2: float,
+                                                     y1: float,
+                                                     y2: float,
+                                                     x: float) -> float:
+    # Calculate the slope m of the line.
+    m = (y2 - y1) / (x2 - x1)
+    # Calculate the value of y using the line equation.
+    y = y1 + m * (x - x1)
+    return y
+
+
 def select_clients_using_ecmtc(comm_round: int,
                                phase: str,
                                num_tasks_to_schedule: int,
-                               deadline: float,
+                               deadline_in_seconds: float,
                                available_clients_map: dict,
                                individual_metrics_history: dict,
-                               history_check_approach: str,
-                               enable_complementary_selection: bool,
-                               complementary_selection_settings: dict,
+                               history_checking_approach: str,
+                               assignment_capacities_init_settings: dict,
                                logger: Logger) -> list:
     # Log a 'selecting clients' message.
     message = "Selecting {0}ing clients using ECMTC...".format(phase)
@@ -127,13 +138,13 @@ def select_clients_using_ecmtc(comm_round: int,
         # Append the selected clients into the selected clients list.
         selected_clients.extend(selected_all_available_clients)
     else:
-        # Otherwise, the clients will be selected according to their entries in the individual metrics history.
+        # Otherwise, the available clients will be selected considering their entries in the individual metrics history.
         comm_rounds = []
-        if history_check_approach == "ImmediatelyPreviousRound":
-            # Consider only available clients who participated on the immediately previous round.
+        if history_checking_approach == "Only_Immediately_Previous_Round":
+            # Check the immediately previous round's history only.
             comm_rounds = [comm_round - 1]
-        elif history_check_approach == "AnyPreviousRound":
-            # Consider only available clients who participated on any of the previous rounds.
+        elif history_checking_approach == "All_Previous_Rounds":
+            # Check all the previous rounds' history.
             comm_rounds = list(range(1, comm_round))
         # Load the available participating clients map.
         available_participating_clients_map = _map_available_participating_clients(comm_rounds,
@@ -149,11 +160,6 @@ def select_clients_using_ecmtc(comm_round: int,
         energy_costs = []
         # For each available client that has entries in the individual metrics history...
         for client_key, client_values in available_participating_clients_map.items():
-            # Initialize his assignment capacities list, based on his previous round(s) participation.
-            assignment_capacities_client = [list(comm_round_metrics)[0]["num_{0}ing_examples_used".format(phase)]
-                                            for key, comm_round_metrics in client_values.items()
-                                            if "comm_round_" in key]
-            assignment_capacities_client = list(set(assignment_capacities_client))
             # Initialize his costs lists, based on the number of tasks (examples) to be scheduled.
             time_costs_client = [inf for _ in range(0, num_tasks_to_schedule+1)]
             energy_costs_client = [inf for _ in range(0, num_tasks_to_schedule+1)]
@@ -183,6 +189,72 @@ def select_clients_using_ecmtc(comm_round: int,
                     energy_nvidia_gpu_cost = individual_metrics_history_entry[energy_nvidia_gpu_key]
                 # Update his energy costs list for this number of examples.
                 energy_costs_client[num_examples] = energy_cpu_cost + energy_nvidia_gpu_cost
+            # Initialize his assignment capacities list...
+            assignment_capacities_client = None
+            assignment_capacities_init_approach = assignment_capacities_init_settings["approach"]
+            if assignment_capacities_init_approach == "Only_Previous_Num_Tasks_Assigned_Set":
+                # Based only on his previous round(s) participation, i.e., the set of previously numbers of tasks
+                # assigned to him.
+                previous_num_tasks_assigned = [list(comm_round_metrics)[0]["num_{0}ing_examples_used".format(phase)]
+                                               for key, comm_round_metrics in client_values.items()
+                                               if "comm_round_" in key]
+                previous_num_tasks_assigned_set = list(set(previous_num_tasks_assigned))
+                assignment_capacities_client = previous_num_tasks_assigned_set
+            elif assignment_capacities_init_approach == "Custom_Range_Set_Union_Previous_Num_Tasks_Assigned_Set":
+                # Based on a custom range set (ordered in ascending order), which also includes his previous round(s)
+                # participation, i.e., the set of previously numbers of tasks assigned to him.
+                lower_bound = assignment_capacities_init_settings["lower_bound"]
+                upper_bound = assignment_capacities_init_settings["upper_bound"]
+                if upper_bound == "client_capacity":
+                    upper_bound = client_values["num_{0}ing_examples_available".format(phase)]
+                step = assignment_capacities_init_settings["step"]
+                custom_range = list(range(lower_bound, upper_bound+1, step))
+                previous_num_tasks_assigned = [list(comm_round_metrics)[0]["num_{0}ing_examples_used".format(phase)]
+                                               for key, comm_round_metrics in client_values.items()
+                                               if "comm_round_" in key]
+                previous_num_tasks_assigned_set = list(set(previous_num_tasks_assigned))
+                custom_range.extend(previous_num_tasks_assigned_set)
+                custom_range_set = list(set(custom_range))
+                custom_range_set_sorted = sorted(custom_range_set)
+                assignment_capacities_client = custom_range_set_sorted
+                # Set the costs of zero tasks scheduled, allowing the data point (x=0, y=0) to be used during the
+                # estimation of costs for the unknown values belonging to the custom range.
+                time_costs_client[0] = 0
+                energy_costs_client[0] = 0
+                previous_num_tasks_assigned.append(0)
+                # Estimates the costs of via linear interpolation/extrapolation.
+                for assignment_capacity in assignment_capacities_client:
+                    if assignment_capacity not in previous_num_tasks_assigned:
+                        # Determine x1 and x2, which are two known values of previously num tasks assigned.
+                        x1_candidates = [i for i in previous_num_tasks_assigned if i < assignment_capacity]
+                        x2_candidates = [i for i in previous_num_tasks_assigned if i > assignment_capacity]
+                        if x2_candidates:
+                            # Interpolation.
+                            x1 = x1_candidates[-1]
+                            x2 = x2_candidates[0]
+                        else:
+                            # Extrapolation.
+                            x1 = x1_candidates[-2]
+                            x2 = x1_candidates[-1]
+                        # Calculate the linear interpolation/extrapolation for the time cost.
+                        y1_time = time_costs_client[x1]
+                        y2_time = time_costs_client[x2]
+                        time_cost_estimation = _calculate_linear_interpolation_or_extrapolation(x1,
+                                                                                                x2,
+                                                                                                y1_time,
+                                                                                                y2_time,
+                                                                                                assignment_capacity)
+                        # Calculate the linear interpolation/extrapolation for the energy cost.
+                        y1_energy = energy_costs_client[x1]
+                        y2_energy = energy_costs_client[x2]
+                        energy_cost_estimation = _calculate_linear_interpolation_or_extrapolation(x1,
+                                                                                                  x2,
+                                                                                                  y1_energy,
+                                                                                                  y2_energy,
+                                                                                                  assignment_capacity)
+                        # Update the costs lists with the estimated values.
+                        time_costs_client[assignment_capacity] = time_cost_estimation
+                        energy_costs_client[assignment_capacity] = energy_cost_estimation
             # Append his lists into the global lists.
             client_ids.append(client_key)
             assignment_capacities.append(assignment_capacities_client)
@@ -198,7 +270,7 @@ def select_clients_using_ecmtc(comm_round: int,
                                                                                assignment_capacities,
                                                                                time_costs,
                                                                                energy_costs,
-                                                                               deadline)
+                                                                               deadline_in_seconds)
         # Log the ECMTC algorithm's result.
         message = "X*: {0}\nMinimal makespan (Cₘₐₓ): {1}\nMinimal energy consumption (ΣE): {2}" \
                   .format(optimal_schedule, minimal_makespan, minimal_energy_consumption)

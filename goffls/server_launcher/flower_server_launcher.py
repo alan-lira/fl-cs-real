@@ -63,6 +63,20 @@ class FlowerServerLauncher:
         client_selection_approach_section = "{0} Client Selection Settings".format(client_selection_approach)
         client_selection_approach_settings = parse_config_section(config_file,
                                                                   client_selection_approach_section)
+        if "assignment_capacities_init_approach" in client_selection_approach_settings:
+            assignment_capacities_init_approach \
+                = client_selection_approach_settings["assignment_capacities_init_approach"]
+            assignment_capacities_init_settings = {}
+            try:
+                assignment_capacities_init_section = "{0} Settings".format(assignment_capacities_init_approach)
+                assignment_capacities_init_settings = parse_config_section(config_file,
+                                                                           assignment_capacities_init_section)
+            except KeyError:
+                pass
+            assignment_capacities_init_settings.update({"approach": assignment_capacities_init_approach})
+            client_selection_approach_settings.update({"assignment_capacities_init_settings":
+                                                       assignment_capacities_init_settings})
+            client_selection_approach_settings.pop("assignment_capacities_init_approach")
         if "complementary_selection_approach" in client_selection_approach_settings:
             complementary_selection_approach = client_selection_approach_settings["complementary_selection_approach"]
             complementary_selection_section = "{0} Client Selection Settings".format(complementary_selection_approach)
