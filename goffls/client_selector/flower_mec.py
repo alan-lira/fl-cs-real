@@ -176,18 +176,30 @@ def select_clients_using_mec(comm_round: int,
                     # Update his time costs list for this number of examples.
                     time_cost = individual_metrics_history_entry[time_key]
                     time_costs_client[num_examples] = time_cost
+                energy_cost = 0
                 # Get the energy consumed by his CPU (if available).
                 energy_cpu_key = "{0}ing_energy_cpu".format(phase)
-                energy_cpu_cost = 0
                 if energy_cpu_key in individual_metrics_history_entry:
                     energy_cpu_cost = individual_metrics_history_entry[energy_cpu_key]
+                    if energy_cpu_cost > 0:
+                        energy_cost += energy_cpu_cost
+                    else:
+                        # TODO: Take the mean CPU energy cost for this number of examples, if available.
+                        pass
                 # Get the energy consumed by his NVIDIA GPU (if available).
                 energy_nvidia_gpu_key = "{0}ing_energy_nvidia_gpu".format(phase)
-                energy_nvidia_gpu_cost = 0
                 if energy_nvidia_gpu_key in individual_metrics_history_entry:
                     energy_nvidia_gpu_cost = individual_metrics_history_entry[energy_nvidia_gpu_key]
+                    if energy_nvidia_gpu_cost > 0:
+                        energy_cost += energy_nvidia_gpu_cost
+                    else:
+                        # TODO: Take the mean NVIDIA GPU energy cost for this number of examples, if available.
+                        pass
+                # If no valid energy costs were found, set the energy cost as infinity.
+                if energy_cost == 0:
+                    energy_cost = inf
                 # Update his energy costs list for this number of examples.
-                energy_costs_client[num_examples] = energy_cpu_cost + energy_nvidia_gpu_cost
+                energy_costs_client[num_examples] = energy_cost
             # Initialize his assignment capacities list...
             assignment_capacities_client = None
             assignment_capacities_initializer = assignment_capacities_init_settings["assignment_capacities_initializer"]
@@ -207,7 +219,7 @@ def select_clients_using_mec(comm_round: int,
                 if upper_bound == "client_capacity":
                     upper_bound = client_values["num_{0}ing_examples_available".format(phase)]
                 step = assignment_capacities_init_settings["step"]
-                custom_range = list(range(lower_bound, upper_bound+1, step))
+                custom_range = list(range(lower_bound, min(upper_bound+1, num_tasks_to_schedule+1), step))
                 previous_num_tasks_assigned = [list(comm_round_metrics)[0]["num_{0}ing_examples_used".format(phase)]
                                                for key, comm_round_metrics in client_values.items()
                                                if "comm_round_" in key]
