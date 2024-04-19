@@ -99,6 +99,26 @@ def _map_available_participating_clients(comm_rounds: list,
     return available_participating_clients_map
 
 
+def _get_metric_mean_value(individual_metrics_history: dict,
+                           client_key: str,
+                           num_examples_key: str,
+                           num_examples_used: int,
+                           metric_key: str) -> float:
+    metric_mean_value = 0
+    metric_values = []
+    for comm_round_key, individual_metrics_entry_comm_round in individual_metrics_history.items():
+        for participating_client_dict in individual_metrics_entry_comm_round:
+            if client_key in participating_client_dict:
+                comm_round_num_examples_used = participating_client_dict[client_key][num_examples_key]
+                if comm_round_num_examples_used == num_examples_used:
+                    metric_value = participating_client_dict[client_key][metric_key]
+                    if metric_value > 0:
+                        metric_values.append(metric_value)
+    if metric_values:
+        metric_mean_value = sum(metric_values) / len(metric_values)
+    return metric_mean_value
+
+
 def _calculate_linear_interpolation_or_extrapolation(x1: float,
                                                      x2: float,
                                                      y1: float,
@@ -181,20 +201,32 @@ def select_clients_using_mec(comm_round: int,
                 energy_cpu_key = "{0}ing_energy_cpu".format(phase)
                 if energy_cpu_key in individual_metrics_history_entry:
                     energy_cpu_cost = individual_metrics_history_entry[energy_cpu_key]
+                    # If the CPU energy cost is a valid value (higher than 0), take it.
                     if energy_cpu_cost > 0:
                         energy_cost += energy_cpu_cost
+                    # Otherwise, take the mean of the CPU energy costs for this number of examples, if available.
                     else:
-                        # TODO: Take the mean CPU energy cost for this number of examples, if available.
-                        pass
+                        energy_cpu_cost_mean_value = _get_metric_mean_value(individual_metrics_history,
+                                                                            client_key,
+                                                                            num_examples_key,
+                                                                            num_examples,
+                                                                            energy_cpu_key)
+                        energy_cost += energy_cpu_cost_mean_value
                 # Get the energy consumed by his NVIDIA GPU (if available).
                 energy_nvidia_gpu_key = "{0}ing_energy_nvidia_gpu".format(phase)
                 if energy_nvidia_gpu_key in individual_metrics_history_entry:
                     energy_nvidia_gpu_cost = individual_metrics_history_entry[energy_nvidia_gpu_key]
+                    # If the NVIDIA GPU energy cost is a valid value (higher than 0), take it.
                     if energy_nvidia_gpu_cost > 0:
                         energy_cost += energy_nvidia_gpu_cost
+                    # Otherwise, take the mean of the NVIDIA GPU energy costs for this number of examples, if available.
                     else:
-                        # TODO: Take the mean NVIDIA GPU energy cost for this number of examples, if available.
-                        pass
+                        energy_nvidia_gpu_cost_mean_value = _get_metric_mean_value(individual_metrics_history,
+                                                                                   client_key,
+                                                                                   num_examples_key,
+                                                                                   num_examples,
+                                                                                   energy_nvidia_gpu_key)
+                        energy_cost += energy_nvidia_gpu_cost_mean_value
                 # If no valid energy costs were found, set the energy cost as infinity.
                 if energy_cost == 0:
                     energy_cost = inf
