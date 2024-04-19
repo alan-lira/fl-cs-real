@@ -22,10 +22,14 @@ class FlowerGOFFLSServer(Strategy):
 
     def __init__(self,
                  *,
-                 server_id: int,
+                 id_: int,
                  enable_training: bool,
                  enable_testing: bool,
                  accept_clients_failures: bool,
+                 num_fit_tasks: int,
+                 fit_deadline_in_seconds: float,
+                 num_evaluate_tasks: int,
+                 evaluate_deadline_in_seconds: float,
                  client_selection_settings: dict,
                  model_aggregation_settings: dict,
                  metrics_aggregation_settings: dict,
@@ -34,10 +38,14 @@ class FlowerGOFFLSServer(Strategy):
                  initial_parameters: Optional[NDArrays],
                  logger: Logger) -> None:
         super().__init__()
-        self._server_id = server_id
+        self._server_id = id_
         self._enable_training = enable_training
         self._enable_testing = enable_testing
         self._accept_clients_failures = accept_clients_failures
+        self._num_fit_tasks = num_fit_tasks
+        self._fit_deadline_in_seconds = fit_deadline_in_seconds
+        self._num_evaluate_tasks = num_evaluate_tasks
+        self._evaluate_deadline_in_seconds = evaluate_deadline_in_seconds
         self._client_selection_settings = client_selection_settings
         self._model_aggregation_settings = model_aggregation_settings
         self._metrics_aggregation_settings = metrics_aggregation_settings
@@ -123,7 +131,7 @@ class FlowerGOFFLSServer(Strategy):
                                              selection_duration: float,
                                              selected_fit_clients: list) -> None:
         client_selection_settings = self.get_attribute("_client_selection_settings")
-        client_selection_approach = client_selection_settings["approach"]
+        client_selector = client_selection_settings["client_selector"]
         selected_fit_clients_history = self.get_attribute("_selected_fit_clients_history")
         available_fit_clients_ids = list(available_fit_clients_map.keys())
         num_available_fit_clients = len(available_fit_clients_ids)
@@ -136,7 +144,7 @@ class FlowerGOFFLSServer(Strategy):
             comm_round_key = "comm_round_{0}".format(comm_round)
             if comm_round_key not in selected_fit_clients_history:
                 comm_round_selected_fit_metrics_dict = {comm_round_key:
-                                                        {"selection_approach": client_selection_approach,
+                                                        {"client_selector": client_selector,
                                                          "selection_duration": selection_duration,
                                                          "num_available_clients": num_available_fit_clients,
                                                          "selected_clients": [client_id_str]}}
@@ -153,8 +161,10 @@ class FlowerGOFFLSServer(Strategy):
            \nImplementation of the abstract method of the Strategy class."""
         # Get the necessary attributes.
         enable_training = self.get_attribute("_enable_training")
+        num_fit_tasks = self.get_attribute("_num_fit_tasks")
+        fit_deadline_in_seconds = self.get_attribute("_fit_deadline_in_seconds")
         client_selection_settings = self.get_attribute("_client_selection_settings")
-        client_selection_approach = client_selection_settings["approach"]
+        client_selector = client_selection_settings["client_selector"]
         individual_fit_metrics_history = self.get_attribute("_individual_fit_metrics_history")
         logger = self.get_attribute("_logger")
         # Do not configure federated training if it is not enabled.
@@ -174,7 +184,7 @@ class FlowerGOFFLSServer(Strategy):
         phase = "train"
         # Start the clients selection duration timer.
         selection_duration_start = perf_counter()
-        if client_selection_approach == "Random":
+        if client_selector == "Random":
             # Select clients using the Random algorithm.
             min_available_clients = client_selection_settings["min_available_clients"]
             fit_clients_fraction = client_selection_settings["fit_clients_fraction"]
@@ -184,24 +194,21 @@ class FlowerGOFFLSServer(Strategy):
                                                                min_available_clients,
                                                                fit_clients_fraction,
                                                                logger)
-        elif client_selection_approach == "MEC":
+        elif client_selector == "MEC":
             # Select clients using the MEC algorithm.
-            num_fit_tasks = client_selection_settings["num_fit_tasks"]
-            history_checking_approach = client_selection_settings["history_checking_approach"]
+            history_checker = client_selection_settings["history_checker"]
             assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
             selected_fit_clients = select_clients_using_mec(server_round,
                                                             phase,
                                                             num_fit_tasks,
                                                             available_fit_clients_map,
                                                             individual_fit_metrics_history,
-                                                            history_checking_approach,
+                                                            history_checker,
                                                             assignment_capacities_init_settings,
                                                             logger)
-        elif client_selection_approach == "ECMTC":
+        elif client_selector == "ECMTC":
             # Select clients using the ECMTC algorithm.
-            num_fit_tasks = client_selection_settings["num_fit_tasks"]
-            fit_deadline_in_seconds = client_selection_settings["fit_deadline_in_seconds"]
-            history_checking_approach = client_selection_settings["history_checking_approach"]
+            history_checker = client_selection_settings["history_checker"]
             assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
             selected_fit_clients = select_clients_using_ecmtc(server_round,
                                                               phase,
@@ -209,7 +216,7 @@ class FlowerGOFFLSServer(Strategy):
                                                               fit_deadline_in_seconds,
                                                               available_fit_clients_map,
                                                               individual_fit_metrics_history,
-                                                              history_checking_approach,
+                                                              history_checker,
                                                               assignment_capacities_init_settings,
                                                               logger)
         # Get the clients selection duration.
@@ -277,7 +284,7 @@ class FlowerGOFFLSServer(Strategy):
         \nCalled by Flower after each training phase."""
         # Get the necessary attributes.
         metrics_aggregation_settings = self.get_attribute("_metrics_aggregation_settings")
-        metrics_aggregation_approach = metrics_aggregation_settings["approach"]
+        metrics_aggregator = metrics_aggregation_settings["metrics_aggregator"]
         server_id = self.get_attribute("_server_id")
         logger = self.get_attribute("_logger")
         # Update the individual training metrics history.
@@ -287,8 +294,8 @@ class FlowerGOFFLSServer(Strategy):
         fit_metrics = self._remove_undesired_metrics(fit_metrics, undesired_metrics)
         # Initialize the aggregated training metrics dictionary (aggregated_fit_metrics).
         aggregated_fit_metrics = {}
-        # Aggregate the training metrics according to the user-defined approach.
-        if metrics_aggregation_approach == "Weighted_Average":
+        # Aggregate the training metrics according to the user-defined aggregator.
+        if metrics_aggregator == "Weighted_Average":
             aggregated_fit_metrics = aggregate_metrics_by_weighted_average(fit_metrics)
         # Update the aggregated training metrics history.
         self._update_aggregated_fit_metrics_history(comm_round, aggregated_fit_metrics)
@@ -298,7 +305,7 @@ class FlowerGOFFLSServer(Strategy):
                                                  " Clients" if num_participating_clients > 1 else " Client"])
         # Log the aggregated training metrics.
         message = "[Server {0} | Round {1}] Aggregated training metrics ({2} of {3}): {4}" \
-                  .format(server_id, comm_round, metrics_aggregation_approach, num_participating_clients_str,
+                  .format(server_id, comm_round, metrics_aggregator, num_participating_clients_str,
                           aggregated_fit_metrics)
         log_message(logger, message, "DEBUG")
         # Return the aggregated training metrics (aggregated_fit_metrics).
@@ -313,13 +320,13 @@ class FlowerGOFFLSServer(Strategy):
         # Get the necessary attributes.
         accept_clients_failures = self.get_attribute("_accept_clients_failures")
         model_aggregation_settings = self.get_attribute("_model_aggregation_settings")
-        model_aggregation_approach = model_aggregation_settings["approach"]
+        model_aggregator = model_aggregation_settings["model_aggregator"]
         # Do not aggregate if there are no results or if there are clients failures and failures are not accepted.
         if not results or (failures and not accept_clients_failures):
             return None, {}
         # Initialize the aggregated model parameters.
         aggregated_model_parameters = None
-        if model_aggregation_approach == "FedAvg":
+        if model_aggregator == "FedAvg":
             # Aggregate the model parameters by weighted average.
             inplace_aggregation = model_aggregation_settings["inplace_aggregation"]
             aggregated_model_parameters = aggregate_parameters_by_weighted_average(results, inplace_aggregation)
@@ -359,7 +366,7 @@ class FlowerGOFFLSServer(Strategy):
                                                   selection_duration: float,
                                                   selected_evaluate_clients: list) -> None:
         client_selection_settings = self.get_attribute("_client_selection_settings")
-        client_selection_approach = client_selection_settings["approach"]
+        client_selector = client_selection_settings["client_selector"]
         selected_evaluate_clients_history = self.get_attribute("_selected_evaluate_clients_history")
         available_evaluate_clients_ids = list(available_evaluate_clients_map.keys())
         num_available_evaluate_clients = len(available_evaluate_clients_ids)
@@ -372,7 +379,7 @@ class FlowerGOFFLSServer(Strategy):
             comm_round_key = "comm_round_{0}".format(comm_round)
             if comm_round_key not in selected_evaluate_clients_history:
                 comm_round_selected_evaluate_metrics_dict = {comm_round_key:
-                                                             {"selection_approach": client_selection_approach,
+                                                             {"client_selector": client_selector,
                                                               "selection_duration": selection_duration,
                                                               "num_available_clients": num_available_evaluate_clients,
                                                               "selected_clients": [client_id_str]}}
@@ -389,8 +396,10 @@ class FlowerGOFFLSServer(Strategy):
            \nImplementation of the abstract method of the Strategy class."""
         # Get the necessary attributes.
         enable_testing = self.get_attribute("_enable_testing")
+        num_evaluate_tasks = self.get_attribute("_num_evaluate_tasks")
+        evaluate_deadline_in_seconds = self.get_attribute("_evaluate_deadline_in_seconds")
         client_selection_settings = self.get_attribute("_client_selection_settings")
-        client_selection_approach = client_selection_settings["approach"]
+        client_selector = client_selection_settings["client_selector"]
         individual_evaluate_metrics_history = self.get_attribute("_individual_evaluate_metrics_history")
         logger = self.get_attribute("_logger")
         # Do not configure federated testing if it is not enabled.
@@ -410,7 +419,7 @@ class FlowerGOFFLSServer(Strategy):
         phase = "test"
         # Start the clients selection duration timer.
         selection_duration_start = perf_counter()
-        if client_selection_approach == "Random":
+        if client_selector == "Random":
             # Select clients for testing randomly.
             min_available_clients = client_selection_settings["min_available_clients"]
             evaluate_clients_fraction = client_selection_settings["evaluate_clients_fraction"]
@@ -420,24 +429,21 @@ class FlowerGOFFLSServer(Strategy):
                                                                     min_available_clients,
                                                                     evaluate_clients_fraction,
                                                                     logger)
-        elif client_selection_approach == "MEC":
+        elif client_selector == "MEC":
             # Select clients using the MEC algorithm.
-            num_evaluate_tasks = client_selection_settings["num_evaluate_tasks"]
-            history_checking_approach = client_selection_settings["history_checking_approach"]
+            history_checker = client_selection_settings["history_checker"]
             assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
             selected_evaluate_clients = select_clients_using_mec(server_round,
                                                                  phase,
                                                                  num_evaluate_tasks,
                                                                  available_evaluate_clients_map,
                                                                  individual_evaluate_metrics_history,
-                                                                 history_checking_approach,
+                                                                 history_checker,
                                                                  assignment_capacities_init_settings,
                                                                  logger)
-        elif client_selection_approach == "ECMTC":
+        elif client_selector == "ECMTC":
             # Select clients using the ECMTC algorithm.
-            num_evaluate_tasks = client_selection_settings["num_evaluate_tasks"]
-            evaluate_deadline_in_seconds = client_selection_settings["evaluate_deadline_in_seconds"]
-            history_checking_approach = client_selection_settings["history_checking_approach"]
+            history_checker = client_selection_settings["history_checker"]
             assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
             selected_evaluate_clients = select_clients_using_ecmtc(server_round,
                                                                    phase,
@@ -445,7 +451,7 @@ class FlowerGOFFLSServer(Strategy):
                                                                    evaluate_deadline_in_seconds,
                                                                    available_evaluate_clients_map,
                                                                    individual_evaluate_metrics_history,
-                                                                   history_checking_approach,
+                                                                   history_checker,
                                                                    assignment_capacities_init_settings,
                                                                    logger)
         # Get the clients selection duration.
@@ -503,7 +509,7 @@ class FlowerGOFFLSServer(Strategy):
         \nCalled by Flower after each testing phase."""
         # Get the necessary attributes.
         metrics_aggregation_settings = self.get_attribute("_metrics_aggregation_settings")
-        metrics_aggregation_approach = metrics_aggregation_settings["approach"]
+        metrics_aggregator = metrics_aggregation_settings["metrics_aggregator"]
         server_id = self.get_attribute("_server_id")
         logger = self.get_attribute("_logger")
         # Update the individual testing metrics history.
@@ -513,8 +519,8 @@ class FlowerGOFFLSServer(Strategy):
         evaluate_metrics = self._remove_undesired_metrics(evaluate_metrics, undesired_metrics)
         # Initialize the aggregated testing metrics dictionary (aggregated_evaluate_metrics).
         aggregated_evaluate_metrics = {}
-        # Aggregate the testing metrics according to the user-defined approach.
-        if metrics_aggregation_approach == "Weighted_Average":
+        # Aggregate the testing metrics according to the user-defined aggregator.
+        if metrics_aggregator == "Weighted_Average":
             aggregated_evaluate_metrics = aggregate_metrics_by_weighted_average(evaluate_metrics)
         # Update the aggregated testing metrics history.
         self._update_aggregated_evaluate_metrics_history(comm_round, aggregated_evaluate_metrics)
@@ -524,7 +530,7 @@ class FlowerGOFFLSServer(Strategy):
                                                  " Clients" if num_participating_clients > 1 else " Client"])
         # Log the aggregated testing metrics.
         message = "[Server {0} | Round {1}] Aggregated testing metrics ({2} of {3}): {4}" \
-                  .format(server_id, comm_round, metrics_aggregation_approach, num_participating_clients_str,
+                  .format(server_id, comm_round, metrics_aggregator, num_participating_clients_str,
                           aggregated_evaluate_metrics)
         log_message(logger, message, "DEBUG")
         # Return the aggregated testing metrics (aggregated_evaluate_metrics).
@@ -539,13 +545,13 @@ class FlowerGOFFLSServer(Strategy):
         # Get the necessary attributes.
         accept_clients_failures = self.get_attribute("_accept_clients_failures")
         model_aggregation_settings = self.get_attribute("_model_aggregation_settings")
-        model_aggregation_approach = model_aggregation_settings["approach"]
+        model_aggregator = model_aggregation_settings["model_aggregator"]
         # Do not aggregate if there are no results or if there are clients failures and failures are not accepted.
         if not results or (failures and not accept_clients_failures):
             return None, {}
         # Initialize the aggregated loss value.
         aggregated_loss = 0
-        if model_aggregation_approach == "FedAvg":
+        if model_aggregator == "FedAvg":
             # Aggregate the loss by weighted average.
             aggregated_loss = aggregate_loss_by_weighted_average(results)
         # Aggregate the testing metrics.

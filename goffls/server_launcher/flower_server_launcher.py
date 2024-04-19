@@ -12,10 +12,10 @@ from goffls.util.logger_util import load_logger, log_message
 
 class FlowerServerLauncher:
     def __init__(self,
-                 server_id: int,
-                 server_config_file: Path) -> None:
-        self._server_id = server_id
-        self._server_config_file = server_config_file
+                 id_: int,
+                 config_file: Path) -> None:
+        self._server_id = id_
+        self._config_file = config_file
         self._logging_settings = None
         self._fl_settings = None
         self._server_strategy_settings = None
@@ -43,7 +43,7 @@ class FlowerServerLauncher:
 
     def _parse_settings(self) -> None:
         # Get the necessary attributes.
-        config_file = self.get_attribute("_server_config_file")
+        config_file = self.get_attribute("_config_file")
         # Parse and set the logging settings.
         logging_section = "Logging Settings"
         logging_settings = parse_config_section(config_file, logging_section)
@@ -59,42 +59,33 @@ class FlowerServerLauncher:
         server_strategy_implementation_section = "{0} Server Strategy Settings".format(server_strategy)
         server_strategy_implementation_settings = parse_config_section(config_file,
                                                                        server_strategy_implementation_section)
-        client_selection_approach = server_strategy_implementation_settings["client_selection_approach"]
-        client_selection_approach_section = "{0} Client Selection Settings".format(client_selection_approach)
-        client_selection_approach_settings = parse_config_section(config_file,
-                                                                  client_selection_approach_section)
-        if "assignment_capacities_init_approach" in client_selection_approach_settings:
-            assignment_capacities_init_approach \
-                = client_selection_approach_settings["assignment_capacities_init_approach"]
+        client_selector = server_strategy_implementation_settings["client_selector"]
+        client_selector_section = "{0} Client Selection Settings".format(client_selector)
+        client_selector_settings = parse_config_section(config_file,
+                                                        client_selector_section)
+        if "assignment_capacities_initializer" in client_selector_settings:
+            assignment_capacities_initializer = client_selector_settings["assignment_capacities_initializer"]
             assignment_capacities_init_settings = {}
             try:
-                assignment_capacities_init_section = "{0} Settings".format(assignment_capacities_init_approach)
+                assignment_capacities_init_section = "{0} Settings".format(assignment_capacities_initializer)
                 assignment_capacities_init_settings = parse_config_section(config_file,
                                                                            assignment_capacities_init_section)
             except KeyError:
                 pass
-            assignment_capacities_init_settings.update({"approach": assignment_capacities_init_approach})
-            client_selection_approach_settings.update({"assignment_capacities_init_settings":
-                                                       assignment_capacities_init_settings})
-            client_selection_approach_settings.pop("assignment_capacities_init_approach")
-        if "complementary_selection_approach" in client_selection_approach_settings:
-            complementary_selection_approach = client_selection_approach_settings["complementary_selection_approach"]
-            complementary_selection_section = "{0} Client Selection Settings".format(complementary_selection_approach)
-            complementary_selection_settings = parse_config_section(config_file,
-                                                                    complementary_selection_section)
-            complementary_selection_settings.update({"approach": complementary_selection_approach})
-            client_selection_approach_settings.update({"complementary_selection_settings":
-                                                       complementary_selection_settings})
-            client_selection_approach_settings.pop("complementary_selection_approach")
-        client_selection_approach_settings.update({"approach": client_selection_approach})
-        model_aggregation_approach = server_strategy_implementation_settings["model_aggregation_approach"]
-        model_aggregation_approach_section = "{0} Model Aggregation Settings".format(model_aggregation_approach)
-        model_aggregation_approach_settings = parse_config_section(config_file, model_aggregation_approach_section)
-        model_aggregation_approach_settings.update({"approach": model_aggregation_approach})
+            assignment_capacities_init_settings.update({"assignment_capacities_initializer":
+                                                        assignment_capacities_initializer})
+            client_selector_settings.update({"assignment_capacities_init_settings":
+                                             assignment_capacities_init_settings})
+            client_selector_settings.pop("assignment_capacities_initializer")
+        client_selector_settings.update({"client_selector": client_selector})
+        model_aggregator = server_strategy_implementation_settings["model_aggregator"]
+        model_aggregator_section = "{0} Model Aggregation Settings".format(model_aggregator)
+        model_aggregator_settings = parse_config_section(config_file, model_aggregator_section)
+        model_aggregator_settings.update({"model_aggregator": model_aggregator})
         server_strategy_settings = {}
         server_strategy_settings.update({"strategy": server_strategy})
-        server_strategy_settings.update({"client_selection": client_selection_approach_settings})
-        server_strategy_settings.update({"model_aggregation": model_aggregation_approach_settings})
+        server_strategy_settings.update({"client_selection": client_selector_settings})
+        server_strategy_settings.update({"model_aggregation": model_aggregator_settings})
         self._set_attribute("_server_strategy_settings", server_strategy_settings)
         # Parse and set the metrics aggregation settings.
         metrics_aggregation_section = "Metrics Aggregation Settings"
@@ -235,6 +226,10 @@ class FlowerServerLauncher:
         enable_training = fl_settings["enable_training"]
         enable_testing = fl_settings["enable_testing"]
         accept_clients_failures = fl_settings["accept_clients_failures"]
+        num_fit_tasks = fl_settings["num_fit_tasks"]
+        fit_deadline_in_seconds = fl_settings["fit_deadline_in_seconds"]
+        num_evaluate_tasks = fl_settings["num_evaluate_tasks"]
+        evaluate_deadline_in_seconds = fl_settings["evaluate_deadline_in_seconds"]
         server_strategy_settings = self.get_attribute("_server_strategy_settings")
         strategy = server_strategy_settings["strategy"]
         client_selection_settings = server_strategy_settings["client_selection"]
@@ -244,10 +239,14 @@ class FlowerServerLauncher:
         server_strategy = None
         if strategy == "GOFFLS":
             # Instantiate the GOFFLS (Generic Optimization Framework for Federated Learning Schedules) server strategy.
-            server_strategy = FlowerGOFFLSServer(server_id=server_id,
+            server_strategy = FlowerGOFFLSServer(id_=server_id,
                                                  enable_training=enable_training,
                                                  enable_testing=enable_testing,
                                                  accept_clients_failures=accept_clients_failures,
+                                                 num_fit_tasks=num_fit_tasks,
+                                                 fit_deadline_in_seconds=fit_deadline_in_seconds,
+                                                 num_evaluate_tasks=num_evaluate_tasks,
+                                                 evaluate_deadline_in_seconds=evaluate_deadline_in_seconds,
                                                  client_selection_settings=client_selection_settings,
                                                  model_aggregation_settings=model_aggregation_settings,
                                                  metrics_aggregation_settings=metrics_aggregation_settings,
@@ -294,6 +293,7 @@ class FlowerServerLauncher:
     def _generate_selected_fit_clients_history_output_file(self) -> None:
         # Get the necessary attributes.
         server_strategy = self.get_attribute("_server_strategy")
+        num_fit_tasks = server_strategy.get_attribute("_num_fit_tasks")
         selected_fit_clients_history = server_strategy.get_attribute("_selected_fit_clients_history")
         output_settings = self.get_attribute("_output_settings")
         remove_output_files = output_settings["remove_output_files"]
@@ -306,10 +306,11 @@ class FlowerServerLauncher:
         # Write the header line to the output file (if not exist yet).
         if not selected_fit_clients_history_file.exists():
             with open(file=selected_fit_clients_history_file, mode="a", encoding="utf-8") as file:
-                header_line = "{0},{1},{2},{3},{4},{5}\n" \
+                header_line = "{0},{1},{2},{3},{4},{5},{6}\n" \
                               .format("comm_round",
-                                      "client_selection_approach",
+                                      "client_selector",
                                       "selection_duration",
+                                      "num_tasks",
                                       "num_available_clients",
                                       "num_selected_clients",
                                       "selected_clients")
@@ -317,15 +318,16 @@ class FlowerServerLauncher:
         # Write the history data lines to the output file.
         with open(file=selected_fit_clients_history_file, mode="a", encoding="utf-8") as file:
             for comm_round_key, comm_round_values in selected_fit_clients_history.items():
-                selection_approach = comm_round_values["selection_approach"]
+                client_selector = comm_round_values["client_selector"]
                 selection_duration = comm_round_values["selection_duration"]
                 num_available_clients = comm_round_values["num_available_clients"]
                 selected_clients = comm_round_values["selected_clients"]
                 num_selected_clients = len(selected_clients)
-                data_line = "{0},{1},{2},{3},{4},{5}\n" \
+                data_line = "{0},{1},{2},{3},{4},{5},{6}\n" \
                             .format(comm_round_key,
-                                    selection_approach,
+                                    client_selector,
                                     selection_duration,
+                                    num_fit_tasks,
                                     num_available_clients,
                                     num_selected_clients,
                                     "|".join(selected_clients))
@@ -334,6 +336,7 @@ class FlowerServerLauncher:
     def _generate_selected_evaluate_clients_history_output_file(self) -> None:
         # Get the necessary attributes.
         server_strategy = self.get_attribute("_server_strategy")
+        num_evaluate_tasks = server_strategy.get_attribute("_num_evaluate_tasks")
         selected_evaluate_clients_history = server_strategy.get_attribute("_selected_evaluate_clients_history")
         output_settings = self.get_attribute("_output_settings")
         remove_output_files = output_settings["remove_output_files"]
@@ -346,10 +349,11 @@ class FlowerServerLauncher:
         # Write the header line to the output file (if not exist yet).
         if not selected_evaluate_clients_history_file.is_file():
             with open(file=selected_evaluate_clients_history_file, mode="a", encoding="utf-8") as file:
-                header_line = "{0},{1},{2},{3},{4},{5}\n" \
+                header_line = "{0},{1},{2},{3},{4},{5},{6}\n" \
                               .format("comm_round",
-                                      "client_selection_approach",
+                                      "client_selector",
                                       "selection_duration",
+                                      "num_tasks",
                                       "num_available_clients",
                                       "num_selected_clients",
                                       "selected_clients")
@@ -357,15 +361,16 @@ class FlowerServerLauncher:
         # Write the history data lines to the output file.
         with open(file=selected_evaluate_clients_history_file, mode="a", encoding="utf-8") as file:
             for comm_round_key, comm_round_values in selected_evaluate_clients_history.items():
-                selection_approach = comm_round_values["selection_approach"]
+                client_selector = comm_round_values["client_selector"]
                 selection_duration = comm_round_values["selection_duration"]
                 num_available_clients = comm_round_values["num_available_clients"]
                 selected_clients = comm_round_values["selected_clients"]
                 num_selected_clients = len(selected_clients)
-                data_line = "{0},{1},{2},{3},{4},{5}\n" \
+                data_line = "{0},{1},{2},{3},{4},{5},{6}\n" \
                             .format(comm_round_key,
-                                    selection_approach,
+                                    client_selector,
                                     selection_duration,
+                                    num_evaluate_tasks,
                                     num_available_clients,
                                     num_selected_clients,
                                     "|".join(selected_clients))
@@ -374,8 +379,9 @@ class FlowerServerLauncher:
     def _generate_individual_fit_metrics_history_output_file(self) -> None:
         # Get the necessary attributes.
         server_strategy = self.get_attribute("_server_strategy")
+        num_fit_tasks = server_strategy.get_attribute("_num_fit_tasks")
         client_selection_settings = server_strategy.get_attribute("_client_selection_settings")
-        client_selection_approach = client_selection_settings["approach"]
+        client_selector = client_selection_settings["client_selector"]
         individual_fit_metrics_history = server_strategy.get_attribute("_individual_fit_metrics_history")
         output_settings = self.get_attribute("_output_settings")
         remove_output_files = output_settings["remove_output_files"]
@@ -395,10 +401,11 @@ class FlowerServerLauncher:
         # Write the header line to the output file (if not exist yet).
         if not individual_fit_metrics_history_file.is_file():
             with open(file=individual_fit_metrics_history_file, mode="a", encoding="utf-8") as file:
-                header_line = "{0},{1},{2},{3}\n" \
+                header_line = "{0},{1},{2},{3},{4}\n" \
                               .format("comm_round",
-                                      "client_selection_approach",
+                                      "client_selector",
                                       "client_id",
+                                      "num_tasks",
                                       ",".join(fit_metrics))
                 file.write(header_line)
         # Write the history data lines to the output file.
@@ -412,10 +419,11 @@ class FlowerServerLauncher:
                             if fit_metric in fit_client_values:
                                 fit_metric_value = str(fit_client_values[fit_metric])
                             fit_client_metrics_values.append(fit_metric_value)
-                        data_line = "{0},{1},{2},{3}\n" \
+                        data_line = "{0},{1},{2},{3},{4}\n" \
                                     .format(comm_round_key,
-                                            client_selection_approach,
+                                            client_selector,
                                             fit_client_key,
+                                            num_fit_tasks,
                                             ",".join(fit_client_metrics_values))
                         file.write(data_line)
 
@@ -423,9 +431,9 @@ class FlowerServerLauncher:
         # Get the necessary attributes.
         server_strategy = self.get_attribute("_server_strategy")
         client_selection_settings = server_strategy.get_attribute("_client_selection_settings")
-        client_selection_approach = client_selection_settings["approach"]
+        client_selector = client_selection_settings["client_selector"]
         metrics_aggregation_settings = server_strategy.get_attribute("_metrics_aggregation_settings")
-        metrics_aggregation_approach = metrics_aggregation_settings["approach"]
+        metrics_aggregator = metrics_aggregation_settings["metrics_aggregator"]
         aggregated_fit_metrics_history = server_strategy.get_attribute("_aggregated_fit_metrics_history")
         output_settings = self.get_attribute("_output_settings")
         remove_output_files = output_settings["remove_output_files"]
@@ -445,8 +453,8 @@ class FlowerServerLauncher:
             with open(file=aggregated_fit_metrics_history_file, mode="a", encoding="utf-8") as file:
                 header_line = "{0},{1},{2},{3}\n" \
                               .format("comm_round",
-                                      "client_selection_approach",
-                                      "metrics_aggregation_approach",
+                                      "client_selector",
+                                      "metrics_aggregator",
                                       ",".join(fit_metrics))
                 file.write(header_line)
         # Write the history data lines to the output file.
@@ -460,16 +468,17 @@ class FlowerServerLauncher:
                     fit_metrics_values.append(fit_metric_value)
                 data_line = "{0},{1},{2},{3}\n" \
                             .format(comm_round,
-                                    client_selection_approach,
-                                    metrics_aggregation_approach,
+                                    client_selector,
+                                    metrics_aggregator,
                                     ",".join(fit_metrics_values))
                 file.write(data_line)
 
     def _generate_individual_evaluate_metrics_history_output_file(self) -> None:
         # Get the necessary attributes.
         server_strategy = self.get_attribute("_server_strategy")
+        num_evaluate_tasks = server_strategy.get_attribute("_num_evaluate_tasks")
         client_selection_settings = server_strategy.get_attribute("_client_selection_settings")
-        client_selection_approach = client_selection_settings["approach"]
+        client_selector = client_selection_settings["client_selector"]
         individual_evaluate_metrics_history = server_strategy.get_attribute("_individual_evaluate_metrics_history")
         output_settings = self.get_attribute("_output_settings")
         remove_output_files = output_settings["remove_output_files"]
@@ -489,10 +498,11 @@ class FlowerServerLauncher:
         # Write the header line to the output file (if not exist yet).
         if not individual_evaluate_metrics_history_file.is_file():
             with open(file=individual_evaluate_metrics_history_file, mode="a", encoding="utf-8") as file:
-                header_line = "{0},{1},{2},{3}\n" \
+                header_line = "{0},{1},{2},{3},{4}\n" \
                               .format("comm_round",
-                                      "client_selection_approach",
+                                      "client_selector",
                                       "client_id",
+                                      "num_tasks",
                                       ",".join(evaluate_metrics))
                 file.write(header_line)
         # Write the history data lines to the output file.
@@ -506,10 +516,11 @@ class FlowerServerLauncher:
                             if evaluate_metric in evaluate_client_values:
                                 evaluate_metric_value = str(evaluate_client_values[evaluate_metric])
                             evaluate_client_metrics_values.append(evaluate_metric_value)
-                        data_line = "{0},{1},{2},{3}\n" \
+                        data_line = "{0},{1},{2},{3},{4}\n" \
                                     .format(comm_round_key,
-                                            client_selection_approach,
+                                            client_selector,
                                             evaluate_client_key,
+                                            num_evaluate_tasks,
                                             ",".join(evaluate_client_metrics_values))
                         file.write(data_line)
 
@@ -517,9 +528,9 @@ class FlowerServerLauncher:
         # Get the necessary attributes.
         server_strategy = self.get_attribute("_server_strategy")
         client_selection_settings = server_strategy.get_attribute("_client_selection_settings")
-        client_selection_approach = client_selection_settings["approach"]
+        client_selector = client_selection_settings["client_selector"]
         metrics_aggregation_settings = server_strategy.get_attribute("_metrics_aggregation_settings")
-        metrics_aggregation_approach = metrics_aggregation_settings["approach"]
+        metrics_aggregator = metrics_aggregation_settings["metrics_aggregator"]
         aggregated_evaluate_metrics_history = server_strategy.get_attribute("_aggregated_evaluate_metrics_history")
         output_settings = self.get_attribute("_output_settings")
         remove_output_files = output_settings["remove_output_files"]
@@ -539,8 +550,8 @@ class FlowerServerLauncher:
             with open(file=aggregated_evaluate_metrics_history_file, mode="a", encoding="utf-8") as file:
                 header_line = "{0},{1},{2},{3}\n" \
                               .format("comm_round",
-                                      "client_selection_approach",
-                                      "metrics_aggregation_approach",
+                                      "client_selector",
+                                      "metrics_aggregator",
                                       ",".join(evaluate_metrics))
                 file.write(header_line)
         # Write the history data lines to the output file.
@@ -554,8 +565,8 @@ class FlowerServerLauncher:
                     evaluate_metrics_values.append(evaluate_metric_value)
                 data_line = "{0},{1},{2},{3}\n" \
                             .format(comm_round,
-                                    client_selection_approach,
-                                    metrics_aggregation_approach,
+                                    client_selector,
+                                    metrics_aggregator,
                                     ",".join(evaluate_metrics_values))
                 file.write(data_line)
 
