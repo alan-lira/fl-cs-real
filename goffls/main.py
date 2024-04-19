@@ -1,9 +1,10 @@
-from argparse import ArgumentParser, RawTextHelpFormatter
+from argparse import ArgumentParser, RawTextHelpFormatter, SUPPRESS
 from pathlib import Path
 from sys import argv
 from time import perf_counter
 
 from goffls.client_launcher.flower_client_launcher import FlowerClientLauncher
+from goffls.result_analyzer.result_analyzer import ResultAnalyzer
 from goffls.server_launcher.flower_server_launcher import FlowerServerLauncher
 from goffls.util.logger_util import load_logger, log_message
 from goffls.util.setup_tools_util import get_version
@@ -12,13 +13,15 @@ from goffls.util.setup_tools_util import get_version
 __BASE_PATH = Path(__file__).parent.resolve()
 __VERSION_FILE = __BASE_PATH.joinpath("VERSION")
 __FLOWER_CLIENT_CONFIG_FILE = __BASE_PATH.joinpath("client/config/flower_client.cfg")
-__FLOWER_SERVER_CONFIG_FILE = __BASE_PATH.joinpath("client/config/flower_server.cfg")
+__FLOWER_SERVER_CONFIG_FILE = __BASE_PATH.joinpath("server/config/flower_server.cfg")
+__RESULT_ANALYZER_CONFIG_FILE = __BASE_PATH.joinpath("result_analyzer/config/results_analyzer.cfg")
 
 # List of implemented tools.
 __AVAILABLE_TOOLS = [{"name": "GOFFLS",
                       "description": "",
                       "actions": [{"launch_server": "launches a FL server instance"},
-                                  {"launch_client": "launches a FL client instance"}]}]
+                                  {"launch_client": "launches a FL client instance"},
+                                  {"analyze_results": "analyzes the results"}]}]
 
 
 def _get_tools_info() -> list:
@@ -68,6 +71,12 @@ def _verify_if_tool_action_is_valid(tool_name: str,
         raise ValueError(error_message)
 
 
+def _verify_if_config_file_is_valid(config_file: Path) -> None:
+    if not config_file.is_file():
+        error_message = "The '{0}' config file was not found!".format(config_file)
+        raise FileNotFoundError(error_message)
+
+
 def main() -> None:
     # Begin.
     # Start the performance counter.
@@ -93,28 +102,33 @@ def main() -> None:
         ap.add_argument("--implementation",
                         type=str,
                         required=True,
-                        help="Server Implementation (no default)")
+                        help=SUPPRESS)
         ap.add_argument("--id",
                         type=int,
                         required=True,
-                        help="Server ID (no default)")
+                        help=SUPPRESS)
         ap.add_argument("--config-file",
                         type=Path,
                         required=True,
-                        help="Server Config File (no default)")
+                        help=SUPPRESS)
     elif "launch_client" in argv:
         ap.add_argument("--implementation",
                         type=str,
                         required=True,
-                        help="Client Implementation (no default)")
+                        help=SUPPRESS)
         ap.add_argument("--id",
                         type=int,
                         required=True,
-                        help="Client ID (no default)")
+                        help=SUPPRESS)
         ap.add_argument("--config-file",
                         type=Path,
                         required=True,
-                        help="Client Config File (no default)")
+                        help=SUPPRESS)
+    elif "analyze_results" in argv:
+        ap.add_argument("--config-file",
+                        type=Path,
+                        required=True,
+                        help=SUPPRESS)
     parsed_args = ap.parse_args()
     # Get the user-provided arguments.
     action = str(parsed_args.action)
@@ -130,19 +144,29 @@ def main() -> None:
     logger_name = "GOFFLS_Logger"
     logger = load_logger(logging_settings, logger_name)
     if action == "launch_server":
-        server_id = int(parsed_args.id)
-        server_config_file = Path(parsed_args.config_file)
-        server_implementation = str(parsed_args.implementation)
-        if server_implementation == "flower":
-            fs = FlowerServerLauncher(server_id, server_config_file)
+        id_ = int(parsed_args.id)
+        config_file = Path(parsed_args.config_file)
+        # Verify if the user-provided config file is valid.
+        _verify_if_config_file_is_valid(config_file)
+        implementation = str(parsed_args.implementation)
+        if implementation == "flower":
+            fs = FlowerServerLauncher(id_, config_file)
             fs.launch_server()
     elif action == "launch_client":
-        client_id = int(parsed_args.id)
-        client_config_file = Path(parsed_args.config_file)
-        client_implementation = str(parsed_args.implementation)
-        if client_implementation == "flower":
-            fc = FlowerClientLauncher(client_id, client_config_file)
+        id_ = int(parsed_args.id)
+        config_file = Path(parsed_args.config_file)
+        # Verify if the user-provided config file is valid.
+        _verify_if_config_file_is_valid(config_file)
+        implementation = str(parsed_args.implementation)
+        if implementation == "flower":
+            fc = FlowerClientLauncher(id_, config_file)
             fc.launch_client()
+    elif action == "analyze_results":
+        config_file = Path(parsed_args.config_file)
+        # Verify if the user-provided config file is valid.
+        _verify_if_config_file_is_valid(config_file)
+        ra = ResultAnalyzer(config_file)
+        ra.analyze_results()
     # Stop the performance counter.
     perf_counter_stop = perf_counter()
     # Log a 'elapsed time in seconds' message.

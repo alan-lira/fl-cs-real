@@ -116,7 +116,7 @@ def select_clients_using_mec(comm_round: int,
                              num_tasks_to_schedule: int,
                              available_clients_map: dict,
                              individual_metrics_history: dict,
-                             history_checking_approach: str,
+                             history_checker: str,
                              assignment_capacities_init_settings: dict,
                              logger: Logger) -> list:
     # Log a 'selecting clients' message.
@@ -139,10 +139,10 @@ def select_clients_using_mec(comm_round: int,
     else:
         # Otherwise, the available clients will be selected considering their entries in the individual metrics history.
         comm_rounds = []
-        if history_checking_approach == "Only_Immediately_Previous_Round":
+        if history_checker == "Only_Immediately_Previous_Round":
             # Check the immediately previous round's history only.
             comm_rounds = [comm_round - 1]
-        elif history_checking_approach == "All_Previous_Rounds":
+        elif history_checker == "All_Previous_Rounds":
             # Check all the previous rounds' history.
             comm_rounds = list(range(1, comm_round))
         # Load the available participating clients map.
@@ -190,8 +190,8 @@ def select_clients_using_mec(comm_round: int,
                 energy_costs_client[num_examples] = energy_cpu_cost + energy_nvidia_gpu_cost
             # Initialize his assignment capacities list...
             assignment_capacities_client = None
-            assignment_capacities_init_approach = assignment_capacities_init_settings["approach"]
-            if assignment_capacities_init_approach == "Only_Previous_Num_Tasks_Assigned_Set":
+            assignment_capacities_initializer = assignment_capacities_init_settings["assignment_capacities_initializer"]
+            if assignment_capacities_initializer == "Only_Previous_Num_Tasks_Assigned_Set":
                 # Based only on his previous round(s) participation, i.e., the set of previously numbers of tasks
                 # assigned to him.
                 previous_num_tasks_assigned = [list(comm_round_metrics)[0]["num_{0}ing_examples_used".format(phase)]
@@ -199,7 +199,7 @@ def select_clients_using_mec(comm_round: int,
                                                if "comm_round_" in key]
                 previous_num_tasks_assigned_set = list(set(previous_num_tasks_assigned))
                 assignment_capacities_client = previous_num_tasks_assigned_set
-            elif assignment_capacities_init_approach == "Custom_Range_Set_Union_Previous_Num_Tasks_Assigned_Set":
+            elif assignment_capacities_initializer == "Custom_Range_Set_Union_Previous_Num_Tasks_Assigned_Set":
                 # Based on a custom range set (ordered in ascending order), which also includes his previous round(s)
                 # participation, i.e., the set of previously numbers of tasks assigned to him.
                 lower_bound = assignment_capacities_init_settings["lower_bound"]
@@ -221,10 +221,10 @@ def select_clients_using_mec(comm_round: int,
                 time_costs_client[0] = 0
                 energy_costs_client[0] = 0
                 previous_num_tasks_assigned.append(0)
-                # Estimates the costs of via linear interpolation/extrapolation.
+                # Estimates the costs for the unknown values via linear interpolation/extrapolation.
                 for assignment_capacity in assignment_capacities_client:
                     if assignment_capacity not in previous_num_tasks_assigned:
-                        # Determine x1 and x2, which are two known values of previously num tasks assigned.
+                        # Determine x1 and x2, which are two known values of previously numbers of tasks assigned.
                         x1_candidates = [i for i in previous_num_tasks_assigned if i < assignment_capacity]
                         x2_candidates = [i for i in previous_num_tasks_assigned if i > assignment_capacity]
                         if x2_candidates:

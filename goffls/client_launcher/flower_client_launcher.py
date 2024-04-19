@@ -23,10 +23,10 @@ from goffls.util.logger_util import load_logger, log_message
 
 class FlowerClientLauncher:
     def __init__(self,
-                 client_id: int,
-                 client_config_file: Path) -> None:
-        self._client_id = client_id
-        self._client_config_file = client_config_file
+                 id_: int,
+                 config_file: Path) -> None:
+        self._client_id = id_
+        self._config_file = config_file
         self._logging_settings = None
         self._ssl_settings = None
         self._grpc_settings = None
@@ -50,7 +50,7 @@ class FlowerClientLauncher:
 
     def _parse_settings(self) -> None:
         # Get the necessary attributes.
-        config_file = self.get_attribute("_client_config_file")
+        config_file = self.get_attribute("_config_file")
         # Parse and set the logging settings.
         logging_section = "Logging Settings"
         logging_settings = parse_config_section(config_file, logging_section)
@@ -356,7 +356,7 @@ class FlowerClientLauncher:
         return model
 
     @staticmethod
-    def _instantiate_flower_client(client_id: int,
+    def _instantiate_flower_client(id_: int,
                                    model: any,
                                    x_train: NDArray,
                                    y_train: NDArray,
@@ -365,7 +365,7 @@ class FlowerClientLauncher:
                                    energy_monitor: any,
                                    logger: Logger) -> Client:
         # Instantiate the flower client.
-        flower_client = FlowerNumpyClient(client_id=client_id,
+        flower_client = FlowerNumpyClient(id_=id_,
                                           model=model,
                                           x_train=x_train,
                                           y_train=y_train,

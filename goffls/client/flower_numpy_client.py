@@ -12,7 +12,7 @@ from goffls.util.logger_util import log_message
 class FlowerNumpyClient(NumPyClient):
 
     def __init__(self,
-                 client_id: int,
+                 id_: int,
                  model: any,
                  x_train: NDArray,
                  y_train: NDArray,
@@ -20,7 +20,7 @@ class FlowerNumpyClient(NumPyClient):
                  y_test: NDArray,
                  energy_monitor: any,
                  logger: Logger) -> None:
-        self._client_id = client_id
+        self._client_id = id_
         self._model = model
         self._x_train = x_train
         self._y_train = y_train
