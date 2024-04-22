@@ -196,6 +196,7 @@ def select_clients_using_mec(comm_round: int,
                     # Update his time costs list for this number of examples.
                     time_cost = individual_metrics_history_entry[time_key]
                     time_costs_client[num_examples] = time_cost
+                # Initialize the energy cost with the zero value, so different energy costs can be summed up.
                 energy_cost = 0
                 # Get the energy consumed by his CPU (if available).
                 energy_cpu_key = "{0}ing_energy_cpu".format(phase)
@@ -227,9 +228,6 @@ def select_clients_using_mec(comm_round: int,
                                                                                    num_examples,
                                                                                    energy_nvidia_gpu_key)
                         energy_cost += energy_nvidia_gpu_cost_mean_value
-                # If no valid energy costs were found, set the energy cost as infinity.
-                if energy_cost == 0:
-                    energy_cost = inf
                 # Update his energy costs list for this number of examples.
                 energy_costs_client[num_examples] = energy_cost
             # Initialize his assignment capacities list...
