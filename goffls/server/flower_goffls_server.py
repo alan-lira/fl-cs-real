@@ -37,6 +37,7 @@ class FlowerGOFFLSServer(Strategy):
                  evaluate_config: dict,
                  initial_parameters: Optional[NDArrays],
                  logger: Logger) -> None:
+        # Initialize the attributes.
         super().__init__()
         self._server_id = id_
         self._enable_training = enable_training
@@ -159,6 +160,7 @@ class FlowerGOFFLSServer(Strategy):
                       client_manager: ClientManager) -> List[Tuple[ClientProxy, FitIns]]:
         """Configure the next round of training.
            \nImplementation of the abstract method of the Strategy class."""
+        client_manager.wait_for(1, 9999)
         # Get the necessary attributes.
         enable_training = self.get_attribute("_enable_training")
         num_fit_tasks = self.get_attribute("_num_fit_tasks")
