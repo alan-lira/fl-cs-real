@@ -1,6 +1,6 @@
 from keras.saving import load_model, save_model
 from logging import Logger
-from multiprocessing import Process, Queue
+from multiprocessing import Process, Queue, set_start_method
 from numpy.random import randint
 from pathlib import Path
 from time import perf_counter
@@ -23,6 +23,7 @@ class FlowerNumpyClient(NumPyClient):
                  y_test: NDArray,
                  energy_monitor: any,
                  daemon_mode: bool,
+                 daemon_start_method: str,
                  logger: Logger) -> None:
         # Initialize the attributes.
         self._client_id = id_
@@ -35,8 +36,12 @@ class FlowerNumpyClient(NumPyClient):
         self._daemon_mode = daemon_mode
         self._logger = logger
         self._model_file = None
-        # Dump the model.
-        self._dump_model(None)
+        # If the daemon mode is enabled...
+        if daemon_mode:
+            # Set the starting method of daemon processes.
+            set_start_method(daemon_start_method)
+            # Dump the local model to file.
+            self._save_model(model)
 
     def _set_attribute(self,
                        attribute_name: str,
@@ -47,25 +52,30 @@ class FlowerNumpyClient(NumPyClient):
                       attribute_name: str) -> any:
         return getattr(self, attribute_name)
 
-    def _dump_model(self,
+    def _save_model(self,
                     model: any) -> None:
         # Get the necessary attributes.
         client_id = self.get_attribute("_client_id")
-        if not model:
-            model = self.get_attribute("_model")
-        # Set the local model file path.
-        model_file = Path("output/models/flower_client_{0}.keras".format(client_id))
-        model_file.parent.mkdir(exist_ok=True, parents=True)
-        self._set_attribute("_model_file", model_file)
-        # Dump the local model.
-        save_model(model=model, filepath=model_file, overwrite=True)
-        self._set_attribute("_model", None)
+        daemon_mode = self.get_attribute("_daemon_mode")
+        if daemon_mode:
+            # Set the local model file path.
+            model_file = Path("output/models/flower_client_{0}.keras".format(client_id))
+            model_file.parent.mkdir(exist_ok=True, parents=True)
+            self._set_attribute("_model_file", model_file)
+            # Dump the local model to file.
+            save_model(model=model, filepath=model_file, overwrite=True)
+            self._set_attribute("_model", None)
+        else:
+            # Set the local model.
+            self._set_attribute("_model", model)
 
     def _load_model(self) -> any:
         # Get the necessary attributes.
+        model = self.get_attribute("_model")
         model_file = self.get_attribute("_model_file")
-        # Load the local model.
-        model = load_model(filepath=model_file, compile=True, safe_mode=True)
+        if not model:
+            # Load the local model from file.
+            model = load_model(filepath=model_file, compile=True, safe_mode=True)
         return model
 
     def get_properties(self,
@@ -127,8 +137,8 @@ class FlowerNumpyClient(NumPyClient):
                             steps_per_epoch=fit_config["steps_per_epoch"],
                             validation_split=fit_config["validation_split"],
                             validation_batch_size=fit_config["validation_batch_size"]).history
-        # Dump the local model with the parameters (weights) obtained from the training.
-        self._dump_model(model)
+        # Save the local model with the parameters (weights) obtained from the training.
+        self._save_model(model)
         # Get the model training duration.
         duration = perf_counter() - duration_start
         # Put into the fit queue the model training history and duration.
@@ -168,7 +178,7 @@ class FlowerNumpyClient(NumPyClient):
         log_message(logger, message, "DEBUG")
         # Log a 'training the model' message.
         message = "[Client {0} | Round {1}] Training the model (daemon mode: {2})..." \
-                  .format(client_id, comm_round, daemon_mode)
+                  .format(client_id, comm_round, str(daemon_mode).lower())
         log_message(logger, message, "INFO")
         # Unset the logger.
         self._set_attribute("_logger", None)
@@ -265,8 +275,8 @@ class FlowerNumpyClient(NumPyClient):
                                  y=y_test_sliced,
                                  batch_size=evaluate_config["batch_size"],
                                  steps=evaluate_config["steps"])
-        # Dump the local model with the parameters (weights) received from the server (global parameters).
-        self._dump_model(model)
+        # Save the local model with the parameters (weights) received from the server (global parameters).
+        self._save_model(model)
         # Get the model testing duration.
         duration = perf_counter() - duration_start
         # Put into the evaluate queue the model testing history and duration.
@@ -307,7 +317,7 @@ class FlowerNumpyClient(NumPyClient):
         log_message(logger, message, "DEBUG")
         # Log a 'testing the model' message.
         message = "[Client {0} | Round {1}] Testing the model (daemon mode: {2})..." \
-                  .format(client_id, comm_round, daemon_mode)
+                  .format(client_id, comm_round, str(daemon_mode).lower())
         log_message(logger, message, "INFO")
         # Unset the logger.
         self._set_attribute("_logger", None)
