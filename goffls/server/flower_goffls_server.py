@@ -160,7 +160,6 @@ class FlowerGOFFLSServer(Strategy):
                       client_manager: ClientManager) -> List[Tuple[ClientProxy, FitIns]]:
         """Configure the next round of training.
            \nImplementation of the abstract method of the Strategy class."""
-        client_manager.wait_for(1, 9999)
         # Get the necessary attributes.
         enable_training = self.get_attribute("_enable_training")
         num_fit_tasks = self.get_attribute("_num_fit_tasks")

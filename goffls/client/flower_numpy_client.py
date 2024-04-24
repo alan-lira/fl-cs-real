@@ -22,6 +22,7 @@ class FlowerNumpyClient(NumPyClient):
                  x_test: NDArray,
                  y_test: NDArray,
                  energy_monitor: any,
+                 daemon_mode: bool,
                  logger: Logger) -> None:
         # Initialize the attributes.
         self._client_id = id_
@@ -31,6 +32,7 @@ class FlowerNumpyClient(NumPyClient):
         self._x_test = x_test
         self._y_test = y_test
         self._energy_monitor = energy_monitor
+        self._daemon_mode = daemon_mode
         self._logger = logger
         self._model_file = None
         # Dump the model.
@@ -108,7 +110,7 @@ class FlowerNumpyClient(NumPyClient):
                      x_train_sliced: NDArray,
                      y_train_sliced: NDArray,
                      fit_config: dict,
-                     queue: Queue) -> None:
+                     fit_queue: Queue) -> None:
         # Start the model training duration timer.
         duration_start = perf_counter()
         # Load the local model.
@@ -129,8 +131,8 @@ class FlowerNumpyClient(NumPyClient):
         self._dump_model(model)
         # Get the model training duration.
         duration = perf_counter() - duration_start
-        # Put into the queue the model training history and duration.
-        queue.put([history, duration])
+        # Put into the fit queue the model training history and duration.
+        fit_queue.put([history, duration])
 
     def fit(self,
             global_parameters: NDArrays,
@@ -141,6 +143,7 @@ class FlowerNumpyClient(NumPyClient):
         x_train = self.get_attribute("_x_train")
         y_train = self.get_attribute("_y_train")
         energy_monitor = self.get_attribute("_energy_monitor")
+        daemon_mode = self.get_attribute("_daemon_mode")
         logger = self.get_attribute("_logger")
         # Initialize the training metrics dictionary.
         training_metrics = {}
@@ -164,43 +167,64 @@ class FlowerNumpyClient(NumPyClient):
         message = "[Client {0} | Round {1}] Received fit_config: {2}".format(client_id, comm_round, fit_config)
         log_message(logger, message, "DEBUG")
         # Log a 'training the model' message.
-        message = "[Client {0} | Round {1}] Training the model...".format(client_id, comm_round)
+        message = "[Client {0} | Round {1}] Training the model (daemon mode: {2})..." \
+                  .format(client_id, comm_round, daemon_mode)
         log_message(logger, message, "INFO")
         # Unset the logger.
         self._set_attribute("_logger", None)
-        # Launch the model training process.
-        queue = Queue()
-        target = self._train_model
-        args = (global_parameters, x_train_sliced, y_train_sliced, fit_config, queue)
-        model_training_process = Process(target=target, args=args)
-        model_training_process.start()
-        # Get the model training process id.
-        model_training_pid = model_training_process.pid
-        # Start the model training energy consumption monitoring.
-        if energy_monitor:
-            tag = "training_energy"
-            if isinstance(energy_monitor, PyJoulesEnergyMonitor):
-                energy_monitor.start(tag)
-            elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
-                energy_monitor.start(model_training_pid)
-        # Wait for the model training process completion.
-        model_training_process.join()
-        # Stop the model training energy consumption monitoring.
-        if energy_monitor:
-            energy_consumptions = {}
-            tag = "training_energy"
-            if isinstance(energy_monitor, PyJoulesEnergyMonitor):
-                energy_monitor.stop()
-                # Get the energy consumptions.
-                energy_consumptions = energy_monitor.get_energy_consumptions(tag)
-            elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
-                energy_monitor.stop()
-                # Get the energy consumptions.
-                energy_consumptions = energy_monitor.get_energy_consumptions(tag)
-            # Add the model training energy consumptions to the training metrics.
-            training_metrics = training_metrics | energy_consumptions
-        # Get the model training process result.
-        model_training_process_result = queue.get()
+        # Initialize the model training queue.
+        fit_queue = Queue()
+        if daemon_mode:
+            # Launch the model training process.
+            target = self._train_model
+            args = (global_parameters, x_train_sliced, y_train_sliced, fit_config, fit_queue)
+            model_training_process = Process(target=target, args=args)
+            model_training_process.start()
+            # Get the model training process id.
+            model_training_pid = model_training_process.pid
+            # Start the model training energy consumption monitoring.
+            if energy_monitor:
+                tag = "training_energy"
+                if isinstance(energy_monitor, PyJoulesEnergyMonitor):
+                    energy_monitor.start(tag)
+                elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
+                    energy_monitor.start(model_training_pid)
+            # Wait for the model training process completion.
+            model_training_process.join()
+            # Stop the model training energy consumption monitoring.
+            if energy_monitor:
+                energy_consumptions = {}
+                tag = "training_energy"
+                if isinstance(energy_monitor, PyJoulesEnergyMonitor):
+                    energy_monitor.stop()
+                    # Get the energy consumptions.
+                    energy_consumptions = energy_monitor.get_energy_consumptions(tag)
+                elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
+                    energy_monitor.stop()
+                    # Get the energy consumptions.
+                    energy_consumptions = energy_monitor.get_energy_consumptions(tag)
+                # Add the model training energy consumptions to the training metrics.
+                training_metrics = training_metrics | energy_consumptions
+        else:
+            # Start the model training energy consumption monitoring.
+            if energy_monitor:
+                tag = "training_energy"
+                if isinstance(energy_monitor, PyJoulesEnergyMonitor):
+                    energy_monitor.start(tag)
+            # Execute the model training task.
+            self._train_model(global_parameters, x_train_sliced, y_train_sliced, fit_config, fit_queue)
+            # Stop the model training energy consumption monitoring.
+            if energy_monitor:
+                energy_consumptions = {}
+                tag = "training_energy"
+                if isinstance(energy_monitor, PyJoulesEnergyMonitor):
+                    energy_monitor.stop()
+                    # Get the energy consumptions.
+                    energy_consumptions = energy_monitor.get_energy_consumptions(tag)
+                # Add the model training energy consumptions to the training metrics.
+                training_metrics = training_metrics | energy_consumptions
+        # Get the model training result.
+        model_training_process_result = fit_queue.get()
         history = model_training_process_result[0]
         duration = model_training_process_result[1]
         # Add the model training duration to the training metrics.
@@ -229,7 +253,7 @@ class FlowerNumpyClient(NumPyClient):
                     x_test_sliced: NDArray,
                     y_test_sliced: NDArray,
                     evaluate_config: dict,
-                    queue: Queue) -> None:
+                    evaluate_queue: Queue) -> None:
         # Start the model testing duration timer.
         duration_start = perf_counter()
         # Load the local model.
@@ -245,8 +269,8 @@ class FlowerNumpyClient(NumPyClient):
         self._dump_model(model)
         # Get the model testing duration.
         duration = perf_counter() - duration_start
-        # Put into the queue the model testing history and duration.
-        queue.put([history, duration])
+        # Put into the evaluate queue the model testing history and duration.
+        evaluate_queue.put([history, duration])
 
     def evaluate(self,
                  global_parameters: NDArrays,
@@ -257,6 +281,7 @@ class FlowerNumpyClient(NumPyClient):
         x_test = self.get_attribute("_x_test")
         y_test = self.get_attribute("_y_test")
         energy_monitor = self.get_attribute("_energy_monitor")
+        daemon_mode = self.get_attribute("_daemon_mode")
         logger = self.get_attribute("_logger")
         # Initialize the testing metrics dictionary.
         testing_metrics = {}
@@ -281,42 +306,64 @@ class FlowerNumpyClient(NumPyClient):
                   .format(client_id, comm_round, evaluate_config)
         log_message(logger, message, "DEBUG")
         # Log a 'testing the model' message.
-        message = "[Client {0} | Round {1}] Testing the model...".format(client_id, comm_round)
+        message = "[Client {0} | Round {1}] Testing the model (daemon mode: {2})..." \
+                  .format(client_id, comm_round, daemon_mode)
         log_message(logger, message, "INFO")
         # Unset the logger.
         self._set_attribute("_logger", None)
-        # Launch the model testing process.
-        queue = Queue()
-        target = self._test_model
-        args = (global_parameters, x_test_sliced, y_test_sliced, evaluate_config, queue)
-        model_testing_process = Process(target=target, args=args)
-        model_testing_process.start()
-        # Get the model testing process id.
-        model_testing_pid = model_testing_process.pid
-        # Start the model testing energy consumption monitoring.
-        if energy_monitor:
-            if isinstance(energy_monitor, PyJoulesEnergyMonitor):
-                energy_monitor.start("testing_energy")
-            elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
-                energy_monitor.start(model_testing_pid)
-        # Wait for the model testing process completion.
-        model_testing_process.join()
-        # Stop the model testing energy consumption monitoring.
-        if energy_monitor:
-            energy_consumptions = {}
-            tag = "testing_energy"
-            if isinstance(energy_monitor, PyJoulesEnergyMonitor):
-                energy_monitor.stop()
-                # Get the energy consumptions.
-                energy_consumptions = energy_monitor.get_energy_consumptions(tag)
-            elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
-                energy_monitor.stop()
-                # Get the energy consumptions.
-                energy_consumptions = energy_monitor.get_energy_consumptions(tag)
-            # Add the model testing energy consumptions to the testing metrics.
-            testing_metrics = testing_metrics | energy_consumptions
-        # Get the model testing process result.
-        model_testing_process_result = queue.get()
+        # Initialize the model testing queue.
+        evaluate_queue = Queue()
+        if daemon_mode:
+            # Launch the model testing process.
+            target = self._test_model
+            args = (global_parameters, x_test_sliced, y_test_sliced, evaluate_config, evaluate_queue)
+            model_testing_process = Process(target=target, args=args)
+            model_testing_process.start()
+            # Get the model testing process id.
+            model_testing_pid = model_testing_process.pid
+            # Start the model testing energy consumption monitoring.
+            if energy_monitor:
+                tag = "testing_energy"
+                if isinstance(energy_monitor, PyJoulesEnergyMonitor):
+                    energy_monitor.start(tag)
+                elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
+                    energy_monitor.start(model_testing_pid)
+            # Wait for the model testing process completion.
+            model_testing_process.join()
+            # Stop the model testing energy consumption monitoring.
+            if energy_monitor:
+                energy_consumptions = {}
+                tag = "testing_energy"
+                if isinstance(energy_monitor, PyJoulesEnergyMonitor):
+                    energy_monitor.stop()
+                    # Get the energy consumptions.
+                    energy_consumptions = energy_monitor.get_energy_consumptions(tag)
+                elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
+                    energy_monitor.stop()
+                    # Get the energy consumptions.
+                    energy_consumptions = energy_monitor.get_energy_consumptions(tag)
+                # Add the model testing energy consumptions to the testing metrics.
+                testing_metrics = testing_metrics | energy_consumptions
+        else:
+            # Start the model training energy consumption monitoring.
+            if energy_monitor:
+                tag = "testing_energy"
+                if isinstance(energy_monitor, PyJoulesEnergyMonitor):
+                    energy_monitor.start(tag)
+            # Execute the model testing task.
+            self._test_model(global_parameters, x_test_sliced, y_test_sliced, evaluate_config, evaluate_queue)
+            # Stop the model testing energy consumption monitoring.
+            if energy_monitor:
+                energy_consumptions = {}
+                tag = "testing_energy"
+                if isinstance(energy_monitor, PyJoulesEnergyMonitor):
+                    energy_monitor.stop()
+                    # Get the energy consumptions.
+                    energy_consumptions = energy_monitor.get_energy_consumptions(tag)
+                # Add the model testing energy consumptions to the testing metrics.
+                testing_metrics = testing_metrics | energy_consumptions
+        # Get the model testing result.
+        model_testing_process_result = evaluate_queue.get()
         history = model_testing_process_result[0]
         duration = model_testing_process_result[1]
         # Add the model testing duration to the testing metrics.

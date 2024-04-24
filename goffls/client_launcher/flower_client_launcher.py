@@ -25,6 +25,7 @@ class FlowerClientLauncher:
         # Initialize the attributes.
         self._client_id = id_
         self._config_file = config_file
+        self._general_settings = None
         self._logging_settings = None
         self._ssl_settings = None
         self._grpc_settings = None
@@ -49,6 +50,10 @@ class FlowerClientLauncher:
     def _parse_settings(self) -> None:
         # Get the necessary attributes.
         config_file = self.get_attribute("_config_file")
+        # Parse and set the general settings.
+        general_section = "General Settings"
+        general_settings = parse_config_section(config_file, general_section)
+        self._set_attribute("_general_settings", general_settings)
         # Parse and set the logging settings.
         logging_section = "Logging Settings"
         logging_settings = parse_config_section(config_file, logging_section)
@@ -326,6 +331,7 @@ class FlowerClientLauncher:
                                    x_test: NDArray,
                                    y_test: NDArray,
                                    energy_monitor: any,
+                                   daemon_mode: bool,
                                    logger: Logger) -> Client:
         # Instantiate the flower client.
         flower_client = FlowerNumpyClient(id_=id_,
@@ -335,6 +341,7 @@ class FlowerClientLauncher:
                                           x_test=x_test,
                                           y_test=y_test,
                                           energy_monitor=energy_monitor,
+                                          daemon_mode=daemon_mode,
                                           logger=logger)
         flower_client = flower_client.to_client()
         # Return the flower server.
@@ -355,6 +362,7 @@ class FlowerClientLauncher:
         # Get the necessary attributes.
         client_id = self.get_attribute("_client_id")
         logger = self.get_attribute("_logger")
+        daemon_mode = self.get_attribute("_general_settings")["enable_daemon_mode"]
         # Get the Secure Socket Layer (SSL) certificates (SSL-enabled secure connection).
         ssl_certificates = self._get_ssl_certificates()
         # Get the flower server address (IP address and port).
@@ -373,7 +381,7 @@ class FlowerClientLauncher:
         model = self._instantiate_and_compile_model(optimizer, loss_function)
         # Instantiate the flower client.
         flower_client = self._instantiate_flower_client(client_id, model, x_train, y_train, x_test, y_test,
-                                                        energy_monitor, logger)
+                                                        energy_monitor, daemon_mode, logger)
         # Start the flower client.
         self._start_flower_client(flower_server_address,
                                   flower_client,
