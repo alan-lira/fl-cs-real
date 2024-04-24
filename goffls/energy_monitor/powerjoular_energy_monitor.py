@@ -8,14 +8,15 @@ from subprocess import Popen, PIPE
 class PowerJoularEnergyMonitor:
 
     def __init__(self,
-                 pw_env: str,
+                 env_variables: dict,
                  monitoring_domains: list,
                  unit: str) -> None:
         # Initialize the attributes.
-        self._pw_env = pw_env
+        self._env_variables = env_variables
         self._monitoring_domains = monitoring_domains
         self._unit = unit
         self._energy_consumptions_temp_file = None
+        self._to_monitor_pid = None
         self._powerjoular_monitoring_pid = None
 
     def _set_attribute(self,
@@ -33,16 +34,17 @@ class PowerJoularEnergyMonitor:
         return available_monitoring_domains
 
     def start(self,
-              pid: int) -> None:
+              to_monitor_pid: int) -> None:
         # Get the necessary attributes.
-        pw_env = self.get_attribute("_pw_env")
+        env_variables = self.get_attribute("_env_variables")
         # Load the password from the environment variable.
-        pw = getenv(pw_env)
+        pw = getenv(env_variables["pw"])
         # Set the energy consumptions temporary file.
         energy_consumptions_temp_file = Path("energy_consumptions_temp_" + str(randint(1, 9999999)))
         self._set_attribute("_energy_consumptions_temp_file", energy_consumptions_temp_file)
-        # Set the PowerJoular monitoring command.
-        monitoring_command = "sudo -S powerjoular -p {0} -f {1}".format(pid, energy_consumptions_temp_file).split()
+        # Define the PowerJoular monitoring command.
+        monitoring_command = "sudo -S powerjoular -p {0} -f {1}" \
+                             .format(to_monitor_pid, energy_consumptions_temp_file).split()
         # Start the PowerJoular monitoring process.
         powerjoular_monitoring_process = Popen(monitoring_command,
                                                stdin=PIPE,
@@ -53,6 +55,8 @@ class PowerJoularEnergyMonitor:
         powerjoular_monitoring_process.communicate("{0}\n".format(pw))
         # Get the PowerJoular monitoring process id.
         powerjoular_monitoring_pid = powerjoular_monitoring_process.pid
+        # Set the to-monitor process id.
+        self._set_attribute("_to_monitor_pid", to_monitor_pid)
         # Set the PowerJoular monitoring process id.
         self._set_attribute("_powerjoular_monitoring_pid", powerjoular_monitoring_pid)
 
@@ -75,6 +79,7 @@ class PowerJoularEnergyMonitor:
         # Get the necessary attributes.
         monitoring_domains = self.get_attribute("_monitoring_domains")
         energy_consumptions_temp_file = self.get_attribute("_energy_consumptions_temp_file")
+        to_monitor_pid = self.get_attribute("_to_monitor_pid")
         # If the energy consumptions temporary file exists...
         if energy_consumptions_temp_file.is_file():
             # Initialize the energy consumptions measurements variables.
@@ -97,8 +102,13 @@ class PowerJoularEnergyMonitor:
                     nvidia_gpu_energy_measurements.append(energy_nvidia_gpu)
             # Remove the energy consumptions temporary file.
             energy_consumptions_temp_file.unlink(missing_ok=True)
+            # Remove the auto-generated energy consumptions .csv file.
+            energy_consumptions_csv_file = Path(str(energy_consumptions_temp_file) + "-{0}.csv".format(to_monitor_pid))
+            energy_consumptions_csv_file.unlink(missing_ok=True)
             # Unset the energy consumptions temporary file.
             self._set_attribute("_energy_consumptions_temp_file", None)
+            # Unset the to-monitor process id.
+            self._set_attribute("_to_monitor_pid", None)
             # Iterate through the list of monitoring domains.
             for monitoring_domain in monitoring_domains:
                 if monitoring_domain == "Total":

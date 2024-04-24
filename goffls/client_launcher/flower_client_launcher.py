@@ -74,11 +74,10 @@ class FlowerClientLauncher:
         energy_monitoring_section = "Energy Monitoring Settings"
         energy_monitoring_settings = parse_config_section(config_file,
                                                           energy_monitoring_section)
-        monitor_implementation = energy_monitoring_settings["implementation"]
-        monitor_implementation_section = "{0} Monitor Settings".format(monitor_implementation)
-        monitor_implementation_settings = parse_config_section(config_file,
-                                                               monitor_implementation_section)
-        energy_monitoring_settings.update({monitor_implementation: monitor_implementation_settings})
+        energy_monitor_name = energy_monitoring_settings["energy_monitor"]
+        energy_monitor_section = "{0} Monitor Settings".format(energy_monitor_name)
+        energy_monitor_settings = parse_config_section(config_file, energy_monitor_section)
+        energy_monitoring_settings.update({energy_monitor_name: energy_monitor_settings})
         self._set_attribute("_energy_monitoring_settings", energy_monitoring_settings)
         # Parse and set the model settings.
         model_section = "Model Settings"
@@ -226,21 +225,21 @@ class FlowerClientLauncher:
         # Get the necessary attributes.
         energy_monitoring_settings = self.get_attribute("_energy_monitoring_settings")
         enable_energy_monitoring = energy_monitoring_settings["enable_energy_monitoring"]
-        monitor_implementation = energy_monitoring_settings["implementation"]
-        monitor_implementation_settings = energy_monitoring_settings[monitor_implementation]
+        energy_monitor_name = energy_monitoring_settings["energy_monitor"]
+        energy_monitor_settings = energy_monitoring_settings[energy_monitor_name]
         # Initialize the energy monitor.
         energy_monitor = None
         # If energy monitoring is enabled...
         if enable_energy_monitoring:
-            if monitor_implementation == "pyJoules":
-                monitoring_domains = monitor_implementation_settings["monitoring_domains"]
-                unit = monitor_implementation_settings["unit"]
+            if energy_monitor_name == "pyJoules":
+                monitoring_domains = energy_monitor_settings["monitoring_domains"]
+                unit = energy_monitor_settings["unit"]
                 energy_monitor = PyJoulesEnergyMonitor(monitoring_domains, unit)
-            elif monitor_implementation == "PowerJoular":
-                pw_env = monitor_implementation_settings["pw_env"]
-                monitoring_domains = monitor_implementation_settings["monitoring_domains"]
-                unit = monitor_implementation_settings["unit"]
-                energy_monitor = PowerJoularEnergyMonitor(pw_env, monitoring_domains, unit)
+            elif energy_monitor_name == "PowerJoular":
+                env_variables = energy_monitor_settings["env_variables"]
+                monitoring_domains = energy_monitor_settings["monitoring_domains"]
+                unit = energy_monitor_settings["unit"]
+                energy_monitor = PowerJoularEnergyMonitor(env_variables, monitoring_domains, unit)
         # Return the energy monitor.
         return energy_monitor
 
