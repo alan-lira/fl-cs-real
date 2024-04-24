@@ -26,6 +26,11 @@ class PyJoulesEnergyMonitor:
                       attribute_name: str) -> any:
         return getattr(self, attribute_name)
 
+    @staticmethod
+    def _get_available_monitoring_domains() -> list:
+        available_monitoring_domains = ["CPU", "CPU_Cores", "Integrated_GPU", "NVIDIA_GPU", "RAM"]
+        return available_monitoring_domains
+
     def _load_energy_monitor(self) -> any:
         # Get the necessary attributes.
         monitoring_domains = self.get_attribute("_monitoring_domains")
@@ -33,6 +38,7 @@ class PyJoulesEnergyMonitor:
         any_monitorable_devices = len(DeviceFactory.create_devices()) > 0
         if any_monitorable_devices:
             devices_to_monitor = []
+            # Iterate through the list of monitoring domains.
             for monitoring_domain in monitoring_domains:
                 if monitoring_domain == "CPU":
                     try:

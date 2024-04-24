@@ -238,8 +238,9 @@ class FlowerClientLauncher:
                 energy_monitor = PyJoulesEnergyMonitor(monitoring_domains, unit)
             elif monitor_implementation == "PowerJoular":
                 pw_env = monitor_implementation_settings["pw_env"]
+                monitoring_domains = monitor_implementation_settings["monitoring_domains"]
                 unit = monitor_implementation_settings["unit"]
-                energy_monitor = PowerJoularEnergyMonitor(pw_env, unit)
+                energy_monitor = PowerJoularEnergyMonitor(pw_env, monitoring_domains, unit)
         # Return the energy monitor.
         return energy_monitor
 
