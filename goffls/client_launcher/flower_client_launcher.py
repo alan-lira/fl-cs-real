@@ -5,11 +5,6 @@ from logging import Logger
 from numpy import empty
 from pathlib import Path
 from PIL import Image
-from pyJoules.device import DeviceFactory
-from pyJoules.device.nvidia_device import NvidiaGPUDomain
-from pyJoules.device.rapl_device import RaplCoreDomain, RaplDramDomain, RaplPackageDomain, RaplUncoreDomain
-from pyJoules.energy_meter import EnergyMeter
-from pyJoules.exception import NoSuchDeviceError, NoSuchDomainError
 from time import perf_counter
 from typing import Optional
 
@@ -17,6 +12,8 @@ from flwr.client import Client, start_client
 from flwr.common import NDArray
 
 from goffls.client.flower_numpy_client import FlowerNumpyClient
+from goffls.energy_monitor.powerjoular_energy_monitor import PowerJoularEnergyMonitor
+from goffls.energy_monitor.pyjoules_energy_monitor import PyJoulesEnergyMonitor
 from goffls.util.config_parser_util import parse_config_section
 from goffls.util.logger_util import load_logger, log_message
 
@@ -25,13 +22,15 @@ class FlowerClientLauncher:
     def __init__(self,
                  id_: int,
                  config_file: Path) -> None:
+        # Initialize the attributes.
         self._client_id = id_
         self._config_file = config_file
+        self._daemon_settings = None
         self._logging_settings = None
         self._ssl_settings = None
         self._grpc_settings = None
         self._dataset_settings = None
-        self._energy_consumption_monitoring_settings = None
+        self._energy_monitoring_settings = None
         self._model_settings = None
         self._logger = None
         # Parse the settings.
@@ -51,6 +50,10 @@ class FlowerClientLauncher:
     def _parse_settings(self) -> None:
         # Get the necessary attributes.
         config_file = self.get_attribute("_config_file")
+        # Parse and set the daemon settings.
+        daemon_section = "Daemon Settings"
+        daemon_settings = parse_config_section(config_file, daemon_section)
+        self._set_attribute("_daemon_settings", daemon_settings)
         # Parse and set the logging settings.
         logging_section = "Logging Settings"
         logging_settings = parse_config_section(config_file, logging_section)
@@ -67,16 +70,15 @@ class FlowerClientLauncher:
         dataset_section = "Dataset Settings"
         dataset_settings = parse_config_section(config_file, dataset_section)
         self._set_attribute("_dataset_settings", dataset_settings)
-        # Parse and set the energy consumption monitoring settings.
-        energy_consumption_monitoring_section = "Energy Consumption Monitoring Settings"
-        energy_consumption_monitoring_settings = parse_config_section(config_file,
-                                                                      energy_consumption_monitoring_section)
-        monitor_implementation = energy_consumption_monitoring_settings["implementation"]
-        monitor_implementation_section = "{0} Monitor Settings".format(monitor_implementation)
-        monitor_implementation_settings = parse_config_section(config_file,
-                                                               monitor_implementation_section)
-        energy_consumption_monitoring_settings.update({monitor_implementation: monitor_implementation_settings})
-        self._set_attribute("_energy_consumption_monitoring_settings", energy_consumption_monitoring_settings)
+        # Parse and set the energy monitoring settings.
+        energy_monitoring_section = "Energy Monitoring Settings"
+        energy_monitoring_settings = parse_config_section(config_file,
+                                                          energy_monitoring_section)
+        energy_monitor_name = energy_monitoring_settings["energy_monitor"]
+        energy_monitor_section = "{0} Monitor Settings".format(energy_monitor_name)
+        energy_monitor_settings = parse_config_section(config_file, energy_monitor_section)
+        energy_monitoring_settings.update({energy_monitor_name: energy_monitor_settings})
+        self._set_attribute("_energy_monitoring_settings", energy_monitoring_settings)
         # Parse and set the model settings.
         model_section = "Model Settings"
         model_settings = parse_config_section(config_file, model_section)
@@ -219,61 +221,27 @@ class FlowerClientLauncher:
         # Return the loaded dataset (x_train, y_train, x_test, and y_test).
         return x_train, y_train, x_test, y_test
 
-    def _load_energy_consumption_monitor(self) -> any:
+    def _load_energy_monitor(self) -> any:
         # Get the necessary attributes.
-        client_id = self.get_attribute("_client_id")
-        energy_consumption_monitoring_settings = self.get_attribute("_energy_consumption_monitoring_settings")
-        enable_energy_monitoring = energy_consumption_monitoring_settings["enable_energy_monitoring"]
-        monitor_implementation = energy_consumption_monitoring_settings["implementation"]
-        monitor_implementation_settings = energy_consumption_monitoring_settings[monitor_implementation]
-        logger = self.get_attribute("_logger")
-        # Initialize the energy consumption monitor.
-        energy_consumption_monitor = None
-        # If energy consumption monitoring is enabled...
+        energy_monitoring_settings = self.get_attribute("_energy_monitoring_settings")
+        enable_energy_monitoring = energy_monitoring_settings["enable_energy_monitoring"]
+        energy_monitor_name = energy_monitoring_settings["energy_monitor"]
+        energy_monitor_settings = energy_monitoring_settings[energy_monitor_name]
+        # Initialize the energy monitor.
+        energy_monitor = None
+        # If energy monitoring is enabled...
         if enable_energy_monitoring:
-            if monitor_implementation == "pyJoules":
-                # Instantiate the pyJoules monitor (EnergyMeter), if the hardware supports monitoring.
-                any_monitorable_devices = len(DeviceFactory.create_devices()) > 0
-                if any_monitorable_devices:
-                    devices_to_monitor = []
-                    monitoring_domains = monitor_implementation_settings["monitoring_domains"]
-                    for monitoring_domain in monitoring_domains:
-                        if monitoring_domain == "CPU":
-                            try:
-                                rapl_package_device = DeviceFactory.create_devices([RaplPackageDomain(0)])
-                                devices_to_monitor.extend(rapl_package_device)
-                            except (NoSuchDeviceError, NoSuchDomainError):
-                                pass
-                        elif monitoring_domain == "CPU_Cores":
-                            try:
-                                rapl_core_device = DeviceFactory.create_devices([RaplCoreDomain(0)])
-                                devices_to_monitor.extend(rapl_core_device)
-                            except (NoSuchDeviceError, NoSuchDomainError):
-                                pass
-                        elif monitoring_domain == "Integrated_GPU":
-                            try:
-                                rapl_uncore_device = DeviceFactory.create_devices([RaplUncoreDomain(0)])
-                                devices_to_monitor.extend(rapl_uncore_device)
-                            except (NoSuchDeviceError, NoSuchDomainError):
-                                pass
-                        elif monitoring_domain == "NVIDIA_GPU":
-                            try:
-                                nvidia_gpu_device = DeviceFactory.create_devices([NvidiaGPUDomain(0)])
-                                devices_to_monitor.extend(nvidia_gpu_device)
-                            except (NoSuchDeviceError, NoSuchDomainError):
-                                pass
-                        elif monitoring_domain == "RAM":
-                            try:
-                                rapl_dram_device = DeviceFactory.create_devices([RaplDramDomain(0)])
-                                devices_to_monitor.extend(rapl_dram_device)
-                            except (NoSuchDeviceError, NoSuchDomainError):
-                                pass
-                    energy_consumption_monitor = EnergyMeter(devices_to_monitor)
-                else:
-                    message = "[Client {0}] No monitorable devices that are compatible with pyJoules were found!" \
-                              .format(client_id)
-                    log_message(logger, message, "INFO")
-        return energy_consumption_monitor
+            if energy_monitor_name == "pyJoules":
+                monitoring_domains = energy_monitor_settings["monitoring_domains"]
+                unit = energy_monitor_settings["unit"]
+                energy_monitor = PyJoulesEnergyMonitor(monitoring_domains, unit)
+            elif energy_monitor_name == "PowerJoular":
+                env_variables = energy_monitor_settings["env_variables"]
+                monitoring_domains = energy_monitor_settings["monitoring_domains"]
+                unit = energy_monitor_settings["unit"]
+                energy_monitor = PowerJoularEnergyMonitor(env_variables, monitoring_domains, unit)
+        # Return the energy monitor.
+        return energy_monitor
 
     def _instantiate_optimizer(self) -> any:
         # Get the necessary attributes.
@@ -363,6 +331,8 @@ class FlowerClientLauncher:
                                    x_test: NDArray,
                                    y_test: NDArray,
                                    energy_monitor: any,
+                                   daemon_mode: bool,
+                                   daemon_start_method: str,
                                    logger: Logger) -> Client:
         # Instantiate the flower client.
         flower_client = FlowerNumpyClient(id_=id_,
@@ -372,6 +342,8 @@ class FlowerClientLauncher:
                                           x_test=x_test,
                                           y_test=y_test,
                                           energy_monitor=energy_monitor,
+                                          daemon_mode=daemon_mode,
+                                          daemon_start_method=daemon_start_method,
                                           logger=logger)
         flower_client = flower_client.to_client()
         # Return the flower server.
@@ -389,6 +361,11 @@ class FlowerClientLauncher:
                      root_certificates=root_certificates)
 
     def launch_client(self) -> None:
+        # Get the necessary attributes.
+        client_id = self.get_attribute("_client_id")
+        logger = self.get_attribute("_logger")
+        daemon_mode = self.get_attribute("_daemon_settings")["enable_daemon_mode"]
+        daemon_start_method = self.get_attribute("_daemon_settings")["start_method"]
         # Get the Secure Socket Layer (SSL) certificates (SSL-enabled secure connection).
         ssl_certificates = self._get_ssl_certificates()
         # Get the flower server address (IP address and port).
@@ -397,8 +374,8 @@ class FlowerClientLauncher:
         max_message_length_in_bytes = self._get_max_message_length_in_bytes()
         # Load the dataset (x_train, y_train, x_test, and y_test).
         x_train, y_train, x_test, y_test = self._load_dataset()
-        # Load the energy consumption monitor.
-        energy_consumption_monitor = self._load_energy_consumption_monitor()
+        # Load the energy monitor.
+        energy_monitor = self._load_energy_monitor()
         # Instantiate the optimizer.
         optimizer = self._instantiate_optimizer()
         # Instantiate the loss function.
@@ -406,10 +383,8 @@ class FlowerClientLauncher:
         # Instantiate and compile the model.
         model = self._instantiate_and_compile_model(optimizer, loss_function)
         # Instantiate the flower client.
-        client_id = self.get_attribute("_client_id")
-        logger = self.get_attribute("_logger")
         flower_client = self._instantiate_flower_client(client_id, model, x_train, y_train, x_test, y_test,
-                                                        energy_consumption_monitor, logger)
+                                                        energy_monitor, daemon_mode, daemon_start_method, logger)
         # Start the flower client.
         self._start_flower_client(flower_server_address,
                                   flower_client,

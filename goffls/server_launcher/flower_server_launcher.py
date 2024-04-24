@@ -14,6 +14,7 @@ class FlowerServerLauncher:
     def __init__(self,
                  id_: int,
                  config_file: Path) -> None:
+        # Initialize the attributes.
         self._server_id = id_
         self._config_file = config_file
         self._logging_settings = None
@@ -571,6 +572,10 @@ class FlowerServerLauncher:
                 file.write(data_line)
 
     def launch_server(self) -> None:
+        # Get the necessary attributes.
+        fl_settings = self.get_attribute("_fl_settings")
+        num_rounds = fl_settings["num_rounds"]
+        round_timeout_in_seconds = fl_settings["round_timeout_in_seconds"]
         # Get the Secure Socket Layer (SSL) certificates (SSL-enabled secure connection).
         ssl_certificates = self._get_ssl_certificates()
         # Get the flower server address (listen IP address and port).
@@ -590,9 +595,6 @@ class FlowerServerLauncher:
         # Instantiate the flower server.
         flower_server = self._instantiate_flower_server(simple_client_manager, server_strategy)
         # Instantiate the flower server config.
-        fl_settings = self.get_attribute("_fl_settings")
-        num_rounds = fl_settings["num_rounds"]
-        round_timeout_in_seconds = fl_settings["round_timeout_in_seconds"]
         flower_server_config = self._instantiate_flower_server_config(num_rounds, round_timeout_in_seconds)
         # Start the flower server.
         self._start_flower_server(flower_server_address,

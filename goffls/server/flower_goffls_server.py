@@ -37,6 +37,7 @@ class FlowerGOFFLSServer(Strategy):
                  evaluate_config: dict,
                  initial_parameters: Optional[NDArrays],
                  logger: Logger) -> None:
+        # Initialize the attributes.
         super().__init__()
         self._server_id = id_
         self._enable_training = enable_training
