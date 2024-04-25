@@ -129,13 +129,15 @@ class FlowerNumpyClient(NumPyClient):
         if daemon_mode:
             fit_queue_element = fit_queue.get()
             model_training_pid = fit_queue_element["model_training_pid"]
-        # Start the model training energy consumption monitoring.
+        # If there is an energy consumption monitor...
         if energy_monitor:
-            tag = "training_energy"
+            # Set the energy consumption monitor's monitoring tag.
+            monitoring_tag = "training_energy"
+            # Start the model training energy consumption monitoring.
             if isinstance(energy_monitor, PyJoulesEnergyMonitor):
-                energy_monitor.start(tag)
+                energy_monitor.start(monitoring_tag)
             elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
-                energy_monitor.start(model_training_pid)
+                energy_monitor.start(monitoring_tag, model_training_pid)
         # Start the model training duration timer.
         duration_start = perf_counter()
         # Load the local model.
@@ -156,18 +158,17 @@ class FlowerNumpyClient(NumPyClient):
         self._save_model(model)
         # Get the model training duration.
         duration = perf_counter() - duration_start
-        # Stop the model training energy consumption monitoring.
+        # Initialize the energy consumptions dictionary.
         energy_consumptions = {}
+        # If there is an energy consumption monitor...
         if energy_monitor:
-            tag = "training_energy"
+            # Stop the model training energy consumption monitoring and get the energy consumptions measurements.
             if isinstance(energy_monitor, PyJoulesEnergyMonitor):
                 energy_monitor.stop()
-                # Get the energy consumptions.
-                energy_consumptions = energy_monitor.get_energy_consumptions(tag)
+                energy_consumptions = energy_monitor.get_energy_consumptions()
             elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
                 energy_monitor.stop()
-                # Get the energy consumptions.
-                energy_consumptions = energy_monitor.get_energy_consumptions(tag)
+                energy_consumptions = energy_monitor.get_energy_consumptions()
         # Put the model training result into the fit queue.
         model_training_result = {"history": history,
                                  "duration": duration,
@@ -271,13 +272,15 @@ class FlowerNumpyClient(NumPyClient):
         if daemon_mode:
             evaluate_queue_element = evaluate_queue.get()
             model_testing_pid = evaluate_queue_element["model_testing_pid"]
-        # Start the model testing energy consumption monitoring.
+        # If there is an energy consumption monitor...
         if energy_monitor:
-            tag = "testing_energy"
+            # Set the energy consumption monitor's monitoring tag.
+            monitoring_tag = "testing_energy"
+            # Start the model testing energy consumption monitoring.
             if isinstance(energy_monitor, PyJoulesEnergyMonitor):
-                energy_monitor.start(tag)
+                energy_monitor.start(monitoring_tag)
             elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
-                energy_monitor.start(model_testing_pid)
+                energy_monitor.start(monitoring_tag, model_testing_pid)
         # Start the model testing duration timer.
         duration_start = perf_counter()
         # Load the local model.
@@ -293,18 +296,17 @@ class FlowerNumpyClient(NumPyClient):
         self._save_model(model)
         # Get the model testing duration.
         duration = perf_counter() - duration_start
-        # Stop the model testing energy consumption monitoring.
+        # Initialize the energy consumptions dictionary.
         energy_consumptions = {}
+        # If there is an energy consumption monitor...
         if energy_monitor:
-            tag = "testing_energy"
+            # Stop the model testing energy consumption monitoring and get the energy consumptions measurements.
             if isinstance(energy_monitor, PyJoulesEnergyMonitor):
                 energy_monitor.stop()
-                # Get the energy consumptions.
-                energy_consumptions = energy_monitor.get_energy_consumptions(tag)
+                energy_consumptions = energy_monitor.get_energy_consumptions()
             elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
                 energy_monitor.stop()
-                # Get the energy consumptions.
-                energy_consumptions = energy_monitor.get_energy_consumptions(tag)
+                energy_consumptions = energy_monitor.get_energy_consumptions()
         # Put the model testing result into the evaluate queue.
         model_testing_result = {"history": history,
                                 "duration": duration,

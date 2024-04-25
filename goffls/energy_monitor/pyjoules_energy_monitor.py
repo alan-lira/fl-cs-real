@@ -13,6 +13,7 @@ class PyJoulesEnergyMonitor:
         # Initialize the attributes.
         self._monitoring_domains = monitoring_domains
         self._unit = unit
+        self._monitoring_tag = None
         self._energy_monitor = None
         # Load the energy monitor.
         self._load_energy_monitor()
@@ -76,12 +77,14 @@ class PyJoulesEnergyMonitor:
             self._set_attribute("_energy_monitor", energy_monitor)
 
     def start(self,
-              tag: str) -> None:
+              monitoring_tag: str) -> None:
         # Get the necessary attributes.
         energy_monitor = self.get_attribute("_energy_monitor")
         if energy_monitor:
             # Start the energy consumption monitoring.
-            energy_monitor.start(tag=tag)
+            energy_monitor.start(tag=monitoring_tag)
+        # Set the monitoring tag.
+        self._set_attribute("_monitoring_tag", monitoring_tag)
 
     def stop(self) -> None:
         # Get the necessary attributes.
@@ -90,16 +93,16 @@ class PyJoulesEnergyMonitor:
             # Stop the energy consumption monitoring.
             energy_monitor.stop()
 
-    def get_energy_consumptions(self,
-                                tag: str) -> dict:
+    def get_energy_consumptions(self) -> dict:
         # Initialize the energy consumptions dictionary.
         energy_consumptions = {}
         # Get the necessary attributes.
         energy_monitor = self.get_attribute("_energy_monitor")
         unit = self.get_attribute("_unit")
+        monitoring_tag = self.get_attribute("_monitoring_tag")
         if energy_monitor:
             last_trace = vars(energy_monitor.get_trace()[0])
-            if last_trace["tag"] == tag:
+            if last_trace["tag"] == monitoring_tag:
                 energy_dict = last_trace["energy"]
                 if "package_0" in energy_dict:
                     # Get the CPU energy consumption, returned as Micro-Joules (μJ).
@@ -108,7 +111,7 @@ class PyJoulesEnergyMonitor:
                         # Convert the CPU energy consumption to Joules (J).
                         energy_cpu /= (1 * pow(10, 6))
                     # Add the CPU energy consumption to the energy consumptions dictionary.
-                    energy_consumptions.update({tag + "_cpu": energy_cpu})
+                    energy_consumptions.update({monitoring_tag + "_cpu": energy_cpu})
                 if "core_0" in energy_dict:
                     # Get the CPU Cores energy consumption, returned as Micro-Joules (μJ).
                     energy_cpu_cores = energy_dict["core_0"]
@@ -116,7 +119,7 @@ class PyJoulesEnergyMonitor:
                         # Convert the CPU Cores energy consumption to Joules (J).
                         energy_cpu_cores /= (1 * pow(10, 6))
                     # Add the CPU Cores energy consumption to the energy consumptions dictionary.
-                    energy_consumptions.update({tag + "_cpu_cores": energy_cpu_cores})
+                    energy_consumptions.update({monitoring_tag + "_cpu_cores": energy_cpu_cores})
                 if "uncore_0" in energy_dict:
                     # Get the Integrated GPU energy consumption, returned as Micro-Joules (μJ).
                     energy_integrated_gpu = energy_dict["uncore_0"]
@@ -124,7 +127,7 @@ class PyJoulesEnergyMonitor:
                         # Convert the Integrated GPU energy consumption to Joules (J).
                         energy_integrated_gpu /= (1 * pow(10, 6))
                     # Add the Integrated GPU energy consumption to the energy consumptions dictionary.
-                    energy_consumptions.update({tag + "_integrated_gpu": energy_integrated_gpu})
+                    energy_consumptions.update({monitoring_tag + "_integrated_gpu": energy_integrated_gpu})
                 if "nvidia_gpu_0" in energy_dict:
                     # Get the NVIDIA GPU energy consumption, returned as Milli-Joules (mJ).
                     energy_nvidia_gpu = energy_dict["nvidia_gpu_0"]
@@ -132,7 +135,7 @@ class PyJoulesEnergyMonitor:
                         # Convert the NVIDIA GPU energy consumption to Joules (J).
                         energy_nvidia_gpu /= (1 * pow(10, 3))
                     # Add the NVIDIA GPU energy consumption to the energy consumptions dictionary.
-                    energy_consumptions.update({tag + "_nvidia_gpu": energy_nvidia_gpu})
+                    energy_consumptions.update({monitoring_tag + "_nvidia_gpu": energy_nvidia_gpu})
                 if "dram_0" in energy_dict:
                     # Get the RAM energy consumption, returned as Micro-Joules (μJ).
                     energy_ram = energy_dict["dram_0"]
@@ -140,6 +143,6 @@ class PyJoulesEnergyMonitor:
                         # Convert the RAM energy consumption to Joules (J).
                         energy_ram /= (1 * pow(10, 6))
                     # Add the RAM energy consumption to the energy consumptions dictionary.
-                    energy_consumptions.update({tag + "_ram": energy_ram})
+                    energy_consumptions.update({monitoring_tag + "_ram": energy_ram})
         # Return the energy consumptions dictionary.
         return energy_consumptions
