@@ -1,8 +1,7 @@
-from os import getenv, system
+from os import getenv
 from pathlib import Path
-from psutil import pid_exists
 from random import randint
-from subprocess import Popen, PIPE
+from subprocess import Popen, PIPE, TimeoutExpired
 
 
 class PowerJoularEnergyMonitor:
@@ -17,7 +16,7 @@ class PowerJoularEnergyMonitor:
         self._unit = unit
         self._energy_consumptions_temp_file = None
         self._to_monitor_pid = None
-        self._powerjoular_monitoring_pid = None
+        self._powerjoular_monitoring_process = None
 
     def _set_attribute(self,
                        attribute_name: str,
@@ -34,7 +33,7 @@ class PowerJoularEnergyMonitor:
         return available_monitoring_domains
 
     def start(self,
-              to_monitor_pid: int) -> None:
+              to_monitor_pid: any) -> None:
         # Get the necessary attributes.
         env_variables = self.get_attribute("_env_variables")
         # Load the password from the environment variable.
@@ -43,34 +42,37 @@ class PowerJoularEnergyMonitor:
         energy_consumptions_temp_file = Path("energy_consumptions_temp_" + str(randint(1, 9999999)))
         self._set_attribute("_energy_consumptions_temp_file", energy_consumptions_temp_file)
         # Define the PowerJoular monitoring command.
-        monitoring_command = "sudo -S powerjoular -p {0} -f {1}" \
-                             .format(to_monitor_pid, energy_consumptions_temp_file).split()
+        if isinstance(to_monitor_pid, int):
+            monitoring_command = "sudo -S powerjoular -p {0} -f {1}".format(to_monitor_pid,
+                                                                            energy_consumptions_temp_file).split()
+        else:
+            monitoring_command = "sudo -S powerjoular -f {0}".format(energy_consumptions_temp_file).split()
         # Start the PowerJoular monitoring process.
-        powerjoular_monitoring_process = Popen(monitoring_command,
+        powerjoular_monitoring_process = Popen(args=monitoring_command,
                                                stdin=PIPE,
-                                               stderr=PIPE,
+                                               stdout=None,
+                                               stderr=None,
                                                universal_newlines=True,
                                                shell=False)
-        # Communicate the password.
-        powerjoular_monitoring_process.communicate("{0}\n".format(pw))
-        # Get the PowerJoular monitoring process id.
-        powerjoular_monitoring_pid = powerjoular_monitoring_process.pid
+        # Communicate the password, but do not wait for the process completion.
+        try:
+            communicate_input = "{0}\n".format(pw)
+            communicate_timeout = 0.001
+            _, _ = powerjoular_monitoring_process.communicate(input=communicate_input, timeout=communicate_timeout)
+        except TimeoutExpired:
+            pass
         # Set the to-monitor process id.
         self._set_attribute("_to_monitor_pid", to_monitor_pid)
-        # Set the PowerJoular monitoring process id.
-        self._set_attribute("_powerjoular_monitoring_pid", powerjoular_monitoring_pid)
+        # Set the PowerJoular monitoring process.
+        self._set_attribute("_powerjoular_monitoring_process", powerjoular_monitoring_process)
 
     def stop(self) -> None:
         # Get the necessary attributes.
-        powerjoular_monitoring_pid = self.get_attribute("_powerjoular_monitoring_pid")
-        # If the PowerJoular monitoring process is still running...
-        if powerjoular_monitoring_pid and pid_exists(powerjoular_monitoring_pid):
-            # Set the PowerJoular killing command.
-            killing_command = "sudo pkill -9 -P " + str(powerjoular_monitoring_pid)
-            # Kill the PowerJoular monitoring process.
-            system(killing_command)
-            # Unset the PowerJoular monitoring process id.
-            self._set_attribute("_powerjoular_monitoring_pid", None)
+        powerjoular_monitoring_process = self.get_attribute("_powerjoular_monitoring_process")
+        # Kill the PowerJoular monitoring process.
+        powerjoular_monitoring_process.kill()
+        # Unset the PowerJoular monitoring process.
+        self._set_attribute("_powerjoular_monitoring_process", None)
 
     def get_energy_consumptions(self,
                                 tag: str) -> dict:
@@ -102,9 +104,11 @@ class PowerJoularEnergyMonitor:
                     nvidia_gpu_energy_measurements.append(energy_nvidia_gpu)
             # Remove the energy consumptions temporary file.
             energy_consumptions_temp_file.unlink(missing_ok=True)
-            # Remove the auto-generated energy consumptions .csv file.
-            energy_consumptions_csv_file = Path(str(energy_consumptions_temp_file) + "-{0}.csv".format(to_monitor_pid))
-            energy_consumptions_csv_file.unlink(missing_ok=True)
+            # Remove the auto-generated energy consumptions .csv file, if any.
+            if isinstance(to_monitor_pid, int):
+                energy_consumptions_csv_file = Path(str(energy_consumptions_temp_file)
+                                                    + "-{0}.csv".format(to_monitor_pid))
+                energy_consumptions_csv_file.unlink(missing_ok=True)
             # Unset the energy consumptions temporary file.
             self._set_attribute("_energy_consumptions_temp_file", None)
             # Unset the to-monitor process id.

@@ -135,8 +135,7 @@ class FlowerNumpyClient(NumPyClient):
             if isinstance(energy_monitor, PyJoulesEnergyMonitor):
                 energy_monitor.start(tag)
             elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
-                if daemon_mode:
-                    energy_monitor.start(model_training_pid)
+                energy_monitor.start(model_training_pid)
         # Start the model training duration timer.
         duration_start = perf_counter()
         # Load the local model.
@@ -279,8 +278,7 @@ class FlowerNumpyClient(NumPyClient):
             if isinstance(energy_monitor, PyJoulesEnergyMonitor):
                 energy_monitor.start(tag)
             elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
-                if daemon_mode:
-                    energy_monitor.start(model_testing_pid)
+                energy_monitor.start(model_testing_pid)
         # Start the model testing duration timer.
         duration_start = perf_counter()
         # Load the local model.
