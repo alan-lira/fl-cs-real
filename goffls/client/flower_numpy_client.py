@@ -124,6 +124,11 @@ class FlowerNumpyClient(NumPyClient):
         # Get the necessary attributes.
         energy_monitor = self.get_attribute("_energy_monitor")
         daemon_mode = self.get_attribute("_daemon_mode")
+        # Get the model training process id from the fit queue.
+        model_training_pid = None
+        if daemon_mode:
+            fit_queue_element = fit_queue.get()
+            model_training_pid = fit_queue_element["model_training_pid"]
         # Start the model training energy consumption monitoring.
         if energy_monitor:
             tag = "training_energy"
@@ -131,9 +136,6 @@ class FlowerNumpyClient(NumPyClient):
                 energy_monitor.start(tag)
             elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
                 if daemon_mode:
-                    # Get the model training process id from the fit queue.
-                    fit_queue_element = fit_queue.get()
-                    model_training_pid = fit_queue_element["model_training_pid"]
                     energy_monitor.start(model_training_pid)
         # Start the model training duration timer.
         duration_start = perf_counter()
@@ -266,6 +268,11 @@ class FlowerNumpyClient(NumPyClient):
         # Get the necessary attributes.
         energy_monitor = self.get_attribute("_energy_monitor")
         daemon_mode = self.get_attribute("_daemon_mode")
+        # Get the model testing process id from the evaluate queue.
+        model_testing_pid = None
+        if daemon_mode:
+            evaluate_queue_element = evaluate_queue.get()
+            model_testing_pid = evaluate_queue_element["model_testing_pid"]
         # Start the model testing energy consumption monitoring.
         if energy_monitor:
             tag = "testing_energy"
@@ -273,9 +280,6 @@ class FlowerNumpyClient(NumPyClient):
                 energy_monitor.start(tag)
             elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
                 if daemon_mode:
-                    # Get the model testing process id from the evaluate queue.
-                    evaluate_queue_element = evaluate_queue.get()
-                    model_testing_pid = evaluate_queue_element["model_testing_pid"]
                     energy_monitor.start(model_testing_pid)
         # Start the model testing duration timer.
         duration_start = perf_counter()
