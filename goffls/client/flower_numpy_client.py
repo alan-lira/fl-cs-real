@@ -165,10 +165,9 @@ class FlowerNumpyClient(NumPyClient):
                 # Get the energy consumptions.
                 energy_consumptions = energy_monitor.get_energy_consumptions(tag)
             elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
-                if daemon_mode:
-                    energy_monitor.stop()
-                    # Get the energy consumptions.
-                    energy_consumptions = energy_monitor.get_energy_consumptions(tag)
+                energy_monitor.stop()
+                # Get the energy consumptions.
+                energy_consumptions = energy_monitor.get_energy_consumptions(tag)
         # Put the model training result into the fit queue.
         model_training_result = {"history": history,
                                  "duration": duration,
@@ -303,10 +302,9 @@ class FlowerNumpyClient(NumPyClient):
                 # Get the energy consumptions.
                 energy_consumptions = energy_monitor.get_energy_consumptions(tag)
             elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
-                if daemon_mode:
-                    energy_monitor.stop()
-                    # Get the energy consumptions.
-                    energy_consumptions = energy_monitor.get_energy_consumptions(tag)
+                energy_monitor.stop()
+                # Get the energy consumptions.
+                energy_consumptions = energy_monitor.get_energy_consumptions(tag)
         # Put the model testing result into the evaluate queue.
         model_testing_result = {"history": history,
                                 "duration": duration,
