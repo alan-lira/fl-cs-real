@@ -25,8 +25,8 @@ class FlowerClientLauncher:
         # Initialize the attributes.
         self._client_id = id_
         self._config_file = config_file
-        self._daemon_settings = None
         self._logging_settings = None
+        self._daemon_settings = None
         self._ssl_settings = None
         self._grpc_settings = None
         self._dataset_settings = None
@@ -50,14 +50,14 @@ class FlowerClientLauncher:
     def _parse_settings(self) -> None:
         # Get the necessary attributes.
         config_file = self.get_attribute("_config_file")
-        # Parse and set the daemon settings.
-        daemon_section = "Daemon Settings"
-        daemon_settings = parse_config_section(config_file, daemon_section)
-        self._set_attribute("_daemon_settings", daemon_settings)
         # Parse and set the logging settings.
         logging_section = "Logging Settings"
         logging_settings = parse_config_section(config_file, logging_section)
         self._set_attribute("_logging_settings", logging_settings)
+        # Parse and set the daemon settings.
+        daemon_section = "Daemon Settings"
+        daemon_settings = parse_config_section(config_file, daemon_section)
+        self._set_attribute("_daemon_settings", daemon_settings)
         # Parse and set the ssl settings.
         ssl_section = "SSL Settings"
         ssl_settings = parse_config_section(config_file, ssl_section)
