@@ -38,19 +38,42 @@ def _schedule_tasks_to_selected_clients(num_tasks_to_schedule: int,
         clients_with_remaining_capacity = [selected_clients[index] for index, _ in enumerate(selected_clients)
                                            if selected_clients[index]["client_capacity"] -
                                            selected_clients[index]["client_num_tasks_scheduled"] > 0]
-        # Schedule the remaining tasks as equal as possible to the clients with remaining capacity.
-        num_tasks_per_client = remaining_tasks_to_schedule // len(clients_with_remaining_capacity)
-        for rem_index, _ in enumerate(clients_with_remaining_capacity):
-            client_proxy = clients_with_remaining_capacity[rem_index]["client_proxy"]
-            client_capacity = clients_with_remaining_capacity[rem_index]["client_capacity"]
-            client_num_tasks_scheduled = clients_with_remaining_capacity[rem_index]["client_num_tasks_scheduled"]
-            client_remaining_capacity = client_capacity - client_num_tasks_scheduled
-            client_num_tasks_to_schedule = min(num_tasks_per_client, client_remaining_capacity)
-            for sel_index, _ in enumerate(selected_clients):
-                if selected_clients[sel_index]["client_proxy"] == client_proxy:
-                    client_num_tasks_scheduled_before = selected_clients[sel_index]["client_num_tasks_scheduled"]
-                    client_num_tasks_scheduled_then = client_num_tasks_scheduled_before + client_num_tasks_to_schedule
-                    selected_clients[sel_index].update({"client_num_tasks_scheduled": client_num_tasks_scheduled_then})
+        num_clients_with_remaining_capacity = len(clients_with_remaining_capacity)
+        # If no more clients left with remaining capacity, end.
+        if num_clients_with_remaining_capacity == 0:
+            break
+        # If the number of remaining tasks to scheduler is lesser than the number of clients with remaining capacity...
+        if remaining_tasks_to_schedule < num_clients_with_remaining_capacity:
+            for rem_index, _ in enumerate(clients_with_remaining_capacity):
+                client_proxy = clients_with_remaining_capacity[rem_index]["client_proxy"]
+                client_num_tasks_to_schedule = 1
+                for sel_index, _ in enumerate(selected_clients):
+                    if selected_clients[sel_index]["client_proxy"] == client_proxy:
+                        client_num_tasks_scheduled_before = selected_clients[sel_index]["client_num_tasks_scheduled"]
+                        client_num_tasks_scheduled_then \
+                            = client_num_tasks_scheduled_before + client_num_tasks_to_schedule
+                        selected_clients[sel_index].update({"client_num_tasks_scheduled":
+                                                            client_num_tasks_scheduled_then})
+                remaining_tasks_to_schedule -= client_num_tasks_to_schedule
+                # If no more tasks left to schedule, end.
+                if remaining_tasks_to_schedule == 0:
+                    break
+        else:
+            # Otherwise, schedule the remaining tasks as equal as possible to the clients with remaining capacity.
+            num_tasks_per_client = remaining_tasks_to_schedule // num_clients_with_remaining_capacity
+            for rem_index, _ in enumerate(clients_with_remaining_capacity):
+                client_proxy = clients_with_remaining_capacity[rem_index]["client_proxy"]
+                client_capacity = clients_with_remaining_capacity[rem_index]["client_capacity"]
+                client_num_tasks_scheduled = clients_with_remaining_capacity[rem_index]["client_num_tasks_scheduled"]
+                client_remaining_capacity = client_capacity - client_num_tasks_scheduled
+                client_num_tasks_to_schedule = min(num_tasks_per_client, client_remaining_capacity)
+                for sel_index, _ in enumerate(selected_clients):
+                    if selected_clients[sel_index]["client_proxy"] == client_proxy:
+                        client_num_tasks_scheduled_before = selected_clients[sel_index]["client_num_tasks_scheduled"]
+                        client_num_tasks_scheduled_then \
+                            = client_num_tasks_scheduled_before + client_num_tasks_to_schedule
+                        selected_clients[sel_index].update({"client_num_tasks_scheduled":
+                                                            client_num_tasks_scheduled_then})
         # Get the number of tasks already scheduled.
         num_tasks_scheduled = sum([selected_clients[sel_index]["client_num_tasks_scheduled"]
                                    for sel_index, _ in enumerate(selected_clients)])
