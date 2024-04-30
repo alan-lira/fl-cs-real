@@ -265,9 +265,9 @@ class ResultAnalyzer:
                     if plotting_settings["y_label"] == "Auto":
                         y_scale = plotting_settings["y_scale"]
                         scale_str = ", log scale" if y_scale == "log" else ""
-                        y_label = "{0} ({1}{2})".format(metric_name.replace("_", " ").capitalize(),
-                                                        time_unit_symbol,
-                                                        scale_str)
+                        y_label = "Mean {0} ({1}{2})".format(metric_name.replace("_", " "),
+                                                             time_unit_symbol,
+                                                             scale_str)
                         plotting_settings["y_label"] = y_label
                     # Set the 'hue' value, if equals to 'Auto'.
                     if plotting_settings["hue"] == "Auto":
@@ -441,9 +441,9 @@ class ResultAnalyzer:
                     if plotting_settings["y_label"] == "Auto":
                         y_scale = plotting_settings["y_scale"]
                         scale_str = ", log scale" if y_scale == "log" else ""
-                        y_label = "{0} ({1}{2})".format(metric_name.replace("_", " ").capitalize(),
-                                                        time_unit_symbol,
-                                                        scale_str)
+                        y_label = "Mean {0} ({1}{2})".format(metric_name.replace("_", " "),
+                                                             time_unit_symbol,
+                                                             scale_str)
                         plotting_settings["y_label"] = y_label
                     # Set the 'hue' value, if equals to 'Auto'.
                     if plotting_settings["hue"] == "Auto":
