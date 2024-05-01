@@ -105,7 +105,7 @@ class FlowerClientLauncher:
         logging_settings = self.get_attribute("_logging_settings")
         client_id = self.get_attribute("_client_id")
         # Append the client's id to the output file name.
-        file_name = Path(logging_settings["file_name"])
+        file_name = Path(logging_settings["file_name"]).absolute()
         file_name = str(file_name.parent.joinpath(file_name.stem + "_{0}".format(client_id) + file_name.suffix))
         logging_settings["file_name"] = file_name
         # Set the logger name.
@@ -166,7 +166,7 @@ class FlowerClientLauncher:
                                                        phase: str) -> tuple:
         # Get the necessary attributes.
         dataset_settings = self.get_attribute("_dataset_settings")
-        root_folder = Path(dataset_settings["root_folder"])
+        root_folder = Path(dataset_settings["root_folder"]).absolute()
         x_phase_folder = root_folder.joinpath("x_{0}".format(phase))
         y_phase_folder = root_folder.joinpath("y_{0}".format(phase))
         y_phase_labels_file = y_phase_folder.joinpath("labels.txt")

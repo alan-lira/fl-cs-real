@@ -1,4 +1,5 @@
 from argparse import ArgumentParser, RawTextHelpFormatter, SUPPRESS
+from logging import Logger
 from pathlib import Path
 from sys import argv
 from time import perf_counter
@@ -71,6 +72,21 @@ def _verify_if_tool_action_is_valid(tool_name: str,
         raise ValueError(error_message)
 
 
+def _set_logger() -> Logger:
+    logging_settings = {"enable_logging": True,
+                        "log_to_file": False,
+                        "log_to_console": True,
+                        "file_name": None,
+                        "file_mode": None,
+                        "encoding": None,
+                        "level": "INFO",
+                        "format_str": "%(asctime)s.%(msecs)03d %(levelname)s: %(message)s",
+                        "date_format": "%Y/%m/%d %H:%M:%S"}
+    logger_name = "GOFFLS_Logger"
+    logger = load_logger(logging_settings, logger_name)
+    return logger
+
+
 def _verify_if_config_file_is_valid(config_file: Path) -> None:
     if not config_file.is_file():
         error_message = "The '{0}' config file was not found!".format(config_file)
@@ -84,7 +100,7 @@ def main() -> None:
     # Get the version.
     version = get_version(__VERSION_FILE)
     # Parse the GOFFLS arguments.
-    usage = "goffls [--version] [--help] <action> [args]"
+    usage = "goffls [-v | --version] [-h | --help] <action> [args]"
     description = '''Generic Optimization Framework for Federated Learning Schedules (GOFFLS).\n'''
     epilog = ('''{0}'''.format("\n".join([tool_info for tool_info in _get_tools_info()])))
     ap = ArgumentParser(usage=usage,
@@ -135,17 +151,10 @@ def main() -> None:
     # Verify if the user-provided action is valid.
     _verify_if_tool_action_is_valid("GOFFLS", action)
     # Set the logger.
-    logging_settings = {"enable_logging": True,
-                        "level": "INFO",
-                        "format": "%(asctime)s.%(msecs)03d %(levelname)s: %(message)s",
-                        "date_format": "%Y/%m/%d %H:%M:%S",
-                        "log_to_file": False,
-                        "log_to_console": True}
-    logger_name = "GOFFLS_Logger"
-    logger = load_logger(logging_settings, logger_name)
+    logger = _set_logger()
     if action == "launch_server":
         id_ = int(parsed_args.id)
-        config_file = Path(parsed_args.config_file)
+        config_file = Path(parsed_args.config_file).absolute()
         # Verify if the user-provided config file is valid.
         _verify_if_config_file_is_valid(config_file)
         implementation = str(parsed_args.implementation)
@@ -154,7 +163,7 @@ def main() -> None:
             fs.launch_server()
     elif action == "launch_client":
         id_ = int(parsed_args.id)
-        config_file = Path(parsed_args.config_file)
+        config_file = Path(parsed_args.config_file).absolute()
         # Verify if the user-provided config file is valid.
         _verify_if_config_file_is_valid(config_file)
         implementation = str(parsed_args.implementation)
@@ -162,7 +171,7 @@ def main() -> None:
             fc = FlowerClientLauncher(id_, config_file)
             fc.launch_client()
     elif action == "analyze_results":
-        config_file = Path(parsed_args.config_file)
+        config_file = Path(parsed_args.config_file).absolute()
         # Verify if the user-provided config file is valid.
         _verify_if_config_file_is_valid(config_file)
         ra = ResultAnalyzer(config_file)

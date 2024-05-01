@@ -59,7 +59,7 @@ class FlowerNumpyClient(NumPyClient):
         daemon_mode = self.get_attribute("_daemon_mode")
         if daemon_mode:
             # Set the local model file path.
-            model_file = Path("output/models/flower_client_{0}.keras".format(client_id))
+            model_file = Path("output/models/flower_client_{0}.keras".format(client_id)).absolute()
             model_file.parent.mkdir(exist_ok=True, parents=True)
             self._set_attribute("_model_file", model_file)
             # Dump the local model to file.

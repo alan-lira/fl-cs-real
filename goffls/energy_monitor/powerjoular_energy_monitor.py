@@ -45,7 +45,7 @@ class PowerJoularEnergyMonitor:
         # Set the to-monitor process id.
         self._set_attribute("_to_monitor_pid", to_monitor_pid)
         # Set the energy consumptions temporary file.
-        energy_consumptions_temp_file = Path("energy_consumptions_temp_" + str(randint(1, 9999999)))
+        energy_consumptions_temp_file = Path("energy_consumptions_temp_" + str(randint(1, 9999999))).absolute()
         self._set_attribute("_energy_consumptions_temp_file", energy_consumptions_temp_file)
         # Define the PowerJoular monitoring command.
         if isinstance(to_monitor_pid, int):
@@ -109,7 +109,7 @@ class PowerJoularEnergyMonitor:
             # Remove the auto-generated energy consumptions .csv file, if any.
             if isinstance(to_monitor_pid, int):
                 energy_consumptions_csv_file = Path(str(energy_consumptions_temp_file)
-                                                    + "-{0}.csv".format(to_monitor_pid))
+                                                    + "-{0}.csv".format(to_monitor_pid)).absolute()
                 energy_consumptions_csv_file.unlink(missing_ok=True)
             # Iterate through the list of monitoring domains.
             for monitoring_domain in monitoring_domains:

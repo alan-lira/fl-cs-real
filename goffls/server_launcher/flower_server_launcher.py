@@ -118,7 +118,7 @@ class FlowerServerLauncher:
         logging_settings = self.get_attribute("_logging_settings")
         server_id = self.get_attribute("_server_id")
         # Append the server's id to the output file name.
-        file_name = Path(logging_settings["file_name"])
+        file_name = Path(logging_settings["file_name"]).absolute()
         file_name = str(file_name.parent.joinpath(file_name.stem + "_{0}".format(server_id) + file_name.suffix))
         logging_settings["file_name"] = file_name
         # Set the logger name.
@@ -298,7 +298,7 @@ class FlowerServerLauncher:
         selected_fit_clients_history = server_strategy.get_attribute("_selected_fit_clients_history")
         output_settings = self.get_attribute("_output_settings")
         remove_output_files = output_settings["remove_output_files"]
-        selected_fit_clients_history_file = Path(output_settings["selected_fit_clients_history_file"])
+        selected_fit_clients_history_file = Path(output_settings["selected_fit_clients_history_file"]).absolute()
         # Remove the history output file (if it exists and if removing is enabled).
         if remove_output_files:
             selected_fit_clients_history_file.unlink(missing_ok=True)
@@ -341,7 +341,8 @@ class FlowerServerLauncher:
         selected_evaluate_clients_history = server_strategy.get_attribute("_selected_evaluate_clients_history")
         output_settings = self.get_attribute("_output_settings")
         remove_output_files = output_settings["remove_output_files"]
-        selected_evaluate_clients_history_file = Path(output_settings["selected_evaluate_clients_history_file"])
+        selected_evaluate_clients_history_file = \
+            Path(output_settings["selected_evaluate_clients_history_file"]).absolute()
         # Remove the history output file (if it exists and if removing is enabled).
         if remove_output_files:
             selected_evaluate_clients_history_file.unlink(missing_ok=True)
@@ -386,7 +387,7 @@ class FlowerServerLauncher:
         individual_fit_metrics_history = server_strategy.get_attribute("_individual_fit_metrics_history")
         output_settings = self.get_attribute("_output_settings")
         remove_output_files = output_settings["remove_output_files"]
-        individual_fit_metrics_history_file = Path(output_settings["individual_fit_metrics_history_file"])
+        individual_fit_metrics_history_file = Path(output_settings["individual_fit_metrics_history_file"]).absolute()
         # Remove the history output file (if it exists and if removing is enabled).
         if remove_output_files:
             individual_fit_metrics_history_file.unlink(missing_ok=True)
@@ -438,7 +439,7 @@ class FlowerServerLauncher:
         aggregated_fit_metrics_history = server_strategy.get_attribute("_aggregated_fit_metrics_history")
         output_settings = self.get_attribute("_output_settings")
         remove_output_files = output_settings["remove_output_files"]
-        aggregated_fit_metrics_history_file = Path(output_settings["aggregated_fit_metrics_history_file"])
+        aggregated_fit_metrics_history_file = Path(output_settings["aggregated_fit_metrics_history_file"]).absolute()
         # Remove the history output file (if it exists and if removing is enabled).
         if remove_output_files:
             aggregated_fit_metrics_history_file.unlink(missing_ok=True)
@@ -483,7 +484,8 @@ class FlowerServerLauncher:
         individual_evaluate_metrics_history = server_strategy.get_attribute("_individual_evaluate_metrics_history")
         output_settings = self.get_attribute("_output_settings")
         remove_output_files = output_settings["remove_output_files"]
-        individual_evaluate_metrics_history_file = Path(output_settings["individual_evaluate_metrics_history_file"])
+        individual_evaluate_metrics_history_file = \
+            Path(output_settings["individual_evaluate_metrics_history_file"]).absolute()
         # Remove the history output file (if it exists and if removing is enabled).
         if remove_output_files:
             individual_evaluate_metrics_history_file.unlink(missing_ok=True)
@@ -535,7 +537,8 @@ class FlowerServerLauncher:
         aggregated_evaluate_metrics_history = server_strategy.get_attribute("_aggregated_evaluate_metrics_history")
         output_settings = self.get_attribute("_output_settings")
         remove_output_files = output_settings["remove_output_files"]
-        aggregated_evaluate_metrics_history_file = Path(output_settings["aggregated_evaluate_metrics_history_file"])
+        aggregated_evaluate_metrics_history_file = \
+            Path(output_settings["aggregated_evaluate_metrics_history_file"]).absolute()
         # Remove the history output file (if it exists and if removing is enabled).
         if remove_output_files:
             aggregated_evaluate_metrics_history_file.unlink(missing_ok=True)

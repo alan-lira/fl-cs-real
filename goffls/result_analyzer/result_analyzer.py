@@ -1,7 +1,6 @@
-from pandas import DataFrame
 from matplotlib.pyplot import figure, rcParams, savefig, title, xlabel, xlim, xticks, xscale, ylabel, ylim, yticks, \
     yscale
-from pandas import read_csv
+from pandas import DataFrame, read_csv
 from pathlib import Path
 from seaborn import color_palette, lineplot, set_palette, set_theme
 from shutil import rmtree
@@ -185,11 +184,11 @@ class ResultAnalyzer:
         n_tasks = plotting_settings["n_tasks"]
         metric_name = plotting_settings["metric_name"]
         analysis_name = self.get_attribute("_analysis_name")
-        analysis_result_folder = self.get_attribute("_analysis_result_folder")
+        analysis_result_folder = Path(self.get_attribute("_analysis_result_folder")).absolute()
         logger = self.get_attribute("_logger")
         # Set the figure's output file.
-        figure_output_file = Path("fig_{0}_{1}_tasks_{2}.pdf".format(analysis_name, n_tasks, metric_name.lower()))
-        figure_output_file = analysis_result_folder.joinpath(figure_output_file)
+        figure_output_file_name = "fig_{0}_{1}_tasks_{2}.pdf".format(analysis_name, n_tasks, metric_name.lower())
+        figure_output_file = analysis_result_folder.joinpath(figure_output_file_name)
         # Save the figure.
         savefig(fname=figure_output_file,
                 bbox_inches=figure_bbox_inches)
@@ -303,7 +302,7 @@ class ResultAnalyzer:
         input_settings = self.get_attribute("_input_settings")
         analysis_settings = self.get_attribute("_analysis_settings")
         selected_fit_clients_history_file = input_settings["selected_fit_clients_history_file"]
-        analysis_root_folder = Path(analysis_settings["analysis_root_folder"])
+        analysis_root_folder = Path(analysis_settings["analysis_root_folder"]).absolute()
         selected_fit_clients_history_settings = self.get_attribute("_selected_fit_clients_history_settings")
         results_df_settings = selected_fit_clients_history_settings["results_df_settings"]
         num_tasks = selected_fit_clients_history_settings["num_tasks"]
@@ -480,7 +479,7 @@ class ResultAnalyzer:
         input_settings = self.get_attribute("_input_settings")
         analysis_settings = self.get_attribute("_analysis_settings")
         selected_evaluate_clients_history_file = input_settings["selected_evaluate_clients_history_file"]
-        analysis_root_folder = Path(analysis_settings["analysis_root_folder"])
+        analysis_root_folder = Path(analysis_settings["analysis_root_folder"]).absolute()
         selected_evaluate_clients_history_settings = self.get_attribute("_selected_evaluate_clients_history_settings")
         results_df_settings = selected_evaluate_clients_history_settings["results_df_settings"]
         num_tasks = selected_evaluate_clients_history_settings["num_tasks"]

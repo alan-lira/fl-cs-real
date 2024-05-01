@@ -7,22 +7,29 @@ from typing import Optional
 def load_logger(logging_settings: dict,
                 logger_name: str) -> Optional[Logger]:
     logger = None
-    if logging_settings["enable_logging"]:
-        logger = Logger(name=logger_name,
-                        level=logging_settings["level"])
-        formatter = Formatter(fmt=logging_settings["format"],
-                              datefmt=logging_settings["date_format"])
-        if logging_settings["log_to_file"]:
-            file_parents = findall("(.*/)", logging_settings["file_name"])
+    enable_logging = logging_settings["enable_logging"]
+    log_to_file = logging_settings["log_to_file"]
+    log_to_console = logging_settings["log_to_console"]
+    file_name = logging_settings["file_name"]
+    if file_name is not None:
+        file_name = Path(logging_settings["file_name"]).absolute()
+    file_mode = logging_settings["file_mode"]
+    encoding = logging_settings["encoding"]
+    level = logging_settings["level"]
+    format_str = logging_settings["format_str"]
+    date_format = logging_settings["date_format"]
+    if enable_logging:
+        logger = Logger(name=logger_name, level=level)
+        formatter = Formatter(fmt=format_str, datefmt=date_format)
+        if log_to_file:
+            file_parents = findall("(.*/)", str(file_name))
             if file_parents:
-                Path(file_parents[0]).mkdir(parents=True, exist_ok=True)
-            file_handler = FileHandler(filename=logging_settings["file_name"],
-                                       mode=logging_settings["file_mode"],
-                                       encoding=logging_settings["encoding"])
+                Path(file_parents[0]).absolute().mkdir(parents=True, exist_ok=True)
+            file_handler = FileHandler(filename=file_name, mode=file_mode, encoding=encoding)
             file_handler.setLevel(logger.getEffectiveLevel())
             file_handler.setFormatter(formatter)
             logger.addHandler(file_handler)
-        if logging_settings["log_to_console"]:
+        if log_to_console:
             console_handler = StreamHandler()
             console_handler.setLevel(logger.getEffectiveLevel())
             console_handler.setFormatter(formatter)
@@ -33,7 +40,8 @@ def load_logger(logging_settings: dict,
 def log_message(logger: Logger,
                 message: str,
                 message_level: str) -> None:
-    if logger and getLevelName(logger.getEffectiveLevel()) != "NOTSET":
+    logger_level = getLevelName(logger.getEffectiveLevel())
+    if logger and logger_level != "NOTSET":
         if message_level == "DEBUG":
             logger.debug(msg=message)
         elif message_level == "INFO":
