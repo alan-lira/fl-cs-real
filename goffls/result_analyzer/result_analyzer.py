@@ -225,6 +225,8 @@ class ResultAnalyzer:
 
     def _generate_figures_for_selected_fit_clients_history_file(self) -> None:
         # Get the necessary attributes.
+        analysis_settings = self.get_attribute("_analysis_settings")
+        figure_files_extension = analysis_settings["figure_files_extension"]
         selected_fit_clients_history_settings = self.get_attribute("_selected_fit_clients_history_settings")
         num_tasks = selected_fit_clients_history_settings["num_tasks"]
         num_available_clients = selected_fit_clients_history_settings["num_available_clients"]
@@ -375,8 +377,11 @@ class ResultAnalyzer:
                 # Plot data into the figure.
                 self._plot_data(plotting_settings, plotting_df)
                 # Set the figure name.
-                figure_name = "fig_{0}_{1}_tasks_{2}.pdf" \
-                              .format(analysis_name, n_tasks, metric_name.lower())
+                figure_name = "fig_{0}_{1}_tasks_{2}.{3}" \
+                              .format(analysis_name,
+                                      n_tasks,
+                                      metric_name.lower(),
+                                      figure_files_extension)
                 # Save the figure.
                 self._save_figure(plotting_settings, figure_name)
 
@@ -451,6 +456,8 @@ class ResultAnalyzer:
 
     def _generate_figures_for_selected_evaluate_clients_history_file(self) -> None:
         # Get the necessary attributes.
+        analysis_settings = self.get_attribute("_analysis_settings")
+        figure_files_extension = analysis_settings["figure_files_extension"]
         selected_evaluate_clients_history_settings = self.get_attribute("_selected_evaluate_clients_history_settings")
         num_tasks = selected_evaluate_clients_history_settings["num_tasks"]
         num_available_clients = selected_evaluate_clients_history_settings["num_available_clients"]
@@ -596,15 +603,17 @@ class ResultAnalyzer:
                                     selected_evaluate_clients_history_settings)
                 # Set the 'plotting_df' dataframe (data that will be plotted into the figure).
                 plotting_df = DataFrame(data=plotting_data)
-                print(plotting_df)
                 self._set_attribute("_plotting_df", plotting_df)
                 # Load the figure settings for plots.
                 self._load_figure_settings(plotting_settings)
                 # Plot data into the figure.
                 self._plot_data(plotting_settings, plotting_df)
                 # Set the figure name.
-                figure_name = "fig_{0}_{1}_tasks_{2}.pdf" \
-                              .format(analysis_name, n_tasks, metric_name.lower())
+                figure_name = "fig_{0}_{1}_tasks_{2}.{3}" \
+                              .format(analysis_name,
+                                      n_tasks,
+                                      metric_name.lower(),
+                                      figure_files_extension)
                 # Save the figure.
                 self._save_figure(plotting_settings, figure_name)
 
@@ -680,6 +689,8 @@ class ResultAnalyzer:
 
     def _generate_figures_for_individual_fit_metrics_history_file(self) -> None:
         # Get the necessary attributes.
+        analysis_settings = self.get_attribute("_analysis_settings")
+        figure_files_extension = analysis_settings["figure_files_extension"]
         selected_fit_clients_history_settings = self.get_attribute("_selected_fit_clients_history_settings")
         num_tasks = selected_fit_clients_history_settings["num_tasks"]
         num_available_clients = selected_fit_clients_history_settings["num_available_clients"]
@@ -841,8 +852,12 @@ class ResultAnalyzer:
                     # Plot data into the figure.
                     self._plot_data(plotting_settings, plotting_df)
                     # Set the figure name.
-                    figure_name = "fig_{0}_{1}_tasks_{2}_clients_{3}.pdf" \
-                                  .format(analysis_name, n_tasks, n_available_clients, metric_name.lower())
+                    figure_name = "fig_{0}_{1}_tasks_{2}_clients_{3}.{4}" \
+                                  .format(analysis_name,
+                                          n_tasks,
+                                          n_available_clients,
+                                          metric_name.lower(),
+                                          figure_files_extension)
                     # Save the figure.
                     self._save_figure(plotting_settings, figure_name)
 
@@ -923,6 +938,8 @@ class ResultAnalyzer:
 
     def _generate_figures_for_individual_evaluate_metrics_history_file(self) -> None:
         # Get the necessary attributes.
+        analysis_settings = self.get_attribute("_analysis_settings")
+        figure_files_extension = analysis_settings["figure_files_extension"]
         individual_evaluate_metrics_history_settings = \
             self.get_attribute("_individual_evaluate_metrics_history_settings")
         num_tasks = individual_evaluate_metrics_history_settings["num_tasks"]
@@ -1086,8 +1103,12 @@ class ResultAnalyzer:
                     # Plot data into the figure.
                     self._plot_data(plotting_settings, plotting_df)
                     # Set the figure name.
-                    figure_name = "fig_{0}_{1}_tasks_{2}_clients_{3}.pdf" \
-                                  .format(analysis_name, n_tasks, n_available_clients, metric_name.lower())
+                    figure_name = "fig_{0}_{1}_tasks_{2}_clients_{3}.{4}" \
+                                  .format(analysis_name,
+                                          n_tasks,
+                                          n_available_clients,
+                                          metric_name.lower(),
+                                          figure_files_extension)
                     # Save the figure.
                     self._save_figure(plotting_settings, figure_name)
 
