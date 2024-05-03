@@ -268,8 +268,19 @@ class ResultAnalyzer:
                         filtered_df = results_df[(results_df["num_tasks"] == n_tasks) &
                                                  (results_df["num_available_clients"] == n_available_clients) &
                                                  (results_df["client_selector"] == client_selector)]
+                        # If the current metric name equals to 'total_selection_duration'...
+                        if metric_name == "total_selection_duration":
+                            # Calculate the total selection duration.
+                            total_selection_duration = filtered_df["selection_duration"].sum()
+                            # Convert the total selection duration, if needed to.
+                            total_selection_duration, time_unit_symbol = self._convert_time(total_selection_duration,
+                                                                                            time_unit_to_output)
+                            # Append the total selection duration to the plotting data.
+                            plotting_data.append({"num_available_clients": n_available_clients,
+                                                  "client_selector": client_selector,
+                                                  "total_selection_duration": total_selection_duration})
                         # If the current metric name equals to 'mean_selection_duration'...
-                        if metric_name == "mean_selection_duration":
+                        elif metric_name == "mean_selection_duration":
                             # Get the number of communication rounds ran by the current client selector.
                             num_comm_rounds = len(list(filtered_df["comm_round"].sort_values().unique()))
                             # Calculate the mean selection duration.
@@ -289,8 +300,39 @@ class ResultAnalyzer:
                             plotting_data.append({"num_available_clients": n_available_clients,
                                                   "client_selector": client_selector,
                                                   "mean_num_selected_clients": mean_num_selected_clients})
+                # If the current metric name equals to 'total_selection_duration'...
+                if metric_name == "total_selection_duration":
+                    # Set the 'y_data' value, if equals to 'Auto'.
+                    if y_data == "Auto":
+                        y_data_new = "total_selection_duration"
+                        plotting_settings["y_data"] = y_data_new
+                    # Set the 'y_scale' value, if equals to 'Auto'.
+                    if y_scale == "Auto":
+                        y_scale_new = "log"
+                        plotting_settings["y_scale"] = y_scale_new
+                    # Set the 'y_label' value, if equals to 'Auto'.
+                    if y_label == "Auto":
+                        scale_str = ", log scale" if plotting_settings["y_scale"] == "log" else ""
+                        y_label_new = "{0} ({1}{2})".format("Total selection duration",
+                                                            time_unit_symbol,
+                                                            scale_str)
+                        plotting_settings["y_label"] = y_label_new
+                    # Set the 'y_ticks' value, if equals to 'Auto'.
+                    if y_ticks == "Auto":
+                        y_ticks_new = None
+                        # If the Y-axis scale to be used is 'log'...
+                        if plotting_settings["y_scale"] == "log":
+                            y_ticks_new = [pow(10, 0), pow(10, 2), pow(10, 4), pow(10, 6), pow(10, 8), pow(10, 10)]
+                        plotting_settings["y_ticks"] = y_ticks_new
+                    # Set the 'y_lim' value, if equals to 'Auto'.
+                    if y_lim == "Auto":
+                        y_lim_new = None
+                        # If the Y-axis scale to be used is 'log'...
+                        if plotting_settings["y_scale"] == "log":
+                            y_lim_new = min(plotting_settings["y_ticks"]), max(plotting_settings["y_ticks"])
+                        plotting_settings["y_lim"] = y_lim_new
                 # If the current metric name equals to 'mean_selection_duration'...
-                if metric_name == "mean_selection_duration":
+                elif metric_name == "mean_selection_duration":
                     # Set the 'y_data' value, if equals to 'Auto'.
                     if y_data == "Auto":
                         y_data_new = "mean_selection_duration"
@@ -499,8 +541,19 @@ class ResultAnalyzer:
                         filtered_df = results_df[(results_df["num_tasks"] == n_tasks) &
                                                  (results_df["num_available_clients"] == n_available_clients) &
                                                  (results_df["client_selector"] == client_selector)]
+                        # If the current metric name equals to 'total_selection_duration'...
+                        if metric_name == "total_selection_duration":
+                            # Calculate the total selection duration.
+                            total_selection_duration = filtered_df["selection_duration"].sum()
+                            # Convert the total selection duration, if needed to.
+                            total_selection_duration, time_unit_symbol = self._convert_time(total_selection_duration,
+                                                                                            time_unit_to_output)
+                            # Append the total selection duration to the plotting data.
+                            plotting_data.append({"num_available_clients": n_available_clients,
+                                                  "client_selector": client_selector,
+                                                  "total_selection_duration": total_selection_duration})
                         # If the current metric name equals to 'mean_selection_duration'...
-                        if metric_name == "mean_selection_duration":
+                        elif metric_name == "mean_selection_duration":
                             # Get the number of communication rounds ran by the current client selector.
                             num_comm_rounds = len(list(filtered_df["comm_round"].sort_values().unique()))
                             # Calculate the mean selection duration.
@@ -520,8 +573,39 @@ class ResultAnalyzer:
                             plotting_data.append({"num_available_clients": n_available_clients,
                                                   "client_selector": client_selector,
                                                   "mean_num_selected_clients": mean_num_selected_clients})
+                # If the current metric name equals to 'total_selection_duration'...
+                if metric_name == "total_selection_duration":
+                    # Set the 'y_data' value, if equals to 'Auto'.
+                    if y_data == "Auto":
+                        y_data_new = "total_selection_duration"
+                        plotting_settings["y_data"] = y_data_new
+                    # Set the 'y_scale' value, if equals to 'Auto'.
+                    if y_scale == "Auto":
+                        y_scale_new = "log"
+                        plotting_settings["y_scale"] = y_scale_new
+                    # Set the 'y_label' value, if equals to 'Auto'.
+                    if y_label == "Auto":
+                        scale_str = ", log scale" if plotting_settings["y_scale"] == "log" else ""
+                        y_label_new = "{0} ({1}{2})".format("Total selection duration",
+                                                            time_unit_symbol,
+                                                            scale_str)
+                        plotting_settings["y_label"] = y_label_new
+                    # Set the 'y_ticks' value, if equals to 'Auto'.
+                    if y_ticks == "Auto":
+                        y_ticks_new = None
+                        # If the Y-axis scale to be used is 'log'...
+                        if plotting_settings["y_scale"] == "log":
+                            y_ticks_new = [pow(10, 0), pow(10, 2), pow(10, 4), pow(10, 6), pow(10, 8), pow(10, 10)]
+                        plotting_settings["y_ticks"] = y_ticks_new
+                    # Set the 'y_lim' value, if equals to 'Auto'.
+                    if y_lim == "Auto":
+                        y_lim_new = None
+                        # If the Y-axis scale to be used is 'log'...
+                        if plotting_settings["y_scale"] == "log":
+                            y_lim_new = min(plotting_settings["y_ticks"]), max(plotting_settings["y_ticks"])
+                        plotting_settings["y_lim"] = y_lim_new
                 # If the current metric name equals to 'mean_selection_duration'...
-                if metric_name == "mean_selection_duration":
+                elif metric_name == "mean_selection_duration":
                     # Set the 'y_data' value, if equals to 'Auto'.
                     if y_data == "Auto":
                         y_data_new = "mean_selection_duration"
