@@ -91,7 +91,7 @@ def _map_available_participating_clients(comm_rounds: list,
     available_participating_clients_map = {}
     # Iterate through the list of communication rounds.
     for comm_round in comm_rounds:
-        # Get the communication round key.
+        # Get the communication round's key.
         comm_round_key = "comm_round_{0}".format(comm_round)
         # Verify if there is an entry in the individual metrics history for the communication round.
         if comm_round_key in individual_metrics_history:
@@ -117,7 +117,7 @@ def _map_available_participating_clients(comm_rounds: list,
                                       comm_round_key: client_metrics}
                         available_participating_clients_map.update({client_id_str: client_map})
                     else:
-                        # If so, just append his metrics of the current communication round to the map.
+                        # If so, append his metrics of the current communication round to the map.
                         available_participating_clients_map[client_id_str].update({comm_round_key: client_metrics})
     return available_participating_clients_map
 
@@ -258,7 +258,7 @@ def select_clients_using_ecmtc(comm_round: int,
             assignment_capacities_client = None
             assignment_capacities_initializer = assignment_capacities_init_settings["assignment_capacities_initializer"]
             if assignment_capacities_initializer == "Only_Previous_Num_Tasks_Assigned_Set":
-                # Based only on his previous round(s) participation, i.e., the set of previously numbers of tasks
+                # Based only on his previous round(s) participation, i.e., the set of previous numbers of tasks
                 # assigned to him.
                 previous_num_tasks_assigned = [list(comm_round_metrics)[0]["num_{0}ing_examples_used".format(phase)]
                                                for key, comm_round_metrics in client_values.items()
@@ -267,7 +267,7 @@ def select_clients_using_ecmtc(comm_round: int,
                 assignment_capacities_client = previous_num_tasks_assigned_set
             elif assignment_capacities_initializer == "Custom_Range_Set_Union_Previous_Num_Tasks_Assigned_Set":
                 # Based on a custom range set (ordered in ascending order), which also includes his previous round(s)
-                # participation, i.e., the set of previously numbers of tasks assigned to him.
+                # participation, i.e., the set of previous numbers of tasks assigned to him.
                 lower_bound = assignment_capacities_init_settings["lower_bound"]
                 upper_bound = assignment_capacities_init_settings["upper_bound"]
                 if upper_bound == "client_capacity":
@@ -290,7 +290,7 @@ def select_clients_using_ecmtc(comm_round: int,
                 # Estimates the costs for the unknown values via linear interpolation/extrapolation.
                 for assignment_capacity in assignment_capacities_client:
                     if assignment_capacity not in previous_num_tasks_assigned:
-                        # Determine x1 and x2, which are two known values of previously numbers of tasks assigned.
+                        # Determine x1 and x2, which are two known previous numbers of tasks assigned.
                         x1_candidates = [i for i in previous_num_tasks_assigned if i < assignment_capacity]
                         x2_candidates = [i for i in previous_num_tasks_assigned if i > assignment_capacity]
                         if x2_candidates:
@@ -317,7 +317,7 @@ def select_clients_using_ecmtc(comm_round: int,
                                                                                                   y1_energy,
                                                                                                   y2_energy,
                                                                                                   assignment_capacity)
-                        # Update the costs lists with the estimated values.
+                        # Update the cost lists with the estimated values.
                         time_costs_client[assignment_capacity] = time_cost_estimation
                         energy_costs_client[assignment_capacity] = energy_cost_estimation
             # Append his lists into the global lists.
@@ -340,7 +340,7 @@ def select_clients_using_ecmtc(comm_round: int,
         message = "X*: {0}\nMinimal makespan (Cₘₐₓ): {1}\nMinimal energy consumption (ΣE): {2}" \
                   .format(optimal_schedule, minimal_makespan, minimal_energy_consumption)
         log_message(logger, message, "DEBUG")
-        # Get the list of indices of the selected clients.
+        # Get the list of indices from the selected clients.
         selected_clients_indices = [sel_index for sel_index, client_num_tasks_scheduled
                                     in enumerate(optimal_schedule) if client_num_tasks_scheduled > 0]
         # Append their corresponding proxies objects and numbers of tasks scheduled into the selected clients list.

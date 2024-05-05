@@ -1,6 +1,5 @@
 from logging import FileHandler, Formatter, getLevelName, Logger, StreamHandler
 from pathlib import Path
-from re import findall
 from typing import Optional
 
 
@@ -22,9 +21,7 @@ def load_logger(logging_settings: dict,
         logger = Logger(name=logger_name, level=level)
         formatter = Formatter(fmt=format_str, datefmt=date_format)
         if log_to_file:
-            file_parents = findall("(.*/)", str(file_name))
-            if file_parents:
-                Path(file_parents[0]).absolute().mkdir(parents=True, exist_ok=True)
+            file_name.parent.mkdir(exist_ok=True, parents=True)
             file_handler = FileHandler(filename=file_name, mode=file_mode, encoding=encoding)
             file_handler.setLevel(logger.getEffectiveLevel())
             file_handler.setFormatter(formatter)

@@ -270,162 +270,168 @@ class ResultAnalyzer:
                                                  (results_df["client_selector"] == client_selector)]
                         # If the current metric name equals to 'total_selection_duration'...
                         if metric_name == "total_selection_duration":
-                            # Calculate the total selection duration.
-                            total_selection_duration = filtered_df["selection_duration"].sum()
-                            # Convert the total selection duration, if needed to.
-                            total_selection_duration, time_unit_symbol = self._convert_time(total_selection_duration,
-                                                                                            time_unit_to_output)
-                            # Append the total selection duration to the plotting data.
-                            plotting_data.append({"num_available_clients": n_available_clients,
-                                                  "client_selector": client_selector,
-                                                  "total_selection_duration": total_selection_duration})
+                            if "selection_duration" in filtered_df.columns:
+                                # Calculate the total selection duration.
+                                total_selection_duration = filtered_df["selection_duration"].sum()
+                                # Convert the total selection duration, if needed to.
+                                total_selection_duration, time_unit_symbol = \
+                                    self._convert_time(total_selection_duration,
+                                                       time_unit_to_output)
+                                # Append the total selection duration to the plotting data.
+                                plotting_data.append({"num_available_clients": n_available_clients,
+                                                      "client_selector": client_selector,
+                                                      "total_selection_duration": total_selection_duration})
                         # If the current metric name equals to 'mean_selection_duration'...
                         elif metric_name == "mean_selection_duration":
-                            # Get the number of communication rounds ran by the current client selector.
-                            num_comm_rounds = len(list(filtered_df["comm_round"].sort_values().unique()))
-                            # Calculate the mean selection duration.
-                            mean_selection_duration = filtered_df["selection_duration"].sum() / num_comm_rounds
-                            # Convert the mean selection duration, if needed to.
-                            mean_selection_duration, time_unit_symbol = self._convert_time(mean_selection_duration,
-                                                                                           time_unit_to_output)
-                            # Append the mean selection duration to the plotting data.
-                            plotting_data.append({"num_available_clients": n_available_clients,
-                                                  "client_selector": client_selector,
-                                                  "mean_selection_duration": mean_selection_duration})
+                            if all(columns in filtered_df.columns for columns in ["comm_round", "selection_duration"]):
+                                # Get the number of communication rounds ran by the current client selector.
+                                num_comm_rounds = len(list(filtered_df["comm_round"].sort_values().unique()))
+                                # Calculate the mean selection duration.
+                                mean_selection_duration = filtered_df["selection_duration"].sum() / num_comm_rounds
+                                # Convert the mean selection duration, if needed to.
+                                mean_selection_duration, time_unit_symbol = self._convert_time(mean_selection_duration,
+                                                                                               time_unit_to_output)
+                                # Append the mean selection duration to the plotting data.
+                                plotting_data.append({"num_available_clients": n_available_clients,
+                                                      "client_selector": client_selector,
+                                                      "mean_selection_duration": mean_selection_duration})
                         # If the current metric name equals to 'mean_num_selected_clients'...
                         elif metric_name == "mean_num_selected_clients":
-                            # Calculate the mean number of selected clients.
-                            mean_num_selected_clients = filtered_df["num_selected_clients"].mean()
-                            # Append the mean number of selected clients to the plotting data.
-                            plotting_data.append({"num_available_clients": n_available_clients,
-                                                  "client_selector": client_selector,
-                                                  "mean_num_selected_clients": mean_num_selected_clients})
-                # If the current metric name equals to 'total_selection_duration'...
-                if metric_name == "total_selection_duration":
-                    # Set the 'y_data' value, if equals to 'Auto'.
-                    if y_data == "Auto":
-                        y_data_new = "total_selection_duration"
-                        plotting_settings["y_data"] = y_data_new
-                    # Set the 'y_scale' value, if equals to 'Auto'.
-                    if y_scale == "Auto":
-                        y_scale_new = "log"
-                        plotting_settings["y_scale"] = y_scale_new
-                    # Set the 'y_label' value, if equals to 'Auto'.
-                    if y_label == "Auto":
-                        scale_str = ", log scale" if plotting_settings["y_scale"] == "log" else ""
-                        y_label_new = "{0} ({1}{2})".format("Total selection duration",
-                                                            time_unit_symbol,
-                                                            scale_str)
-                        plotting_settings["y_label"] = y_label_new
-                    # Set the 'y_ticks' value, if equals to 'Auto'.
-                    if y_ticks == "Auto":
-                        y_ticks_new = None
-                        # If the Y-axis scale to be used is 'log'...
-                        if plotting_settings["y_scale"] == "log":
-                            y_ticks_new = [pow(10, 0), pow(10, 2), pow(10, 4), pow(10, 6), pow(10, 8), pow(10, 10)]
-                        plotting_settings["y_ticks"] = y_ticks_new
-                    # Set the 'y_lim' value, if equals to 'Auto'.
-                    if y_lim == "Auto":
-                        y_lim_new = None
-                        # If the Y-axis scale to be used is 'log'...
-                        if plotting_settings["y_scale"] == "log":
-                            y_lim_new = min(plotting_settings["y_ticks"]), max(plotting_settings["y_ticks"])
-                        plotting_settings["y_lim"] = y_lim_new
-                # If the current metric name equals to 'mean_selection_duration'...
-                elif metric_name == "mean_selection_duration":
-                    # Set the 'y_data' value, if equals to 'Auto'.
-                    if y_data == "Auto":
-                        y_data_new = "mean_selection_duration"
-                        plotting_settings["y_data"] = y_data_new
-                    # Set the 'y_scale' value, if equals to 'Auto'.
-                    if y_scale == "Auto":
-                        y_scale_new = "log"
-                        plotting_settings["y_scale"] = y_scale_new
-                    # Set the 'y_label' value, if equals to 'Auto'.
-                    if y_label == "Auto":
-                        scale_str = ", log scale" if plotting_settings["y_scale"] == "log" else ""
-                        y_label_new = "{0} ({1}{2})".format("Mean selection duration",
-                                                            time_unit_symbol,
-                                                            scale_str)
-                        plotting_settings["y_label"] = y_label_new
-                    # Set the 'y_ticks' value, if equals to 'Auto'.
-                    if y_ticks == "Auto":
-                        y_ticks_new = None
-                        # If the Y-axis scale to be used is 'log'...
-                        if plotting_settings["y_scale"] == "log":
-                            y_ticks_new = [pow(10, 0), pow(10, 2), pow(10, 4), pow(10, 6), pow(10, 8), pow(10, 10)]
-                        plotting_settings["y_ticks"] = y_ticks_new
-                    # Set the 'y_lim' value, if equals to 'Auto'.
-                    if y_lim == "Auto":
-                        y_lim_new = None
-                        # If the Y-axis scale to be used is 'log'...
-                        if plotting_settings["y_scale"] == "log":
-                            y_lim_new = min(plotting_settings["y_ticks"]), max(plotting_settings["y_ticks"])
-                        plotting_settings["y_lim"] = y_lim_new
-                # If the current metric name equals to 'mean_num_selected_clients'...
-                elif metric_name == "mean_num_selected_clients":
-                    # Set the 'y_data' value, if equals to 'Auto'.
-                    if y_data == "Auto":
-                        y_data_new = "mean_num_selected_clients"
-                        plotting_settings["y_data"] = y_data_new
-                    # Set the 'y_scale' value, if equals to 'Auto'.
-                    if y_scale == "Auto":
-                        y_scale_new = None
-                        plotting_settings["y_scale"] = y_scale_new
-                    # Set the 'y_label' value, if equals to 'Auto'.
-                    if y_label == "Auto":
-                        y_label_new = "{0}".format("Mean number of selected clients")
-                        plotting_settings["y_label"] = y_label_new
-                    # Set the 'y_ticks' value, if equals to 'Auto'.
-                    if y_ticks == "Auto":
-                        y_ticks_new = None
-                        plotting_settings["y_ticks"] = y_ticks_new
-                    # Set the 'y_lim' value, if equals to 'Auto'.
-                    if y_lim == "Auto":
-                        y_lim_new = None
-                        plotting_settings["y_lim"] = y_lim_new
-                # Set the 'x_data' value, if equals to 'Auto'.
-                if x_data == "Auto":
-                    x_data_new = "num_available_clients"
-                    plotting_settings["x_data"] = x_data_new
-                # Set the 'x_label' value, if equals to 'Auto'.
-                if x_label == "Auto":
-                    x_label_new = "Number of available clients"
-                    plotting_settings["x_label"] = x_label_new
-                # Set the 'hue' value, if equals to 'Auto'.
-                if hue == "Auto":
-                    hue_new = "client_selector"
-                    plotting_settings["hue"] = hue_new
-                # Set the 'hue_order' value, if equals to 'Auto'.
-                if hue_order == "Auto":
-                    hue_order_new = client_selectors
-                    plotting_settings["hue_order"] = hue_order_new
-                    # Set the 'style' value, if equals to 'Auto'.
-                if style == "Auto":
-                    style_new = "client_selector"
-                    plotting_settings["style"] = style_new
-                    # Set the 'size' value, if equals to 'Auto'.
-                if size == "Auto":
-                    size_new = "client_selector"
-                    plotting_settings["size"] = size_new
-                # Update the plotting settings.
-                selected_fit_clients_history_settings["plotting_settings"] = plotting_settings
-                self._set_attribute("_selected_fit_clients_history_settings", selected_fit_clients_history_settings)
-                # Set the 'plotting_df' dataframe (data that will be plotted into the figure).
-                plotting_df = DataFrame(data=plotting_data)
-                self._set_attribute("_plotting_df", plotting_df)
-                # Load the figure settings for plots.
-                self._load_figure_settings(plotting_settings)
-                # Plot data into the figure.
-                self._plot_data(plotting_settings, plotting_df)
-                # Set the figure name.
-                figure_name = "fig_{0}_{1}_tasks_{2}.{3}" \
-                              .format(analysis_name,
-                                      n_tasks,
-                                      metric_name.lower(),
-                                      figure_files_extension)
-                # Save the figure.
-                self._save_figure(plotting_settings, figure_name)
+                            if "num_selected_clients" in filtered_df.columns:
+                                # Calculate the mean number of selected clients.
+                                mean_num_selected_clients = filtered_df["num_selected_clients"].mean()
+                                # Append the mean number of selected clients to the plotting data.
+                                plotting_data.append({"num_available_clients": n_available_clients,
+                                                      "client_selector": client_selector,
+                                                      "mean_num_selected_clients": mean_num_selected_clients})
+                # If there is data to plot...
+                if plotting_data:
+                    # If the current metric name equals to 'total_selection_duration'...
+                    if metric_name == "total_selection_duration":
+                        # Set the 'y_data' value, if equals to 'Auto'.
+                        if y_data == "Auto":
+                            y_data_new = "total_selection_duration"
+                            plotting_settings["y_data"] = y_data_new
+                        # Set the 'y_scale' value, if equals to 'Auto'.
+                        if y_scale == "Auto":
+                            y_scale_new = "log"
+                            plotting_settings["y_scale"] = y_scale_new
+                        # Set the 'y_label' value, if equals to 'Auto'.
+                        if y_label == "Auto":
+                            scale_str = ", log scale" if plotting_settings["y_scale"] == "log" else ""
+                            y_label_new = "{0} ({1}{2})".format("Total selection duration",
+                                                                time_unit_symbol,
+                                                                scale_str)
+                            plotting_settings["y_label"] = y_label_new
+                        # Set the 'y_ticks' value, if equals to 'Auto'.
+                        if y_ticks == "Auto":
+                            y_ticks_new = None
+                            # If the Y-axis scale to be used is 'log'...
+                            if plotting_settings["y_scale"] == "log":
+                                y_ticks_new = [pow(10, 0), pow(10, 2), pow(10, 4), pow(10, 6), pow(10, 8), pow(10, 10)]
+                            plotting_settings["y_ticks"] = y_ticks_new
+                        # Set the 'y_lim' value, if equals to 'Auto'.
+                        if y_lim == "Auto":
+                            y_lim_new = None
+                            # If the Y-axis scale to be used is 'log'...
+                            if plotting_settings["y_scale"] == "log":
+                                y_lim_new = min(plotting_settings["y_ticks"]), max(plotting_settings["y_ticks"])
+                            plotting_settings["y_lim"] = y_lim_new
+                    # If the current metric name equals to 'mean_selection_duration'...
+                    elif metric_name == "mean_selection_duration":
+                        # Set the 'y_data' value, if equals to 'Auto'.
+                        if y_data == "Auto":
+                            y_data_new = "mean_selection_duration"
+                            plotting_settings["y_data"] = y_data_new
+                        # Set the 'y_scale' value, if equals to 'Auto'.
+                        if y_scale == "Auto":
+                            y_scale_new = "log"
+                            plotting_settings["y_scale"] = y_scale_new
+                        # Set the 'y_label' value, if equals to 'Auto'.
+                        if y_label == "Auto":
+                            scale_str = ", log scale" if plotting_settings["y_scale"] == "log" else ""
+                            y_label_new = "{0} ({1}{2})".format("Mean selection duration",
+                                                                time_unit_symbol,
+                                                                scale_str)
+                            plotting_settings["y_label"] = y_label_new
+                        # Set the 'y_ticks' value, if equals to 'Auto'.
+                        if y_ticks == "Auto":
+                            y_ticks_new = None
+                            # If the Y-axis scale to be used is 'log'...
+                            if plotting_settings["y_scale"] == "log":
+                                y_ticks_new = [pow(10, 0), pow(10, 2), pow(10, 4), pow(10, 6), pow(10, 8), pow(10, 10)]
+                            plotting_settings["y_ticks"] = y_ticks_new
+                        # Set the 'y_lim' value, if equals to 'Auto'.
+                        if y_lim == "Auto":
+                            y_lim_new = None
+                            # If the Y-axis scale to be used is 'log'...
+                            if plotting_settings["y_scale"] == "log":
+                                y_lim_new = min(plotting_settings["y_ticks"]), max(plotting_settings["y_ticks"])
+                            plotting_settings["y_lim"] = y_lim_new
+                    # If the current metric name equals to 'mean_num_selected_clients'...
+                    elif metric_name == "mean_num_selected_clients":
+                        # Set the 'y_data' value, if equals to 'Auto'.
+                        if y_data == "Auto":
+                            y_data_new = "mean_num_selected_clients"
+                            plotting_settings["y_data"] = y_data_new
+                        # Set the 'y_scale' value, if equals to 'Auto'.
+                        if y_scale == "Auto":
+                            y_scale_new = None
+                            plotting_settings["y_scale"] = y_scale_new
+                        # Set the 'y_label' value, if equals to 'Auto'.
+                        if y_label == "Auto":
+                            y_label_new = "{0}".format("Mean number of selected clients")
+                            plotting_settings["y_label"] = y_label_new
+                        # Set the 'y_ticks' value, if equals to 'Auto'.
+                        if y_ticks == "Auto":
+                            y_ticks_new = None
+                            plotting_settings["y_ticks"] = y_ticks_new
+                        # Set the 'y_lim' value, if equals to 'Auto'.
+                        if y_lim == "Auto":
+                            y_lim_new = None
+                            plotting_settings["y_lim"] = y_lim_new
+                    # Set the 'x_data' value, if equals to 'Auto'.
+                    if x_data == "Auto":
+                        x_data_new = "num_available_clients"
+                        plotting_settings["x_data"] = x_data_new
+                    # Set the 'x_label' value, if equals to 'Auto'.
+                    if x_label == "Auto":
+                        x_label_new = "Number of available clients"
+                        plotting_settings["x_label"] = x_label_new
+                    # Set the 'hue' value, if equals to 'Auto'.
+                    if hue == "Auto":
+                        hue_new = "client_selector"
+                        plotting_settings["hue"] = hue_new
+                    # Set the 'hue_order' value, if equals to 'Auto'.
+                    if hue_order == "Auto":
+                        hue_order_new = client_selectors
+                        plotting_settings["hue_order"] = hue_order_new
+                        # Set the 'style' value, if equals to 'Auto'.
+                    if style == "Auto":
+                        style_new = "client_selector"
+                        plotting_settings["style"] = style_new
+                        # Set the 'size' value, if equals to 'Auto'.
+                    if size == "Auto":
+                        size_new = "client_selector"
+                        plotting_settings["size"] = size_new
+                    # Update the plotting settings.
+                    selected_fit_clients_history_settings["plotting_settings"] = plotting_settings
+                    self._set_attribute("_selected_fit_clients_history_settings", selected_fit_clients_history_settings)
+                    # Set the 'plotting_df' dataframe (data that will be plotted into the figure).
+                    plotting_df = DataFrame(data=plotting_data)
+                    self._set_attribute("_plotting_df", plotting_df)
+                    # Load the figure settings for plots.
+                    self._load_figure_settings(plotting_settings)
+                    # Plot data into the figure.
+                    self._plot_data(plotting_settings, plotting_df)
+                    # Set the figure name.
+                    figure_name = "fig_{0}_{1}_tasks_{2}.{3}" \
+                                  .format(analysis_name,
+                                          n_tasks,
+                                          metric_name.lower(),
+                                          figure_files_extension)
+                    # Save the figure.
+                    self._save_figure(plotting_settings, figure_name)
 
     def _analyze_selected_fit_clients_history_file(self) -> None:
         # Get the necessary attributes.
@@ -543,163 +549,169 @@ class ResultAnalyzer:
                                                  (results_df["client_selector"] == client_selector)]
                         # If the current metric name equals to 'total_selection_duration'...
                         if metric_name == "total_selection_duration":
-                            # Calculate the total selection duration.
-                            total_selection_duration = filtered_df["selection_duration"].sum()
-                            # Convert the total selection duration, if needed to.
-                            total_selection_duration, time_unit_symbol = self._convert_time(total_selection_duration,
-                                                                                            time_unit_to_output)
-                            # Append the total selection duration to the plotting data.
-                            plotting_data.append({"num_available_clients": n_available_clients,
-                                                  "client_selector": client_selector,
-                                                  "total_selection_duration": total_selection_duration})
+                            if "selection_duration" in filtered_df.columns:
+                                # Calculate the total selection duration.
+                                total_selection_duration = filtered_df["selection_duration"].sum()
+                                # Convert the total selection duration, if needed to.
+                                total_selection_duration, time_unit_symbol = \
+                                    self._convert_time(total_selection_duration,
+                                                       time_unit_to_output)
+                                # Append the total selection duration to the plotting data.
+                                plotting_data.append({"num_available_clients": n_available_clients,
+                                                      "client_selector": client_selector,
+                                                      "total_selection_duration": total_selection_duration})
                         # If the current metric name equals to 'mean_selection_duration'...
                         elif metric_name == "mean_selection_duration":
-                            # Get the number of communication rounds ran by the current client selector.
-                            num_comm_rounds = len(list(filtered_df["comm_round"].sort_values().unique()))
-                            # Calculate the mean selection duration.
-                            mean_selection_duration = filtered_df["selection_duration"].sum() / num_comm_rounds
-                            # Convert the mean selection duration, if needed to.
-                            mean_selection_duration, time_unit_symbol = self._convert_time(mean_selection_duration,
-                                                                                           time_unit_to_output)
-                            # Append the selection duration mean to the plotting data.
-                            plotting_data.append({"num_available_clients": n_available_clients,
-                                                  "client_selector": client_selector,
-                                                  "mean_selection_duration": mean_selection_duration})
+                            if all(columns in filtered_df.columns for columns in ["comm_round", "selection_duration"]):
+                                # Get the number of communication rounds ran by the current client selector.
+                                num_comm_rounds = len(list(filtered_df["comm_round"].sort_values().unique()))
+                                # Calculate the mean selection duration.
+                                mean_selection_duration = filtered_df["selection_duration"].sum() / num_comm_rounds
+                                # Convert the mean selection duration, if needed to.
+                                mean_selection_duration, time_unit_symbol = self._convert_time(mean_selection_duration,
+                                                                                               time_unit_to_output)
+                                # Append the selection duration mean to the plotting data.
+                                plotting_data.append({"num_available_clients": n_available_clients,
+                                                      "client_selector": client_selector,
+                                                      "mean_selection_duration": mean_selection_duration})
                         # If the current metric name equals to 'mean_num_selected_clients'...
                         elif metric_name == "mean_num_selected_clients":
-                            # Calculate the mean number of selected clients.
-                            mean_num_selected_clients = filtered_df["num_selected_clients"].mean()
-                            # Append the mean number of selected clients to the plotting data.
-                            plotting_data.append({"num_available_clients": n_available_clients,
-                                                  "client_selector": client_selector,
-                                                  "mean_num_selected_clients": mean_num_selected_clients})
-                # If the current metric name equals to 'total_selection_duration'...
-                if metric_name == "total_selection_duration":
-                    # Set the 'y_data' value, if equals to 'Auto'.
-                    if y_data == "Auto":
-                        y_data_new = "total_selection_duration"
-                        plotting_settings["y_data"] = y_data_new
-                    # Set the 'y_scale' value, if equals to 'Auto'.
-                    if y_scale == "Auto":
-                        y_scale_new = "log"
-                        plotting_settings["y_scale"] = y_scale_new
-                    # Set the 'y_label' value, if equals to 'Auto'.
-                    if y_label == "Auto":
-                        scale_str = ", log scale" if plotting_settings["y_scale"] == "log" else ""
-                        y_label_new = "{0} ({1}{2})".format("Total selection duration",
-                                                            time_unit_symbol,
-                                                            scale_str)
-                        plotting_settings["y_label"] = y_label_new
-                    # Set the 'y_ticks' value, if equals to 'Auto'.
-                    if y_ticks == "Auto":
-                        y_ticks_new = None
-                        # If the Y-axis scale to be used is 'log'...
-                        if plotting_settings["y_scale"] == "log":
-                            y_ticks_new = [pow(10, 0), pow(10, 2), pow(10, 4), pow(10, 6), pow(10, 8), pow(10, 10)]
-                        plotting_settings["y_ticks"] = y_ticks_new
-                    # Set the 'y_lim' value, if equals to 'Auto'.
-                    if y_lim == "Auto":
-                        y_lim_new = None
-                        # If the Y-axis scale to be used is 'log'...
-                        if plotting_settings["y_scale"] == "log":
-                            y_lim_new = min(plotting_settings["y_ticks"]), max(plotting_settings["y_ticks"])
-                        plotting_settings["y_lim"] = y_lim_new
-                # If the current metric name equals to 'mean_selection_duration'...
-                elif metric_name == "mean_selection_duration":
-                    # Set the 'y_data' value, if equals to 'Auto'.
-                    if y_data == "Auto":
-                        y_data_new = "mean_selection_duration"
-                        plotting_settings["y_data"] = y_data_new
-                    # Set the 'y_scale' value, if equals to 'Auto'.
-                    if y_scale == "Auto":
-                        y_scale_new = "log"
-                        plotting_settings["y_scale"] = y_scale_new
-                    # Set the 'y_label' value, if equals to 'Auto'.
-                    if y_label == "Auto":
-                        scale_str = ", log scale" if plotting_settings["y_scale"] == "log" else ""
-                        y_label_new = "{0} ({1}{2})".format("Mean selection duration",
-                                                            time_unit_symbol,
-                                                            scale_str)
-                        plotting_settings["y_label"] = y_label_new
-                    # Set the 'y_ticks' value, if equals to 'Auto'.
-                    if y_ticks == "Auto":
-                        y_ticks_new = None
-                        # If the Y-axis scale to be used is 'log'...
-                        if plotting_settings["y_scale"] == "log":
-                            y_ticks_new = [pow(10, 0), pow(10, 2), pow(10, 4), pow(10, 6), pow(10, 8), pow(10, 10)]
-                        plotting_settings["y_ticks"] = y_ticks_new
-                    # Set the 'y_lim' value, if equals to 'Auto'.
-                    if y_lim == "Auto":
-                        y_lim_new = None
-                        # If the Y-axis scale to be used is 'log'...
-                        if plotting_settings["y_scale"] == "log":
-                            y_lim_new = min(plotting_settings["y_ticks"]), max(plotting_settings["y_ticks"])
-                        plotting_settings["y_lim"] = y_lim_new
-                # If the current metric name equals to 'mean_num_selected_clients'...
-                elif metric_name == "mean_num_selected_clients":
-                    # Set the 'y_data' value, if equals to 'Auto'.
-                    if y_data == "Auto":
-                        y_data_new = "mean_num_selected_clients"
-                        plotting_settings["y_data"] = y_data_new
-                    # Set the 'y_scale' value, if equals to 'Auto'.
-                    if y_scale == "Auto":
-                        y_scale_new = None
-                        plotting_settings["y_scale"] = y_scale_new
-                    # Set the 'y_label' value, if equals to 'Auto'.
-                    if y_label == "Auto":
-                        y_label_new = "{0}".format("Mean number of selected clients")
-                        plotting_settings["y_label"] = y_label_new
-                    # Set the 'y_ticks' value, if equals to 'Auto'.
-                    if y_ticks == "Auto":
-                        y_ticks_new = None
-                        plotting_settings["y_ticks"] = y_ticks_new
-                    # Set the 'y_lim' value, if equals to 'Auto'.
-                    if y_lim == "Auto":
-                        y_lim_new = None
-                        plotting_settings["y_lim"] = y_lim_new
-                # Set the 'x_data' value, if equals to 'Auto'.
-                if x_data == "Auto":
-                    x_data_new = "num_available_clients"
-                    plotting_settings["x_data"] = x_data_new
-                # Set the 'x_label' value, if equals to 'Auto'.
-                if x_label == "Auto":
-                    x_label_new = "Number of available clients"
-                    plotting_settings["x_label"] = x_label_new
-                # Set the 'hue' value, if equals to 'Auto'.
-                if hue == "Auto":
-                    hue_new = "client_selector"
-                    plotting_settings["hue"] = hue_new
-                # Set the 'hue_order' value, if equals to 'Auto'.
-                if hue_order == "Auto":
-                    hue_order_new = client_selectors
-                    plotting_settings["hue_order"] = hue_order_new
-                    # Set the 'style' value, if equals to 'Auto'.
-                if style == "Auto":
-                    style_new = "client_selector"
-                    plotting_settings["style"] = style_new
-                    # Set the 'size' value, if equals to 'Auto'.
-                if size == "Auto":
-                    size_new = "client_selector"
-                    plotting_settings["size"] = size_new
-                # Update the plotting settings.
-                selected_evaluate_clients_history_settings["plotting_settings"] = plotting_settings
-                self._set_attribute("_selected_evaluate_clients_history_settings",
-                                    selected_evaluate_clients_history_settings)
-                # Set the 'plotting_df' dataframe (data that will be plotted into the figure).
-                plotting_df = DataFrame(data=plotting_data)
-                self._set_attribute("_plotting_df", plotting_df)
-                # Load the figure settings for plots.
-                self._load_figure_settings(plotting_settings)
-                # Plot data into the figure.
-                self._plot_data(plotting_settings, plotting_df)
-                # Set the figure name.
-                figure_name = "fig_{0}_{1}_tasks_{2}.{3}" \
-                              .format(analysis_name,
-                                      n_tasks,
-                                      metric_name.lower(),
-                                      figure_files_extension)
-                # Save the figure.
-                self._save_figure(plotting_settings, figure_name)
+                            if "num_selected_clients" in filtered_df.columns:
+                                # Calculate the mean number of selected clients.
+                                mean_num_selected_clients = filtered_df["num_selected_clients"].mean()
+                                # Append the mean number of selected clients to the plotting data.
+                                plotting_data.append({"num_available_clients": n_available_clients,
+                                                      "client_selector": client_selector,
+                                                      "mean_num_selected_clients": mean_num_selected_clients})
+                # If there is data to plot...
+                if plotting_data:
+                    # If the current metric name equals to 'total_selection_duration'...
+                    if metric_name == "total_selection_duration":
+                        # Set the 'y_data' value, if equals to 'Auto'.
+                        if y_data == "Auto":
+                            y_data_new = "total_selection_duration"
+                            plotting_settings["y_data"] = y_data_new
+                        # Set the 'y_scale' value, if equals to 'Auto'.
+                        if y_scale == "Auto":
+                            y_scale_new = "log"
+                            plotting_settings["y_scale"] = y_scale_new
+                        # Set the 'y_label' value, if equals to 'Auto'.
+                        if y_label == "Auto":
+                            scale_str = ", log scale" if plotting_settings["y_scale"] == "log" else ""
+                            y_label_new = "{0} ({1}{2})".format("Total selection duration",
+                                                                time_unit_symbol,
+                                                                scale_str)
+                            plotting_settings["y_label"] = y_label_new
+                        # Set the 'y_ticks' value, if equals to 'Auto'.
+                        if y_ticks == "Auto":
+                            y_ticks_new = None
+                            # If the Y-axis scale to be used is 'log'...
+                            if plotting_settings["y_scale"] == "log":
+                                y_ticks_new = [pow(10, 0), pow(10, 2), pow(10, 4), pow(10, 6), pow(10, 8), pow(10, 10)]
+                            plotting_settings["y_ticks"] = y_ticks_new
+                        # Set the 'y_lim' value, if equals to 'Auto'.
+                        if y_lim == "Auto":
+                            y_lim_new = None
+                            # If the Y-axis scale to be used is 'log'...
+                            if plotting_settings["y_scale"] == "log":
+                                y_lim_new = min(plotting_settings["y_ticks"]), max(plotting_settings["y_ticks"])
+                            plotting_settings["y_lim"] = y_lim_new
+                    # If the current metric name equals to 'mean_selection_duration'...
+                    elif metric_name == "mean_selection_duration":
+                        # Set the 'y_data' value, if equals to 'Auto'.
+                        if y_data == "Auto":
+                            y_data_new = "mean_selection_duration"
+                            plotting_settings["y_data"] = y_data_new
+                        # Set the 'y_scale' value, if equals to 'Auto'.
+                        if y_scale == "Auto":
+                            y_scale_new = "log"
+                            plotting_settings["y_scale"] = y_scale_new
+                        # Set the 'y_label' value, if equals to 'Auto'.
+                        if y_label == "Auto":
+                            scale_str = ", log scale" if plotting_settings["y_scale"] == "log" else ""
+                            y_label_new = "{0} ({1}{2})".format("Mean selection duration",
+                                                                time_unit_symbol,
+                                                                scale_str)
+                            plotting_settings["y_label"] = y_label_new
+                        # Set the 'y_ticks' value, if equals to 'Auto'.
+                        if y_ticks == "Auto":
+                            y_ticks_new = None
+                            # If the Y-axis scale to be used is 'log'...
+                            if plotting_settings["y_scale"] == "log":
+                                y_ticks_new = [pow(10, 0), pow(10, 2), pow(10, 4), pow(10, 6), pow(10, 8), pow(10, 10)]
+                            plotting_settings["y_ticks"] = y_ticks_new
+                        # Set the 'y_lim' value, if equals to 'Auto'.
+                        if y_lim == "Auto":
+                            y_lim_new = None
+                            # If the Y-axis scale to be used is 'log'...
+                            if plotting_settings["y_scale"] == "log":
+                                y_lim_new = min(plotting_settings["y_ticks"]), max(plotting_settings["y_ticks"])
+                            plotting_settings["y_lim"] = y_lim_new
+                    # If the current metric name equals to 'mean_num_selected_clients'...
+                    elif metric_name == "mean_num_selected_clients":
+                        # Set the 'y_data' value, if equals to 'Auto'.
+                        if y_data == "Auto":
+                            y_data_new = "mean_num_selected_clients"
+                            plotting_settings["y_data"] = y_data_new
+                        # Set the 'y_scale' value, if equals to 'Auto'.
+                        if y_scale == "Auto":
+                            y_scale_new = None
+                            plotting_settings["y_scale"] = y_scale_new
+                        # Set the 'y_label' value, if equals to 'Auto'.
+                        if y_label == "Auto":
+                            y_label_new = "{0}".format("Mean number of selected clients")
+                            plotting_settings["y_label"] = y_label_new
+                        # Set the 'y_ticks' value, if equals to 'Auto'.
+                        if y_ticks == "Auto":
+                            y_ticks_new = None
+                            plotting_settings["y_ticks"] = y_ticks_new
+                        # Set the 'y_lim' value, if equals to 'Auto'.
+                        if y_lim == "Auto":
+                            y_lim_new = None
+                            plotting_settings["y_lim"] = y_lim_new
+                    # Set the 'x_data' value, if equals to 'Auto'.
+                    if x_data == "Auto":
+                        x_data_new = "num_available_clients"
+                        plotting_settings["x_data"] = x_data_new
+                    # Set the 'x_label' value, if equals to 'Auto'.
+                    if x_label == "Auto":
+                        x_label_new = "Number of available clients"
+                        plotting_settings["x_label"] = x_label_new
+                    # Set the 'hue' value, if equals to 'Auto'.
+                    if hue == "Auto":
+                        hue_new = "client_selector"
+                        plotting_settings["hue"] = hue_new
+                    # Set the 'hue_order' value, if equals to 'Auto'.
+                    if hue_order == "Auto":
+                        hue_order_new = client_selectors
+                        plotting_settings["hue_order"] = hue_order_new
+                        # Set the 'style' value, if equals to 'Auto'.
+                    if style == "Auto":
+                        style_new = "client_selector"
+                        plotting_settings["style"] = style_new
+                        # Set the 'size' value, if equals to 'Auto'.
+                    if size == "Auto":
+                        size_new = "client_selector"
+                        plotting_settings["size"] = size_new
+                    # Update the plotting settings.
+                    selected_evaluate_clients_history_settings["plotting_settings"] = plotting_settings
+                    self._set_attribute("_selected_evaluate_clients_history_settings",
+                                        selected_evaluate_clients_history_settings)
+                    # Set the 'plotting_df' dataframe (data that will be plotted into the figure).
+                    plotting_df = DataFrame(data=plotting_data)
+                    self._set_attribute("_plotting_df", plotting_df)
+                    # Load the figure settings for plots.
+                    self._load_figure_settings(plotting_settings)
+                    # Plot data into the figure.
+                    self._plot_data(plotting_settings, plotting_df)
+                    # Set the figure name.
+                    figure_name = "fig_{0}_{1}_tasks_{2}.{3}" \
+                                  .format(analysis_name,
+                                          n_tasks,
+                                          metric_name.lower(),
+                                          figure_files_extension)
+                    # Save the figure.
+                    self._save_figure(plotting_settings, figure_name)
 
     def _analyze_selected_evaluate_clients_history_file(self) -> None:
         # Get the necessary attributes.
@@ -819,131 +831,138 @@ class ResultAnalyzer:
                                                      (results_df["client_selector"] == client_selector)]
                             # If the current metric name equals to 'max_training_time'...
                             if metric_name == "max_training_time":
-                                # Get the maximum training time among the participating clients (Makespan).
-                                max_training_time = filtered_df["training_time"].max()
-                                # Convert the maximum training time, if needed to.
-                                max_training_time, time_unit_symbol = self._convert_time(max_training_time,
-                                                                                         time_unit_to_output)
-                                # Append the maximum training time to the plotting data.
-                                plotting_data.append({"comm_round": comm_round,
-                                                      "client_selector": client_selector,
-                                                      "max_training_time": max_training_time})
+                                if "training_time" in filtered_df.columns:
+                                    # Get the maximum training time among the participating clients (Makespan).
+                                    max_training_time = filtered_df["training_time"].max()
+                                    # Convert the maximum training time, if needed to.
+                                    max_training_time, time_unit_symbol = self._convert_time(max_training_time,
+                                                                                             time_unit_to_output)
+                                    # Append the maximum training time to the plotting data.
+                                    plotting_data.append({"comm_round": comm_round,
+                                                          "client_selector": client_selector,
+                                                          "max_training_time": max_training_time})
                             # If the current metric name equals to 'sum_training_energy_cpu'...
                             elif metric_name == "sum_training_energy_cpu":
-                                # Get the sum of CPU energy consumption.
-                                sum_training_energy_cpu = filtered_df["training_energy_cpu"].sum()
-                                # Append the sum of CPU energy consumption to the plotting data.
-                                plotting_data.append({"comm_round": comm_round,
-                                                      "client_selector": client_selector,
-                                                      "sum_training_energy_cpu": sum_training_energy_cpu})
+                                if "training_energy_cpu" in filtered_df.columns:
+                                    # Get the sum of CPU energy consumption.
+                                    sum_training_energy_cpu = filtered_df["training_energy_cpu"].sum()
+                                    # Append the sum of CPU energy consumption to the plotting data.
+                                    plotting_data.append({"comm_round": comm_round,
+                                                          "client_selector": client_selector,
+                                                          "sum_training_energy_cpu": sum_training_energy_cpu})
                             # If the current metric name equals to 'mean_num_training_examples_used'...
                             elif metric_name == "mean_num_training_examples_used":
-                                # Calculate the mean number of training examples used.
-                                mean_num_training_examples_used = filtered_df["num_training_examples_used"].mean()
-                                # Append the mean accuracy to the plotting data.
-                                plotting_data.append({"comm_round": comm_round,
-                                                      "client_selector": client_selector,
-                                                      "mean_num_training_examples_used":
-                                                      mean_num_training_examples_used})
+                                if "num_training_examples_used" in filtered_df.columns:
+                                    # Calculate the mean number of training examples used.
+                                    mean_num_training_examples_used = filtered_df["num_training_examples_used"].mean()
+                                    # Append the mean accuracy to the plotting data.
+                                    plotting_data.append({"comm_round": comm_round,
+                                                          "client_selector": client_selector,
+                                                          "mean_num_training_examples_used":
+                                                          mean_num_training_examples_used})
                             # If the current metric name equals to 'mean_accuracy'...
                             elif metric_name == "mean_accuracy":
-                                # Calculate the mean accuracy.
-                                mean_accuracy = filtered_df["accuracy"].mean()
-                                # Append the mean accuracy to the plotting data.
-                                plotting_data.append({"comm_round": comm_round,
-                                                      "client_selector": client_selector,
-                                                      "mean_accuracy": mean_accuracy})
-                    # If the current metric name equals to 'max_training_time'...
-                    if metric_name == "max_training_time":
-                        # Set the 'y_data' value, if equals to 'Auto'.
-                        if y_data == "Auto":
-                            y_data_new = "max_training_time"
-                            plotting_settings["y_data"] = y_data_new
-                        # Set the 'y_label' value, if equals to 'Auto'.
-                        if y_label == "Auto":
-                            y_scale_new = None
-                            plotting_settings["y_scale"] = y_scale_new
-                            y_label_new = "{0} ({1})".format("Makespan", time_unit_symbol)
-                            plotting_settings["y_label"] = y_label_new
-                    # If the current metric name equals to 'sum_training_energy_cpu'...
-                    elif metric_name == "sum_training_energy_cpu":
-                        # Set the 'y_data' value, if equals to 'Auto'.
-                        if y_data == "Auto":
-                            y_data_new = "sum_training_energy_cpu"
-                            plotting_settings["y_data"] = y_data_new
-                        # Set the 'y_label' value, if equals to 'Auto'.
-                        if y_label == "Auto":
-                            y_scale_new = None
-                            plotting_settings["y_scale"] = y_scale_new
-                            y_label_new = "{0} ({1})".format("Sum of CPU energy consumption", "J")
-                            plotting_settings["y_label"] = y_label_new
-                    # If the current metric name equals to 'mean_num_training_examples_used'...
-                    elif metric_name == "mean_num_training_examples_used":
-                        # Set the 'y_data' value, if equals to 'Auto'.
-                        if y_data == "Auto":
-                            y_data_new = "mean_num_training_examples_used"
-                            plotting_settings["y_data"] = y_data_new
-                        # Set the 'y_label' value, if equals to 'Auto'.
-                        if y_label == "Auto":
-                            y_scale_new = None
-                            plotting_settings["y_scale"] = y_scale_new
-                            y_label_new = "{0}".format("Mean number of training examples used")
-                            plotting_settings["y_label"] = y_label_new
-                    # If the current metric name equals to 'mean_accuracy'...
-                    elif metric_name == "mean_accuracy":
-                        # Set the 'y_data' value, if equals to 'Auto'.
-                        if y_data == "Auto":
-                            y_data_new = "mean_accuracy"
-                            plotting_settings["y_data"] = y_data_new
-                        # Set the 'y_label' value, if equals to 'Auto'.
-                        if y_label == "Auto":
-                            y_scale_new = None
-                            plotting_settings["y_scale"] = y_scale_new
-                            y_label_new = "{0}".format("Mean accuracy")
-                            plotting_settings["y_label"] = y_label_new
-                    # Set the 'x_data' value, if equals to 'Auto'.
-                    if x_data == "Auto":
-                        x_data_new = "comm_round"
-                        plotting_settings["x_data"] = x_data_new
-                    # Set the 'x_label' value, if equals to 'Auto'.
-                    if x_label == "Auto":
-                        x_label_new = "Communication round"
-                        plotting_settings["x_label"] = x_label_new
-                    # Set the 'hue' value, if equals to 'Auto'.
-                    if hue == "Auto":
-                        hue_new = "client_selector"
-                        plotting_settings["hue"] = hue_new
-                    # Set the 'hue_order' value, if equals to 'Auto'.
-                    if hue_order == "Auto":
-                        hue_order_new = client_selectors
-                        plotting_settings["hue_order"] = hue_order_new
-                        # Set the 'style' value, if equals to 'Auto'.
-                    if style == "Auto":
-                        style_new = "client_selector"
-                        plotting_settings["style"] = style_new
-                        # Set the 'size' value, if equals to 'Auto'.
-                    if size == "Auto":
-                        size_new = "client_selector"
-                        plotting_settings["size"] = size_new
-                    # Update the plotting settings.
-                    selected_fit_clients_history_settings["plotting_settings"] = plotting_settings
-                    self._set_attribute("_selected_fit_clients_history_settings", selected_fit_clients_history_settings)
-                    # Set the 'plotting_df' dataframe (data that will be plotted into the figure).
-                    plotting_df = DataFrame(data=plotting_data)
-                    self._set_attribute("_plotting_df", plotting_df)
-                    # Load the figure settings for plots.
-                    self._load_figure_settings(plotting_settings)
-                    # Plot data into the figure.
-                    self._plot_data(plotting_settings, plotting_df)
-                    # Set the figure name.
-                    figure_name = "fig_{0}_{1}_tasks_{2}_clients_{3}.{4}" \
-                                  .format(analysis_name,
-                                          n_tasks,
-                                          n_available_clients,
-                                          metric_name.lower(),
-                                          figure_files_extension)
-                    # Save the figure.
-                    self._save_figure(plotting_settings, figure_name)
+                                if "accuracy" in filtered_df.columns:
+                                    # Calculate the mean accuracy.
+                                    mean_accuracy = filtered_df["accuracy"].mean()
+                                    # Append the mean accuracy to the plotting data.
+                                    plotting_data.append({"comm_round": comm_round,
+                                                          "client_selector": client_selector,
+                                                          "mean_accuracy": mean_accuracy})
+                    # If there is data to plot...
+                    if plotting_data:
+                        # If the current metric name equals to 'max_training_time'...
+                        if metric_name == "max_training_time":
+                            # Set the 'y_data' value, if equals to 'Auto'.
+                            if y_data == "Auto":
+                                y_data_new = "max_training_time"
+                                plotting_settings["y_data"] = y_data_new
+                            # Set the 'y_label' value, if equals to 'Auto'.
+                            if y_label == "Auto":
+                                y_scale_new = None
+                                plotting_settings["y_scale"] = y_scale_new
+                                y_label_new = "{0} ({1})".format("Makespan", time_unit_symbol)
+                                plotting_settings["y_label"] = y_label_new
+                        # If the current metric name equals to 'sum_training_energy_cpu'...
+                        elif metric_name == "sum_training_energy_cpu":
+                            # Set the 'y_data' value, if equals to 'Auto'.
+                            if y_data == "Auto":
+                                y_data_new = "sum_training_energy_cpu"
+                                plotting_settings["y_data"] = y_data_new
+                            # Set the 'y_label' value, if equals to 'Auto'.
+                            if y_label == "Auto":
+                                y_scale_new = None
+                                plotting_settings["y_scale"] = y_scale_new
+                                y_label_new = "{0} ({1})".format("Sum of CPU energy consumption", "J")
+                                plotting_settings["y_label"] = y_label_new
+                        # If the current metric name equals to 'mean_num_training_examples_used'...
+                        elif metric_name == "mean_num_training_examples_used":
+                            # Set the 'y_data' value, if equals to 'Auto'.
+                            if y_data == "Auto":
+                                y_data_new = "mean_num_training_examples_used"
+                                plotting_settings["y_data"] = y_data_new
+                            # Set the 'y_label' value, if equals to 'Auto'.
+                            if y_label == "Auto":
+                                y_scale_new = None
+                                plotting_settings["y_scale"] = y_scale_new
+                                y_label_new = "{0}".format("Mean number of training examples used")
+                                plotting_settings["y_label"] = y_label_new
+                        # If the current metric name equals to 'mean_accuracy'...
+                        elif metric_name == "mean_accuracy":
+                            # Set the 'y_data' value, if equals to 'Auto'.
+                            if y_data == "Auto":
+                                y_data_new = "mean_accuracy"
+                                plotting_settings["y_data"] = y_data_new
+                            # Set the 'y_label' value, if equals to 'Auto'.
+                            if y_label == "Auto":
+                                y_scale_new = None
+                                plotting_settings["y_scale"] = y_scale_new
+                                y_label_new = "{0}".format("Mean accuracy")
+                                plotting_settings["y_label"] = y_label_new
+                        # Set the 'x_data' value, if equals to 'Auto'.
+                        if x_data == "Auto":
+                            x_data_new = "comm_round"
+                            plotting_settings["x_data"] = x_data_new
+                        # Set the 'x_label' value, if equals to 'Auto'.
+                        if x_label == "Auto":
+                            x_label_new = "Communication round"
+                            plotting_settings["x_label"] = x_label_new
+                        # Set the 'hue' value, if equals to 'Auto'.
+                        if hue == "Auto":
+                            hue_new = "client_selector"
+                            plotting_settings["hue"] = hue_new
+                        # Set the 'hue_order' value, if equals to 'Auto'.
+                        if hue_order == "Auto":
+                            hue_order_new = client_selectors
+                            plotting_settings["hue_order"] = hue_order_new
+                            # Set the 'style' value, if equals to 'Auto'.
+                        if style == "Auto":
+                            style_new = "client_selector"
+                            plotting_settings["style"] = style_new
+                            # Set the 'size' value, if equals to 'Auto'.
+                        if size == "Auto":
+                            size_new = "client_selector"
+                            plotting_settings["size"] = size_new
+                        # Update the plotting settings.
+                        selected_fit_clients_history_settings["plotting_settings"] = plotting_settings
+                        self._set_attribute("_selected_fit_clients_history_settings",
+                                            selected_fit_clients_history_settings)
+                        # Set the 'plotting_df' dataframe (data that will be plotted into the figure).
+                        plotting_df = DataFrame(data=plotting_data)
+                        self._set_attribute("_plotting_df", plotting_df)
+                        # Load the figure settings for plots.
+                        self._load_figure_settings(plotting_settings)
+                        # Plot data into the figure.
+                        self._plot_data(plotting_settings, plotting_df)
+                        # Set the figure name.
+                        figure_name = "fig_{0}_{1}_tasks_{2}_clients_{3}.{4}" \
+                                      .format(analysis_name,
+                                              n_tasks,
+                                              n_available_clients,
+                                              metric_name.lower(),
+                                              figure_files_extension)
+                        # Save the figure.
+                        self._save_figure(plotting_settings, figure_name)
 
     def _analyze_individual_fit_metrics_history_file(self) -> None:
         # Get the necessary attributes.
@@ -1069,132 +1088,138 @@ class ResultAnalyzer:
                                                      (results_df["client_selector"] == client_selector)]
                             # If the current metric name equals to 'max_testing_time'...
                             if metric_name == "max_testing_time":
-                                # Get the maximum testing time among the participating clients (Makespan).
-                                max_testing_time = filtered_df["testing_time"].max()
-                                # Convert the maximum testing time, if needed to.
-                                max_testing_time, time_unit_symbol = self._convert_time(max_testing_time,
-                                                                                        time_unit_to_output)
-                                # Append the maximum testing time to the plotting data.
-                                plotting_data.append({"comm_round": comm_round,
-                                                      "client_selector": client_selector,
-                                                      "max_testing_time": max_testing_time})
+                                if "testing_time" in filtered_df.columns:
+                                    # Get the maximum testing time among the participating clients (Makespan).
+                                    max_testing_time = filtered_df["testing_time"].max()
+                                    # Convert the maximum testing time, if needed to.
+                                    max_testing_time, time_unit_symbol = self._convert_time(max_testing_time,
+                                                                                            time_unit_to_output)
+                                    # Append the maximum testing time to the plotting data.
+                                    plotting_data.append({"comm_round": comm_round,
+                                                          "client_selector": client_selector,
+                                                          "max_testing_time": max_testing_time})
                             # If the current metric name equals to 'sum_testing_energy_cpu'...
                             elif metric_name == "sum_testing_energy_cpu":
-                                # Get the sum of CPU energy consumption.
-                                sum_testing_energy_cpu = filtered_df["testing_energy_cpu"].sum()
-                                # Append the sum of CPU energy consumption to the plotting data.
-                                plotting_data.append({"comm_round": comm_round,
-                                                      "client_selector": client_selector,
-                                                      "sum_testing_energy_cpu": sum_testing_energy_cpu})
+                                if "testing_energy_cpu" in filtered_df.columns:
+                                    # Get the sum of CPU energy consumption.
+                                    sum_testing_energy_cpu = filtered_df["testing_energy_cpu"].sum()
+                                    # Append the sum of CPU energy consumption to the plotting data.
+                                    plotting_data.append({"comm_round": comm_round,
+                                                          "client_selector": client_selector,
+                                                          "sum_testing_energy_cpu": sum_testing_energy_cpu})
                             # If the current metric name equals to 'mean_num_testing_examples_used'...
                             elif metric_name == "mean_num_testing_examples_used":
-                                # Calculate the mean number of testing examples used.
-                                mean_num_testing_examples_used = filtered_df["num_testing_examples_used"].mean()
-                                # Append the mean accuracy to the plotting data.
-                                plotting_data.append({"comm_round": comm_round,
-                                                      "client_selector": client_selector,
-                                                      "mean_num_testing_examples_used":
-                                                      mean_num_testing_examples_used})
+                                if "num_testing_examples_used" in filtered_df.columns:
+                                    # Calculate the mean number of testing examples used.
+                                    mean_num_testing_examples_used = filtered_df["num_testing_examples_used"].mean()
+                                    # Append the mean accuracy to the plotting data.
+                                    plotting_data.append({"comm_round": comm_round,
+                                                          "client_selector": client_selector,
+                                                          "mean_num_testing_examples_used":
+                                                          mean_num_testing_examples_used})
                             # If the current metric name equals to 'mean_accuracy'...
                             elif metric_name == "mean_accuracy":
-                                # Calculate the mean accuracy.
-                                mean_accuracy = filtered_df["compile_metrics"].mean()  # TODO: Solve this issue.
-                                # Append the mean accuracy to the plotting data.
-                                plotting_data.append({"comm_round": comm_round,
-                                                      "client_selector": client_selector,
-                                                      "mean_accuracy": mean_accuracy})
-                    # If the current metric name equals to 'max_testing_time'...
-                    if metric_name == "max_testing_time":
-                        # Set the 'y_data' value, if equals to 'Auto'.
-                        if y_data == "Auto":
-                            y_data_new = "max_testing_time"
-                            plotting_settings["y_data"] = y_data_new
-                        # Set the 'y_label' value, if equals to 'Auto'.
-                        if y_label == "Auto":
-                            y_scale_new = None
-                            plotting_settings["y_scale"] = y_scale_new
-                            y_label_new = "{0} ({1})".format("Makespan", time_unit_symbol)
-                            plotting_settings["y_label"] = y_label_new
-                    # If the current metric name equals to 'sum_testing_energy_cpu'...
-                    elif metric_name == "sum_testing_energy_cpu":
-                        # Set the 'y_data' value, if equals to 'Auto'.
-                        if y_data == "Auto":
-                            y_data_new = "sum_testing_energy_cpu"
-                            plotting_settings["y_data"] = y_data_new
-                        # Set the 'y_label' value, if equals to 'Auto'.
-                        if y_label == "Auto":
-                            y_scale_new = None
-                            plotting_settings["y_scale"] = y_scale_new
-                            y_label_new = "{0} ({1})".format("Sum of CPU energy consumption", "J")
-                            plotting_settings["y_label"] = y_label_new
-                    # If the current metric name equals to 'mean_num_testing_examples_used'...
-                    elif metric_name == "mean_num_testing_examples_used":
-                        # Set the 'y_data' value, if equals to 'Auto'.
-                        if y_data == "Auto":
-                            y_data_new = "mean_num_testing_examples_used"
-                            plotting_settings["y_data"] = y_data_new
-                        # Set the 'y_label' value, if equals to 'Auto'.
-                        if y_label == "Auto":
-                            y_scale_new = None
-                            plotting_settings["y_scale"] = y_scale_new
-                            y_label_new = "{0}".format("Mean number of testing examples used")
-                            plotting_settings["y_label"] = y_label_new
-                    # If the current metric name equals to 'mean_accuracy'...
-                    elif metric_name == "mean_accuracy":
-                        # Set the 'y_data' value, if equals to 'Auto'.
-                        if y_data == "Auto":
-                            y_data_new = "mean_accuracy"
-                            plotting_settings["y_data"] = y_data_new
-                        # Set the 'y_label' value, if equals to 'Auto'.
-                        if y_label == "Auto":
-                            y_scale_new = None
-                            plotting_settings["y_scale"] = y_scale_new
-                            y_label_new = "{0}".format("Mean accuracy")
-                            plotting_settings["y_label"] = y_label_new
-                    # Set the 'x_data' value, if equals to 'Auto'.
-                    if x_data == "Auto":
-                        x_data_new = "comm_round"
-                        plotting_settings["x_data"] = x_data_new
-                    # Set the 'x_label' value, if equals to 'Auto'.
-                    if x_label == "Auto":
-                        x_label_new = "Communication round"
-                        plotting_settings["x_label"] = x_label_new
-                    # Set the 'hue' value, if equals to 'Auto'.
-                    if hue == "Auto":
-                        hue_new = "client_selector"
-                        plotting_settings["hue"] = hue_new
-                    # Set the 'hue_order' value, if equals to 'Auto'.
-                    if hue_order == "Auto":
-                        hue_order_new = client_selectors
-                        plotting_settings["hue_order"] = hue_order_new
-                        # Set the 'style' value, if equals to 'Auto'.
-                    if style == "Auto":
-                        style_new = "client_selector"
-                        plotting_settings["style"] = style_new
-                        # Set the 'size' value, if equals to 'Auto'.
-                    if size == "Auto":
-                        size_new = "client_selector"
-                        plotting_settings["size"] = size_new
-                    # Update the plotting settings.
-                    individual_evaluate_metrics_history_settings["plotting_settings"] = plotting_settings
-                    self._set_attribute("_individual_evaluate_metrics_history_settings",
-                                        individual_evaluate_metrics_history_settings)
-                    # Set the 'plotting_df' dataframe (data that will be plotted into the figure).
-                    plotting_df = DataFrame(data=plotting_data)
-                    self._set_attribute("_plotting_df", plotting_df)
-                    # Load the figure settings for plots.
-                    self._load_figure_settings(plotting_settings)
-                    # Plot data into the figure.
-                    self._plot_data(plotting_settings, plotting_df)
-                    # Set the figure name.
-                    figure_name = "fig_{0}_{1}_tasks_{2}_clients_{3}.{4}" \
-                                  .format(analysis_name,
-                                          n_tasks,
-                                          n_available_clients,
-                                          metric_name.lower(),
-                                          figure_files_extension)
-                    # Save the figure.
-                    self._save_figure(plotting_settings, figure_name)
+                                if "compile_metrics" in filtered_df.columns:
+                                    # Calculate the mean accuracy.
+                                    mean_accuracy = filtered_df["compile_metrics"].mean()  # TODO: Solve this issue.
+                                    # Append the mean accuracy to the plotting data.
+                                    plotting_data.append({"comm_round": comm_round,
+                                                          "client_selector": client_selector,
+                                                          "mean_accuracy": mean_accuracy})
+                    # If there is data to plot...
+                    if plotting_data:
+                        # If the current metric name equals to 'max_testing_time'...
+                        if metric_name == "max_testing_time":
+                            # Set the 'y_data' value, if equals to 'Auto'.
+                            if y_data == "Auto":
+                                y_data_new = "max_testing_time"
+                                plotting_settings["y_data"] = y_data_new
+                            # Set the 'y_label' value, if equals to 'Auto'.
+                            if y_label == "Auto":
+                                y_scale_new = None
+                                plotting_settings["y_scale"] = y_scale_new
+                                y_label_new = "{0} ({1})".format("Makespan", time_unit_symbol)
+                                plotting_settings["y_label"] = y_label_new
+                        # If the current metric name equals to 'sum_testing_energy_cpu'...
+                        elif metric_name == "sum_testing_energy_cpu":
+                            # Set the 'y_data' value, if equals to 'Auto'.
+                            if y_data == "Auto":
+                                y_data_new = "sum_testing_energy_cpu"
+                                plotting_settings["y_data"] = y_data_new
+                            # Set the 'y_label' value, if equals to 'Auto'.
+                            if y_label == "Auto":
+                                y_scale_new = None
+                                plotting_settings["y_scale"] = y_scale_new
+                                y_label_new = "{0} ({1})".format("Sum of CPU energy consumption", "J")
+                                plotting_settings["y_label"] = y_label_new
+                        # If the current metric name equals to 'mean_num_testing_examples_used'...
+                        elif metric_name == "mean_num_testing_examples_used":
+                            # Set the 'y_data' value, if equals to 'Auto'.
+                            if y_data == "Auto":
+                                y_data_new = "mean_num_testing_examples_used"
+                                plotting_settings["y_data"] = y_data_new
+                            # Set the 'y_label' value, if equals to 'Auto'.
+                            if y_label == "Auto":
+                                y_scale_new = None
+                                plotting_settings["y_scale"] = y_scale_new
+                                y_label_new = "{0}".format("Mean number of testing examples used")
+                                plotting_settings["y_label"] = y_label_new
+                        # If the current metric name equals to 'mean_accuracy'...
+                        elif metric_name == "mean_accuracy":
+                            # Set the 'y_data' value, if equals to 'Auto'.
+                            if y_data == "Auto":
+                                y_data_new = "mean_accuracy"
+                                plotting_settings["y_data"] = y_data_new
+                            # Set the 'y_label' value, if equals to 'Auto'.
+                            if y_label == "Auto":
+                                y_scale_new = None
+                                plotting_settings["y_scale"] = y_scale_new
+                                y_label_new = "{0}".format("Mean accuracy")
+                                plotting_settings["y_label"] = y_label_new
+                        # Set the 'x_data' value, if equals to 'Auto'.
+                        if x_data == "Auto":
+                            x_data_new = "comm_round"
+                            plotting_settings["x_data"] = x_data_new
+                        # Set the 'x_label' value, if equals to 'Auto'.
+                        if x_label == "Auto":
+                            x_label_new = "Communication round"
+                            plotting_settings["x_label"] = x_label_new
+                        # Set the 'hue' value, if equals to 'Auto'.
+                        if hue == "Auto":
+                            hue_new = "client_selector"
+                            plotting_settings["hue"] = hue_new
+                        # Set the 'hue_order' value, if equals to 'Auto'.
+                        if hue_order == "Auto":
+                            hue_order_new = client_selectors
+                            plotting_settings["hue_order"] = hue_order_new
+                            # Set the 'style' value, if equals to 'Auto'.
+                        if style == "Auto":
+                            style_new = "client_selector"
+                            plotting_settings["style"] = style_new
+                            # Set the 'size' value, if equals to 'Auto'.
+                        if size == "Auto":
+                            size_new = "client_selector"
+                            plotting_settings["size"] = size_new
+                        # Update the plotting settings.
+                        individual_evaluate_metrics_history_settings["plotting_settings"] = plotting_settings
+                        self._set_attribute("_individual_evaluate_metrics_history_settings",
+                                            individual_evaluate_metrics_history_settings)
+                        # Set the 'plotting_df' dataframe (data that will be plotted into the figure).
+                        plotting_df = DataFrame(data=plotting_data)
+                        self._set_attribute("_plotting_df", plotting_df)
+                        # Load the figure settings for plots.
+                        self._load_figure_settings(plotting_settings)
+                        # Plot data into the figure.
+                        self._plot_data(plotting_settings, plotting_df)
+                        # Set the figure name.
+                        figure_name = "fig_{0}_{1}_tasks_{2}_clients_{3}.{4}" \
+                                      .format(analysis_name,
+                                              n_tasks,
+                                              n_available_clients,
+                                              metric_name.lower(),
+                                              figure_files_extension)
+                        # Save the figure.
+                        self._save_figure(plotting_settings, figure_name)
 
     def _analyze_individual_evaluate_metrics_history_file(self) -> None:
         # Get the necessary attributes.

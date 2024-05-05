@@ -35,7 +35,7 @@ class PyJoulesEnergyMonitor:
     def _load_energy_monitor(self) -> any:
         # Get the necessary attributes.
         monitoring_domains = self.get_attribute("_monitoring_domains")
-        # Instantiate the pyJoules monitor (EnergyMeter), if the hardware supports monitoring.
+        # Instantiate the pyJoules monitor (EnergyMeter) if the hardware supports monitoring.
         any_monitorable_devices = len(DeviceFactory.create_devices()) > 0
         if any_monitorable_devices:
             devices_to_monitor = []

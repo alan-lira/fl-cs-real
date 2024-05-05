@@ -80,7 +80,7 @@ class FlowerNumpyClient(NumPyClient):
 
     def get_properties(self,
                        config: dict) -> dict:
-        """ Implementation of the abstract method of the NumPyClient class."""
+        """ Implementation of the abstract method from the NumPyClient class."""
         if "client_id" in config:
             client_id = self.get_attribute("_client_id")
             config.update({"client_id": client_id})
@@ -95,7 +95,7 @@ class FlowerNumpyClient(NumPyClient):
 
     def get_parameters(self,
                        config: dict) -> NDArrays:
-        """ Implementation of the abstract method of the NumPyClient class."""
+        """ Implementation of the abstract method from the NumPyClient class."""
         model = self._load_model()
         local_model_parameters = model.get_weights()
         # Return the current parameters (weights) of the local model requested by the server.
@@ -124,7 +124,7 @@ class FlowerNumpyClient(NumPyClient):
         # Get the necessary attributes.
         energy_monitor = self.get_attribute("_energy_monitor")
         daemon_mode = self.get_attribute("_daemon_mode")
-        # Get the model training process id from the fit queue.
+        # Get the model training process id from the fit_queue.
         model_training_pid = None
         if daemon_mode:
             fit_queue_element = fit_queue.get()
@@ -169,7 +169,7 @@ class FlowerNumpyClient(NumPyClient):
             elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
                 energy_monitor.stop()
                 energy_consumptions = energy_monitor.get_energy_consumptions()
-        # Put the model training result into the fit queue.
+        # Put the model training result into the fit_queue.
         model_training_result = {"history": history,
                                  "duration": duration,
                                  "energy_consumptions": energy_consumptions}
@@ -178,7 +178,7 @@ class FlowerNumpyClient(NumPyClient):
     def fit(self,
             global_parameters: NDArrays,
             fit_config: dict) -> tuple[NDArrays, int, dict]:
-        """ Implementation of the abstract method of the NumPyClient class."""
+        """ Implementation of the abstract method from the NumPyClient class."""
         # Get the necessary attributes.
         client_id = self.get_attribute("_client_id")
         x_train = self.get_attribute("_x_train")
@@ -212,7 +212,7 @@ class FlowerNumpyClient(NumPyClient):
         log_message(logger, message, "INFO")
         # Unset the logger.
         self._set_attribute("_logger", None)
-        # Initialize the model training queue.
+        # Initialize the model training queue (fit_queue).
         fit_queue = Queue()
         if daemon_mode:
             # Launch the model training process.
@@ -222,7 +222,7 @@ class FlowerNumpyClient(NumPyClient):
             model_training_process.start()
             # Get the model training process id.
             model_training_pid = model_training_process.pid
-            # Put the model training process id into the fit queue.
+            # Put the model training process id into the fit_queue.
             fit_queue.put({"model_training_pid": model_training_pid})
             # Wait for the model training process completion.
             model_training_process.join()
@@ -267,7 +267,7 @@ class FlowerNumpyClient(NumPyClient):
         # Get the necessary attributes.
         energy_monitor = self.get_attribute("_energy_monitor")
         daemon_mode = self.get_attribute("_daemon_mode")
-        # Get the model testing process id from the evaluate queue.
+        # Get the model testing process id from the evaluate_queue.
         model_testing_pid = None
         if daemon_mode:
             evaluate_queue_element = evaluate_queue.get()
@@ -307,7 +307,7 @@ class FlowerNumpyClient(NumPyClient):
             elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
                 energy_monitor.stop()
                 energy_consumptions = energy_monitor.get_energy_consumptions()
-        # Put the model testing result into the evaluate queue.
+        # Put the model testing result into the evaluate_queue.
         model_testing_result = {"history": history,
                                 "duration": duration,
                                 "energy_consumptions": energy_consumptions}
@@ -316,7 +316,7 @@ class FlowerNumpyClient(NumPyClient):
     def evaluate(self,
                  global_parameters: NDArrays,
                  evaluate_config: dict) -> tuple[float, int, dict]:
-        """ Implementation of the abstract method of the NumPyClient class."""
+        """ Implementation of the abstract method from the NumPyClient class."""
         # Get the necessary attributes.
         client_id = self.get_attribute("_client_id")
         x_test = self.get_attribute("_x_test")
@@ -351,7 +351,7 @@ class FlowerNumpyClient(NumPyClient):
         log_message(logger, message, "INFO")
         # Unset the logger.
         self._set_attribute("_logger", None)
-        # Initialize the model testing queue.
+        # Initialize the model testing queue (evaluate_queue).
         evaluate_queue = Queue()
         if daemon_mode:
             # Launch the model testing process.
@@ -361,7 +361,7 @@ class FlowerNumpyClient(NumPyClient):
             model_testing_process.start()
             # Get the model testing process id.
             model_testing_pid = model_testing_process.pid
-            # Put the model testing process id into the evaluate queue.
+            # Put the model testing process id into the evaluate_queue.
             evaluate_queue.put({"model_testing_pid": model_testing_pid})
             # Wait for the model testing process completion.
             model_testing_process.join()

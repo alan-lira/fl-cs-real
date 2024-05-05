@@ -154,7 +154,7 @@ def main() -> None:
     logger = _set_logger()
     if action == "launch_server":
         id_ = int(parsed_args.id)
-        config_file = Path(parsed_args.config_file).absolute()
+        config_file = Path(parsed_args.config_file)
         # Verify if the user-provided config file is valid.
         _verify_if_config_file_is_valid(config_file)
         implementation = str(parsed_args.implementation)
@@ -163,7 +163,7 @@ def main() -> None:
             fs.launch_server()
     elif action == "launch_client":
         id_ = int(parsed_args.id)
-        config_file = Path(parsed_args.config_file).absolute()
+        config_file = Path(parsed_args.config_file)
         # Verify if the user-provided config file is valid.
         _verify_if_config_file_is_valid(config_file)
         implementation = str(parsed_args.implementation)
@@ -171,14 +171,14 @@ def main() -> None:
             fc = FlowerClientLauncher(id_, config_file)
             fc.launch_client()
     elif action == "analyze_results":
-        config_file = Path(parsed_args.config_file).absolute()
+        config_file = Path(parsed_args.config_file)
         # Verify if the user-provided config file is valid.
         _verify_if_config_file_is_valid(config_file)
         ra = ResultAnalyzer(config_file)
         ra.analyze_results()
     # Stop the performance counter.
     perf_counter_stop = perf_counter()
-    # Log a 'elapsed time in seconds' message.
+    # Log an 'elapsed time in seconds' message.
     elapsed_time_seconds = round((perf_counter_stop - perf_counter_start), 2)
     message = "Elapsed time: {0} {1}.".format(elapsed_time_seconds,
                                               "seconds" if elapsed_time_seconds != 1 else "second")
