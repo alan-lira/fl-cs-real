@@ -153,7 +153,8 @@ class FlowerNumpyClient(NumPyClient):
                             epochs=fit_config["epochs"],
                             steps_per_epoch=fit_config["steps_per_epoch"],
                             validation_split=fit_config["validation_split"],
-                            validation_batch_size=fit_config["validation_batch_size"]).history
+                            validation_batch_size=fit_config["validation_batch_size"],
+                            verbose=fit_config["verbose"]).history
         # Save the local model with the parameters (weights) obtained from the training.
         self._save_model(model)
         # Get the model training duration.
@@ -291,7 +292,8 @@ class FlowerNumpyClient(NumPyClient):
         history = model.evaluate(x=x_test_sliced,
                                  y=y_test_sliced,
                                  batch_size=evaluate_config["batch_size"],
-                                 steps=evaluate_config["steps"])
+                                 steps=evaluate_config["steps"],
+                                 verbose=evaluate_config["verbose"])
         # Save the local model with the parameters (weights) received from the server (global parameters).
         self._save_model(model)
         # Get the model testing duration.
