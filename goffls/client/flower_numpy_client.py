@@ -1,15 +1,82 @@
+from keras.callbacks import Callback
 from keras.saving import load_model, save_model
 from logging import Logger
 from multiprocessing import Process, Queue, set_start_method
 from numpy.random import randint
+from os import getpid
 from pathlib import Path
-from time import perf_counter
+from time import perf_counter, process_time
 
 from flwr.client import NumPyClient
 from flwr.common import NDArray, NDArrays
 from goffls.energy_monitor.powerjoular_energy_monitor import PowerJoularEnergyMonitor
 from goffls.energy_monitor.pyjoules_energy_monitor import PyJoulesEnergyMonitor
 from goffls.util.logger_util import log_message
+
+
+class MeasurementsCallback(Callback):
+
+    def __init__(self,
+                 energy_monitor: any) -> None:
+        super().__init__()
+        self._energy_monitor = energy_monitor
+        self._train_cpu_time_start = None
+        self._train_elapsed_time_start = None
+        self.train_cpu_time = None
+        self.train_elapsed_time = None
+        self.train_energy_consumptions = {}
+        self._test_cpu_time_start = None
+        self._test_elapsed_time_start = None
+        self.test_cpu_time = None
+        self.test_elapsed_time = None
+        self.test_energy_consumptions = {}
+
+    def on_train_begin(self,
+                       logs=None) -> None:
+        #
+        self._train_cpu_time_start = process_time()
+        self._train_elapsed_time_start = perf_counter()
+        #
+        energy_monitor = self._energy_monitor
+        # If there is an energy consumption monitor...
+        if energy_monitor:
+            # Set the energy consumption monitor's monitoring tag.
+            monitoring_tag = "training_energy"
+            # Start the model training energy consumption monitoring.
+            if isinstance(energy_monitor, PyJoulesEnergyMonitor):
+                energy_monitor.start(monitoring_tag)
+            elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
+                model_training_pid = getpid()
+                energy_monitor.start(monitoring_tag, model_training_pid)
+
+    def on_train_end(self,
+                     logs=None) -> None:
+        #
+        self.train_cpu_time = process_time() - self._train_cpu_time_start
+        self.train_elapsed_time = perf_counter() - self._train_elapsed_time_start
+        #
+        energy_monitor = self._energy_monitor
+        # If there is an energy consumption monitor...
+        if energy_monitor:
+            energy_consumptions = {}
+            # Stop the model training energy consumption monitoring and get the energy consumptions measurements.
+            if isinstance(energy_monitor, PyJoulesEnergyMonitor):
+                energy_monitor.stop()
+                energy_consumptions = energy_monitor.get_energy_consumptions()
+            elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
+                energy_monitor.stop()
+                energy_consumptions = energy_monitor.get_energy_consumptions()
+            self.train_energy_consumptions = energy_consumptions
+
+    def on_test_begin(self,
+                      logs=None) -> None:
+        self._test_cpu_time_start = process_time()
+        self._test_elapsed_time_start = perf_counter()
+
+    def on_test_end(self,
+                    logs=None) -> None:
+        self.test_cpu_time = process_time() - self._test_cpu_time_start
+        self.test_elapsed_time = perf_counter() - self._test_elapsed_time_start
 
 
 class FlowerNumpyClient(NumPyClient):
@@ -36,6 +103,7 @@ class FlowerNumpyClient(NumPyClient):
         self._daemon_mode = daemon_mode
         self._logger = logger
         self._model_file = None
+        self._measurements_callback = MeasurementsCallback(energy_monitor)
         # If the daemon mode is enabled...
         if daemon_mode:
             # Set the starting method of daemon processes.
@@ -121,25 +189,9 @@ class FlowerNumpyClient(NumPyClient):
                      y_train_sliced: NDArray,
                      fit_config: dict,
                      fit_queue: Queue) -> None:
-        # Get the necessary attributes.
-        energy_monitor = self.get_attribute("_energy_monitor")
-        daemon_mode = self.get_attribute("_daemon_mode")
-        # Get the model training process id from the fit_queue.
-        model_training_pid = None
-        if daemon_mode:
-            fit_queue_element = fit_queue.get()
-            model_training_pid = fit_queue_element["model_training_pid"]
-        # If there is an energy consumption monitor...
-        if energy_monitor:
-            # Set the energy consumption monitor's monitoring tag.
-            monitoring_tag = "training_energy"
-            # Start the model training energy consumption monitoring.
-            if isinstance(energy_monitor, PyJoulesEnergyMonitor):
-                energy_monitor.start(monitoring_tag)
-            elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
-                energy_monitor.start(monitoring_tag, model_training_pid)
-        # Start the model training duration timer.
-        duration_start = perf_counter()
+        # Start the model training duration (elapsed time and CPU time).
+        train_elapsed_time_start = perf_counter()
+        train_cpu_time_start = process_time()
         # Load the local model.
         model = self._load_model()
         # Update the parameters (weights) of the local model with those received from the server (global parameters).
@@ -154,27 +206,25 @@ class FlowerNumpyClient(NumPyClient):
                             steps_per_epoch=fit_config["steps_per_epoch"],
                             validation_split=fit_config["validation_split"],
                             validation_batch_size=fit_config["validation_batch_size"],
-                            verbose=fit_config["verbose"]).history
+                            verbose=fit_config["verbose"],
+                            callbacks=[self._measurements_callback]).history
         # Save the local model with the parameters (weights) obtained from the training.
         self._save_model(model)
-        # Get the model training duration.
-        duration = perf_counter() - duration_start
-        # Initialize the energy consumptions dictionary.
-        energy_consumptions = {}
-        # If there is an energy consumption monitor...
-        if energy_monitor:
-            # Stop the model training energy consumption monitoring and get the energy consumptions measurements.
-            if isinstance(energy_monitor, PyJoulesEnergyMonitor):
-                energy_monitor.stop()
-                energy_consumptions = energy_monitor.get_energy_consumptions()
-            elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
-                energy_monitor.stop()
-                energy_consumptions = energy_monitor.get_energy_consumptions()
+        # Get the model training duration (elapsed time and CPU time).
+        train_elapsed_time = perf_counter() - train_elapsed_time_start
+        train_cpu_time = process_time() - train_cpu_time_start
         # Put the model training result into the fit_queue.
         model_training_result = {"history": history,
-                                 "duration": duration,
-                                 "energy_consumptions": energy_consumptions}
+                                 "duration": self._measurements_callback.train_cpu_time,
+                                 "energy_consumptions": self._measurements_callback.train_energy_consumptions}
         fit_queue.put({"model_training_result": model_training_result})
+        print("Client {0} Train --> ELAPSED TIME: {1} (Non Callback) e {2} (Using Callback) | "
+              "CPU TIME: {3} (Non Callback) e {4} (Using Callback)"
+              .format(self._client_id,
+                      train_elapsed_time,
+                      self._measurements_callback.train_elapsed_time,
+                      train_cpu_time,
+                      self._measurements_callback.train_cpu_time))
 
     def fit(self,
             global_parameters: NDArrays,
@@ -221,10 +271,6 @@ class FlowerNumpyClient(NumPyClient):
             args = (global_parameters, x_train_sliced, y_train_sliced, fit_config, fit_queue)
             model_training_process = Process(target=target, args=args)
             model_training_process.start()
-            # Get the model training process id.
-            model_training_pid = model_training_process.pid
-            # Put the model training process id into the fit_queue.
-            fit_queue.put({"model_training_pid": model_training_pid})
             # Wait for the model training process completion.
             model_training_process.join()
         else:
@@ -282,8 +328,9 @@ class FlowerNumpyClient(NumPyClient):
                 energy_monitor.start(monitoring_tag)
             elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
                 energy_monitor.start(monitoring_tag, model_testing_pid)
-        # Start the model testing duration timer.
-        duration_start = perf_counter()
+        # Start the model testing duration (elapsed time and CPU time).
+        test_elapsed_time_start = perf_counter()
+        test_cpu_time_start = process_time()
         # Load the local model.
         model = self._load_model()
         # Update the parameters (weights) of the local model with those received from the server (global parameters).
@@ -293,11 +340,13 @@ class FlowerNumpyClient(NumPyClient):
                                  y=y_test_sliced,
                                  batch_size=evaluate_config["batch_size"],
                                  steps=evaluate_config["steps"],
-                                 verbose=evaluate_config["verbose"])
+                                 verbose=evaluate_config["verbose"],
+                                 callbacks=[self._measurements_callback])
         # Save the local model with the parameters (weights) received from the server (global parameters).
         self._save_model(model)
-        # Get the model testing duration.
-        duration = perf_counter() - duration_start
+        # Get the model testing duration (elapsed time and CPU time).
+        test_elapsed_time = perf_counter() - test_elapsed_time_start
+        test_cpu_time = process_time() - test_cpu_time_start
         # Initialize the energy consumptions dictionary.
         energy_consumptions = {}
         # If there is an energy consumption monitor...
@@ -311,9 +360,16 @@ class FlowerNumpyClient(NumPyClient):
                 energy_consumptions = energy_monitor.get_energy_consumptions()
         # Put the model testing result into the evaluate_queue.
         model_testing_result = {"history": history,
-                                "duration": duration,
+                                "duration": test_elapsed_time,
                                 "energy_consumptions": energy_consumptions}
         evaluate_queue.put({"model_testing_result": model_testing_result})
+        print("Client {0} Test --> ELAPSED TIME: {1} (Non Callback) e {2} (Using Callback) | "
+              "CPU TIME: {3} (Non Callback) e {4} (Using Callback)"
+              .format(self._client_id,
+                      test_elapsed_time,
+                      self._measurements_callback.test_elapsed_time,
+                      test_cpu_time,
+                      self._measurements_callback.test_cpu_time))
 
     def evaluate(self,
                  global_parameters: NDArrays,
