@@ -14,7 +14,7 @@ from goffls.energy_monitor.pyjoules_energy_monitor import PyJoulesEnergyMonitor
 from goffls.util.logger_util import log_message
 
 
-class MeasurementsCallback(Callback):
+class TrainMeasurementsCallback(Callback):
 
     def __init__(self,
                  energy_monitor: any) -> None:
@@ -26,11 +26,6 @@ class MeasurementsCallback(Callback):
         self._train_cpu_time = None
         self._train_elapsed_time = None
         self._train_energy_consumptions = {}
-        self._test_cpu_time_start = None
-        self._test_elapsed_time_start = None
-        self._test_cpu_time = None
-        self._test_elapsed_time = None
-        self._test_energy_consumptions = {}
 
     def _set_attribute(self,
                        attribute_name: str,
@@ -86,6 +81,29 @@ class MeasurementsCallback(Callback):
                 train_energy_consumptions = energy_monitor.get_energy_consumptions()
             # Set the model training energy consumptions.
             self._set_attribute("_train_energy_consumptions", train_energy_consumptions)
+
+
+class TestMeasurementsCallback(Callback):
+
+    def __init__(self,
+                 energy_monitor: any) -> None:
+        super().__init__()
+        # Initialize the attributes.
+        self._energy_monitor = energy_monitor
+        self._test_cpu_time_start = None
+        self._test_elapsed_time_start = None
+        self._test_cpu_time = None
+        self._test_elapsed_time = None
+        self._test_energy_consumptions = {}
+
+    def _set_attribute(self,
+                       attribute_name: str,
+                       attribute_value: any) -> None:
+        setattr(self, attribute_name, attribute_value)
+
+    def get_attribute(self,
+                      attribute_name: str) -> any:
+        return getattr(self, attribute_name)
 
     def on_test_begin(self,
                       logs=None) -> None:
@@ -158,7 +176,8 @@ class FlowerNumpyClient(NumPyClient):
         self._daemon_mode = daemon_mode
         self._logger = logger
         self._model_file = None
-        self._measurements_callback = MeasurementsCallback(energy_monitor)
+        self._train_measurements_callback = TrainMeasurementsCallback(energy_monitor)
+        self._test_measurements_callback = TestMeasurementsCallback(energy_monitor)
         # If the daemon mode is enabled...
         if daemon_mode:
             # Set the starting method of daemon processes.
@@ -245,7 +264,7 @@ class FlowerNumpyClient(NumPyClient):
                      fit_config: dict,
                      fit_queue: Queue) -> None:
         # Get the necessary attributes.
-        measurements_callback = self.get_attribute("_measurements_callback")
+        train_measurements_callback = self.get_attribute("_train_measurements_callback")
         # Load the local model.
         model = self._load_model()
         # Update the parameters (weights) of the local model with those received from the server (global parameters).
@@ -261,13 +280,13 @@ class FlowerNumpyClient(NumPyClient):
                             validation_split=fit_config["validation_split"],
                             validation_batch_size=fit_config["validation_batch_size"],
                             verbose=fit_config["verbose"],
-                            callbacks=[measurements_callback]).history
+                            callbacks=[train_measurements_callback]).history
         # Save the local model with the parameters (weights) obtained from the training.
         self._save_model(model)
         # Put the model training result into the fit_queue.
-        train_cpu_time = measurements_callback.get_attribute("_train_cpu_time")
-        train_elapsed_time = measurements_callback.get_attribute("_train_elapsed_time")
-        train_energy_consumptions = measurements_callback.get_attribute("_train_energy_consumptions")
+        train_cpu_time = train_measurements_callback.get_attribute("_train_cpu_time")
+        train_elapsed_time = train_measurements_callback.get_attribute("_train_elapsed_time")
+        train_energy_consumptions = train_measurements_callback.get_attribute("_train_energy_consumptions")
         model_training_result = {"history": history,
                                  "duration": train_cpu_time,
                                  "energy_consumptions": train_energy_consumptions}
@@ -363,7 +382,7 @@ class FlowerNumpyClient(NumPyClient):
                     evaluate_config: dict,
                     evaluate_queue: Queue) -> None:
         # Get the necessary attributes.
-        measurements_callback = self.get_attribute("_measurements_callback")
+        test_measurements_callback = self.get_attribute("_test_measurements_callback")
         # Load the local model.
         model = self._load_model()
         # Update the parameters (weights) of the local model with those received from the server (global parameters).
@@ -374,13 +393,13 @@ class FlowerNumpyClient(NumPyClient):
                                  batch_size=evaluate_config["batch_size"],
                                  steps=evaluate_config["steps"],
                                  verbose=evaluate_config["verbose"],
-                                 callbacks=[self._measurements_callback])
+                                 callbacks=[test_measurements_callback])
         # Save the local model with the parameters (weights) received from the server (global parameters).
         self._save_model(model)
         # Put the model testing result into the evaluate_queue.
-        test_cpu_time = measurements_callback.get_attribute("_test_cpu_time")
-        test_elapsed_time = measurements_callback.get_attribute("_test_elapsed_time")
-        test_energy_consumptions = measurements_callback.get_attribute("_test_energy_consumptions")
+        test_cpu_time = test_measurements_callback.get_attribute("_test_cpu_time")
+        test_elapsed_time = test_measurements_callback.get_attribute("_test_elapsed_time")
+        test_energy_consumptions = test_measurements_callback.get_attribute("_test_energy_consumptions")
         model_testing_result = {"history": history,
                                 "duration": test_cpu_time,
                                 "energy_consumptions": test_energy_consumptions}
