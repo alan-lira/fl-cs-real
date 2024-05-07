@@ -14,22 +14,29 @@ def aggregate_loss_by_weighted_average(evaluate_results: List[Tuple[ClientProxy,
 def aggregate_metrics_by_weighted_average(metrics_tuples: list[tuple[int, Metrics]]) -> dict:
     # Initialize the aggregated metrics dictionary.
     aggregated_metrics = {}
-    # Get the list of metrics names.
-    metrics_names = list(metrics_tuples[0][1].keys())
-    # Initialize the list that will store the results of multiplying metrics values by the number of examples,
-    # for each participating client.
-    metrics_products_list = []
-    # Iterate through the list of metrics names.
-    for metric_name in metrics_names:
-        # For each pair (metric, participating client),
-        # multiply the metric value by the number of examples used by the client (data contribution).
-        metric_product = [num_examples * metric[metric_name] for num_examples, metric in metrics_tuples]
-        metrics_products_list.append(metric_product)
     # Get the sum of examples used by all participating clients.
     sum_num_examples = sum([num_examples for num_examples, _ in metrics_tuples])
-    # Aggregate the metrics by weighted average.
-    for metric_index in range(0, len(metrics_names)):
-        metric_name = metrics_names[metric_index]
-        weighted_average_value = sum(metrics_products_list[metric_index]) / sum_num_examples
-        aggregated_metrics.update({metric_name: weighted_average_value})
+    # Get the list of metrics names.
+    metrics_names = []
+    for _, metrics in metrics_tuples:
+        for metric_key, _ in metrics.items():
+            metrics_names.append(metric_key)
+    metrics_names = sorted(list(set(metrics_names)))
+    # Iterate through the list of metrics names.
+    for metric_name in metrics_names:
+        # Initialize the 'sum_metric_product' variable.
+        sum_metric_product = 0
+        # For each pair (metric, participating client)...
+        for num_examples, metrics in metrics_tuples:
+            # If the current client metrics contains the current metric...
+            if metric_name in metrics:
+                # Multiply the metric value by the number of examples used by the client (data contribution),
+                # and increment it into the 'sum_metric_product' variable.
+                metric_value = metrics[metric_name]
+                sum_metric_product += num_examples * metric_value
+        # Get the weighted average value of the current metric.
+        metric_weighted_average_value = sum_metric_product / sum_num_examples
+        # Append it into the aggregated metrics dictionary.
+        aggregated_metrics.update({metric_name: metric_weighted_average_value})
+    # Return the aggregated metrics dictionary.
     return aggregated_metrics

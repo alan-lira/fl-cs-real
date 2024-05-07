@@ -3,7 +3,7 @@ from keras.saving import load_model, save_model
 from logging import Logger
 from multiprocessing import Process, Queue, set_start_method
 from numpy.random import randint
-from os import cpu_count, getpid, sched_getaffinity, sched_setaffinity
+from os import cpu_count, getpid
 from pathlib import Path
 from time import perf_counter, process_time
 
@@ -39,7 +39,6 @@ class TrainMeasurementsCallback(Callback):
 
     def on_train_begin(self,
                        logs=None) -> None:
-        print("Process is eligible to run on: {0}".format(sched_getaffinity(0)))
         # Set the model training time start (CPU and elapsed times).
         train_cpu_time_start = process_time()
         train_elapsed_time_start = perf_counter()
@@ -189,9 +188,18 @@ class FlowerNumpyClient(NumPyClient):
             self._save_model(model)
         # If the operating system is Linux...
         if get_system() == "Linux":
-            # Set the process affinity (the list of CPU cores eligible for the client).
+            # Import the necessary functions.
+            from os import sched_setaffinity
+            # Get the necessary attributes.
+            client_id = self.get_attribute("_client_id")
+            # Set the client process affinity (the list of CPU cores eligible for the client).
             affinity_list = self._get_affinity_list(affinity_method)
             sched_setaffinity(0, affinity_list)
+            # Log a 'eligible CPU cores' message.
+            message = "[Client {0}] The following CPU cores will be used: {1}" \
+                      .format(client_id,
+                              ",".join(affinity_list))
+            log_message(logger, message, "INFO")
 
     def _set_attribute(self,
                        attribute_name: str,
@@ -357,7 +365,6 @@ class FlowerNumpyClient(NumPyClient):
         log_message(logger, message, "INFO")
         # Unset the logger.
         self._set_attribute("_logger", None)
-        print("Process is eligible to run on: {0}".format(sched_getaffinity(0)))
         # Initialize the model training queue (fit_queue).
         fit_queue = Queue()
         if daemon_mode:
