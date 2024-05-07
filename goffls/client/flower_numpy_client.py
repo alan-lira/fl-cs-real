@@ -3,7 +3,7 @@ from keras.saving import load_model, save_model
 from logging import Logger
 from multiprocessing import Process, Queue, set_start_method
 from numpy.random import randint
-from os import getpid
+from os import cpu_count, getpid, sched_getaffinity, sched_setaffinity
 from pathlib import Path
 from time import perf_counter, process_time
 
@@ -12,6 +12,7 @@ from flwr.common import NDArray, NDArrays
 from goffls.energy_monitor.powerjoular_energy_monitor import PowerJoularEnergyMonitor
 from goffls.energy_monitor.pyjoules_energy_monitor import PyJoulesEnergyMonitor
 from goffls.util.logger_util import log_message
+from goffls.util.platform_util import get_system
 
 
 class TrainMeasurementsCallback(Callback):
@@ -38,6 +39,7 @@ class TrainMeasurementsCallback(Callback):
 
     def on_train_begin(self,
                        logs=None) -> None:
+        print("Process is eligible to run on: {0}".format(sched_getaffinity(0)))
         # Set the model training time start (CPU and elapsed times).
         train_cpu_time_start = process_time()
         train_elapsed_time_start = perf_counter()
@@ -333,6 +335,7 @@ class FlowerNumpyClient(NumPyClient):
         log_message(logger, message, "INFO")
         # Unset the logger.
         self._set_attribute("_logger", None)
+        print("Process is eligible to run on: {0}".format(sched_getaffinity(0)))
         # Initialize the model training queue (fit_queue).
         fit_queue = Queue()
         if daemon_mode:
