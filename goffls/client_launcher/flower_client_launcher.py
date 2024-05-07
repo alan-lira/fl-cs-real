@@ -27,6 +27,7 @@ class FlowerClientLauncher:
         self._config_file = config_file
         self._logging_settings = None
         self._daemon_settings = None
+        self._affinity_settings = None
         self._ssl_settings = None
         self._grpc_settings = None
         self._dataset_settings = None
@@ -58,6 +59,10 @@ class FlowerClientLauncher:
         daemon_section = "Daemon Settings"
         daemon_settings = parse_config_section(config_file, daemon_section)
         self._set_attribute("_daemon_settings", daemon_settings)
+        # Parse and set the affinity settings.
+        affinity_section = "Affinity Settings"
+        affinity_settings = parse_config_section(config_file, affinity_section)
+        self._set_attribute("_affinity_settings", affinity_settings)
         # Parse and set the ssl settings.
         ssl_section = "SSL Settings"
         ssl_settings = parse_config_section(config_file, ssl_section)
@@ -333,6 +338,7 @@ class FlowerClientLauncher:
                                    energy_monitor: any,
                                    daemon_mode: bool,
                                    daemon_start_method: str,
+                                   affinity_method: str,
                                    logger: Logger) -> Client:
         # Instantiate the flower client.
         flower_client = FlowerNumpyClient(id_=id_,
@@ -344,6 +350,7 @@ class FlowerClientLauncher:
                                           energy_monitor=energy_monitor,
                                           daemon_mode=daemon_mode,
                                           daemon_start_method=daemon_start_method,
+                                          affinity_method=affinity_method,
                                           logger=logger)
         flower_client = flower_client.to_client()
         # Return the flower server.
@@ -366,6 +373,7 @@ class FlowerClientLauncher:
         logger = self.get_attribute("_logger")
         daemon_mode = self.get_attribute("_daemon_settings")["enable_daemon_mode"]
         daemon_start_method = self.get_attribute("_daemon_settings")["start_method"]
+        affinity_method = self.get_attribute("_affinity_settings")["affinity_method"]
         # Get the Secure Socket Layer (SSL) certificates (SSL-enabled secure connection).
         ssl_certificates = self._get_ssl_certificates()
         # Get the flower server address (IP address and port).
@@ -384,7 +392,8 @@ class FlowerClientLauncher:
         model = self._instantiate_and_compile_model(optimizer, loss_function)
         # Instantiate the flower client.
         flower_client = self._instantiate_flower_client(client_id, model, x_train, y_train, x_test, y_test,
-                                                        energy_monitor, daemon_mode, daemon_start_method, logger)
+                                                        energy_monitor, daemon_mode, daemon_start_method,
+                                                        affinity_method, logger)
         # Start the flower client.
         self._start_flower_client(flower_server_address,
                                   flower_client,

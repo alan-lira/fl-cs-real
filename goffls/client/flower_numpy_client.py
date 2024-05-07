@@ -166,6 +166,7 @@ class FlowerNumpyClient(NumPyClient):
                  energy_monitor: any,
                  daemon_mode: bool,
                  daemon_start_method: str,
+                 affinity_method: str,
                  logger: Logger) -> None:
         # Initialize the attributes.
         self._client_id = id_
@@ -186,6 +187,11 @@ class FlowerNumpyClient(NumPyClient):
             set_start_method(daemon_start_method)
             # Dump the local model to file.
             self._save_model(model)
+        # If the operating system is Linux...
+        if get_system() == "Linux":
+            # Set the process affinity (the list of CPU cores eligible for the client).
+            affinity_list = self._get_affinity_list(affinity_method)
+            sched_setaffinity(0, affinity_list)
 
     def _set_attribute(self,
                        attribute_name: str,
@@ -221,6 +227,22 @@ class FlowerNumpyClient(NumPyClient):
             # Load the local model from file.
             model = load_model(filepath=model_file, compile=True, safe_mode=True)
         return model
+
+    def _get_affinity_list(self,
+                           affinity_method: str) -> list:
+        # Get the necessary attributes.
+        client_id = self.get_attribute("_client_id")
+        affinity_list = []
+        num_cpus = cpu_count()
+        cpus_ids = list(range(0, num_cpus))
+        if affinity_method == "One_CPU_Core_Only":
+            if client_id in cpus_ids:
+                cpu_index = client_id
+            else:
+                cpu_index = client_id % num_cpus
+            cpu_to_allocate = cpus_ids[cpu_index]
+            affinity_list.append(cpu_to_allocate)
+        return affinity_list
 
     def get_properties(self,
                        config: dict) -> dict:
