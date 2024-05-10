@@ -40,11 +40,6 @@ class TrainMeasurementsCallback(Callback):
 
     def on_train_begin(self,
                        logs=None) -> None:
-        # Set the model training time start (CPU and elapsed times).
-        train_cpu_time_start = process_time()
-        train_elapsed_time_start = perf_counter()
-        self._set_attribute("_train_cpu_time_start", train_cpu_time_start)
-        self._set_attribute("_train_elapsed_time_start", train_elapsed_time_start)
         # Get the energy consumption monitor.
         energy_monitor = self.get_attribute("_energy_monitor")
         # If there is an energy consumption monitor...
@@ -57,17 +52,14 @@ class TrainMeasurementsCallback(Callback):
             elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
                 model_training_pid = getpid()
                 energy_monitor.start(monitoring_tag, model_training_pid)
+        # Set the model training time start (CPU and elapsed times).
+        train_cpu_time_start = process_time()
+        train_elapsed_time_start = perf_counter()
+        self._set_attribute("_train_cpu_time_start", train_cpu_time_start)
+        self._set_attribute("_train_elapsed_time_start", train_elapsed_time_start)
 
     def on_train_end(self,
                      logs=None) -> None:
-        # Get the model training time start (CPU and elapsed times).
-        train_cpu_time_start = self.get_attribute("_train_cpu_time_start")
-        train_elapsed_time_start = self.get_attribute("_train_elapsed_time_start")
-        # Set the model training duration (CPU and elapsed times).
-        train_cpu_time = process_time() - train_cpu_time_start
-        train_elapsed_time = perf_counter() - train_elapsed_time_start
-        self._set_attribute("_train_cpu_time", train_cpu_time)
-        self._set_attribute("_train_elapsed_time", train_elapsed_time)
         # Get the energy consumption monitor.
         energy_monitor = self.get_attribute("_energy_monitor")
         # If there is an energy consumption monitor...
@@ -83,6 +75,14 @@ class TrainMeasurementsCallback(Callback):
                 train_energy_consumptions = energy_monitor.get_energy_consumptions()
             # Set the model training energy consumptions.
             self._set_attribute("_train_energy_consumptions", train_energy_consumptions)
+        # Get the model training time start (CPU and elapsed times).
+        train_cpu_time_start = self.get_attribute("_train_cpu_time_start")
+        train_elapsed_time_start = self.get_attribute("_train_elapsed_time_start")
+        # Set the model training duration (CPU and elapsed times).
+        train_cpu_time = process_time() - train_cpu_time_start
+        train_elapsed_time = perf_counter() - train_elapsed_time_start
+        self._set_attribute("_train_cpu_time", train_cpu_time)
+        self._set_attribute("_train_elapsed_time", train_elapsed_time)
 
 
 class TestMeasurementsCallback(Callback):
@@ -109,11 +109,6 @@ class TestMeasurementsCallback(Callback):
 
     def on_test_begin(self,
                       logs=None) -> None:
-        # Set the model testing time start (CPU and elapsed times).
-        test_cpu_time_start = process_time()
-        test_elapsed_time_start = perf_counter()
-        self._set_attribute("_test_cpu_time_start", test_cpu_time_start)
-        self._set_attribute("_test_elapsed_time_start", test_elapsed_time_start)
         # Get the energy consumption monitor.
         energy_monitor = self.get_attribute("_energy_monitor")
         # If there is an energy consumption monitor...
@@ -126,17 +121,14 @@ class TestMeasurementsCallback(Callback):
             elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
                 model_testing_pid = getpid()
                 energy_monitor.start(monitoring_tag, model_testing_pid)
+        # Set the model testing time start (CPU and elapsed times).
+        test_cpu_time_start = process_time()
+        test_elapsed_time_start = perf_counter()
+        self._set_attribute("_test_cpu_time_start", test_cpu_time_start)
+        self._set_attribute("_test_elapsed_time_start", test_elapsed_time_start)
 
     def on_test_end(self,
                     logs=None) -> None:
-        # Get the model testing time start (CPU and elapsed times).
-        test_cpu_time_start = self.get_attribute("_test_cpu_time_start")
-        test_elapsed_time_start = self.get_attribute("_test_elapsed_time_start")
-        # Set the model testing duration (CPU and elapsed times).
-        test_cpu_time = process_time() - test_cpu_time_start
-        test_elapsed_time = perf_counter() - test_elapsed_time_start
-        self._set_attribute("_test_cpu_time", test_cpu_time)
-        self._set_attribute("_test_elapsed_time", test_elapsed_time)
         # Get the energy consumption monitor.
         energy_monitor = self.get_attribute("_energy_monitor")
         # If there is an energy consumption monitor...
@@ -152,6 +144,14 @@ class TestMeasurementsCallback(Callback):
                 test_energy_consumptions = energy_monitor.get_energy_consumptions()
             # Set the model testing energy consumptions.
             self._set_attribute("_test_energy_consumptions", test_energy_consumptions)
+        # Get the model testing time start (CPU and elapsed times).
+        test_cpu_time_start = self.get_attribute("_test_cpu_time_start")
+        test_elapsed_time_start = self.get_attribute("_test_elapsed_time_start")
+        # Set the model testing duration (CPU and elapsed times).
+        test_cpu_time = process_time() - test_cpu_time_start
+        test_elapsed_time = perf_counter() - test_elapsed_time_start
+        self._set_attribute("_test_cpu_time", test_cpu_time)
+        self._set_attribute("_test_elapsed_time", test_elapsed_time)
 
 
 class FlowerNumpyClient(NumPyClient):
