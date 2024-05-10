@@ -244,7 +244,13 @@ class FlowerClientLauncher:
                 env_variables = energy_monitor_settings["env_variables"]
                 monitoring_domains = energy_monitor_settings["monitoring_domains"]
                 unit = energy_monitor_settings["unit"]
-                energy_monitor = PowerJoularEnergyMonitor(env_variables, monitoring_domains, unit)
+                process_monitoring = energy_monitor_settings["process_monitoring"]
+                report_consumptions_per_second = energy_monitor_settings["report_consumptions_per_second"]
+                energy_monitor = PowerJoularEnergyMonitor(env_variables,
+                                                          monitoring_domains,
+                                                          unit,
+                                                          process_monitoring,
+                                                          report_consumptions_per_second)
         # Return the energy monitor.
         return energy_monitor
 

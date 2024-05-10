@@ -5,6 +5,7 @@ from multiprocessing import Process, Queue, set_start_method
 from numpy.random import randint
 from os import cpu_count, getpid
 from pathlib import Path
+from socket import gethostname
 from time import perf_counter, process_time
 
 from flwr.client import NumPyClient
@@ -180,6 +181,7 @@ class FlowerNumpyClient(NumPyClient):
         self._model_file = None
         self._train_measurements_callback = TrainMeasurementsCallback(energy_monitor)
         self._test_measurements_callback = TestMeasurementsCallback(energy_monitor)
+        self._hostname = gethostname()
         # If the daemon mode is enabled...
         if daemon_mode:
             # Set the starting method of daemon processes.
@@ -196,9 +198,9 @@ class FlowerNumpyClient(NumPyClient):
             affinity_list = self._get_affinity_list(affinity_method)
             sched_setaffinity(0, affinity_list)
             # Log a 'eligible CPU cores' message.
-            message = "[Client {0}] The following CPU cores will be used: {1}" \
+            message = "[Client {0}] The following CPU cores will be used (list of IDs): {1}" \
                       .format(client_id,
-                              ",".join(affinity_list))
+                              ",".join([str(cpu_core_id) for cpu_core_id in affinity_list]))
             log_message(logger, message, "INFO")
 
     def _set_attribute(self,
@@ -264,6 +266,9 @@ class FlowerNumpyClient(NumPyClient):
         if "num_testing_examples_available" in config:
             num_testing_examples_available = len(self.get_attribute("_x_test"))
             config.update({"num_testing_examples_available": num_testing_examples_available})
+        if "hostname" in config:
+            hostname = self.get_attribute("_hostname")
+            config.update({"hostname": hostname})
         # Return the properties requested by the server.
         return config
 

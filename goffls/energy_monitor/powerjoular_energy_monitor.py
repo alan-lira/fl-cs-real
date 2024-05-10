@@ -9,11 +9,15 @@ class PowerJoularEnergyMonitor:
     def __init__(self,
                  env_variables: dict,
                  monitoring_domains: list,
-                 unit: str) -> None:
+                 unit: str,
+                 process_monitoring: bool,
+                 report_consumptions_per_second: bool) -> None:
         # Initialize the attributes.
         self._env_variables = env_variables
         self._monitoring_domains = monitoring_domains
         self._unit = unit
+        self._process_monitoring = process_monitoring
+        self._report_consumptions_per_second = report_consumptions_per_second
         self._monitoring_tag = None
         self._to_monitor_pid = None
         self._energy_consumptions_temp_file = None
@@ -38,6 +42,7 @@ class PowerJoularEnergyMonitor:
               to_monitor_pid: any) -> None:
         # Get the necessary attributes.
         env_variables = self.get_attribute("_env_variables")
+        process_monitoring = self.get_attribute("_process_monitoring")
         # Load the password from the environment variable.
         pw = getenv(env_variables["pw"])
         # Set the monitoring tag.
@@ -48,7 +53,7 @@ class PowerJoularEnergyMonitor:
         energy_consumptions_temp_file = Path("energy_consumptions_temp_" + str(randint(1, 9999999))).absolute()
         self._set_attribute("_energy_consumptions_temp_file", energy_consumptions_temp_file)
         # Define the PowerJoular monitoring command.
-        if isinstance(to_monitor_pid, int):
+        if process_monitoring and isinstance(to_monitor_pid, int):
             monitoring_command = "sudo -S powerjoular -p {0} -f {1}".format(to_monitor_pid,
                                                                             energy_consumptions_temp_file).split()
         else:
@@ -76,7 +81,54 @@ class PowerJoularEnergyMonitor:
         # Kill the PowerJoular monitoring process.
         powerjoular_monitoring_process.kill()
 
-    def get_energy_consumptions(self) -> dict:
+    def _get_energy_consumptions_per_second(self) -> dict:
+        # Initialize the energy consumptions dictionary.
+        energy_consumptions = {}
+        # Get the necessary attributes.
+        monitoring_domains = self.get_attribute("_monitoring_domains")
+        monitoring_tag = self.get_attribute("_monitoring_tag")
+        to_monitor_pid = self.get_attribute("_to_monitor_pid")
+        energy_consumptions_temp_file = self.get_attribute("_energy_consumptions_temp_file")
+        # If the energy consumptions temporary file exists...
+        if energy_consumptions_temp_file.is_file():
+            with open(energy_consumptions_temp_file, mode="r") as file:
+                next(file)  # Skip the header line.
+                # Iterate through the timestamp lines.
+                for line in file:
+                    line_split = line.strip().split(",")
+                    # Get the current timestamp.
+                    timestamp = str(line_split[0])
+                    # Get the Total energy consumption for the current timestamp, returned as Joules (J).
+                    total_energy = float(line_split[2])
+                    # Get the CPU energy consumption for the current timestamp, returned as Joules (J).
+                    energy_cpu = float(line_split[3])
+                    # Get the NVIDIA GPU energy consumption for the current timestamp, returned as Joules (J).
+                    energy_nvidia_gpu = float(line_split[4])
+                    # Initialize the energy consumptions dictionary of current timestamp.
+                    energy_consumptions_t = {}
+                    # Iterate through the list of monitoring domains.
+                    for monitoring_domain in monitoring_domains:
+                        if monitoring_domain == "Total":
+                            # Add the Total energy consumptions sum to the energy consumptions dictionary.
+                            energy_consumptions_t.update({monitoring_tag + "_total": total_energy})
+                        elif monitoring_domain == "CPU":
+                            # Add the CPU energy consumptions sum to the energy consumptions dictionary.
+                            energy_consumptions_t.update({monitoring_tag + "_cpu": energy_cpu})
+                        elif monitoring_domain == "NVIDIA_GPU":
+                            # Add the NVIDIA GPU energy consumptions sum to the energy consumptions dictionary.
+                            energy_consumptions_t.update({monitoring_tag + "_nvidia_gpu": energy_nvidia_gpu})
+                    energy_consumptions.update({timestamp: energy_consumptions_t})
+            # Remove the energy consumptions temporary file.
+            energy_consumptions_temp_file.unlink(missing_ok=True)
+            # Remove the auto-generated energy consumptions .csv file, if any.
+            if isinstance(to_monitor_pid, int):
+                energy_consumptions_csv_file = Path(str(energy_consumptions_temp_file)
+                                                    + "-{0}.csv".format(to_monitor_pid)).absolute()
+                energy_consumptions_csv_file.unlink(missing_ok=True)
+        # Return the energy consumptions dictionary.
+        return energy_consumptions
+
+    def _get_energy_consumptions_sums(self) -> dict:
         # Initialize the energy consumptions dictionary.
         energy_consumptions = {}
         # Get the necessary attributes.
@@ -122,5 +174,15 @@ class PowerJoularEnergyMonitor:
                 elif monitoring_domain == "NVIDIA_GPU":
                     # Add the NVIDIA GPU energy consumptions sum to the energy consumptions dictionary.
                     energy_consumptions.update({monitoring_tag + "_nvidia_gpu": sum(nvidia_gpu_energy_measurements)})
+        # Return the energy consumptions dictionary.
+        return energy_consumptions
+
+    def get_energy_consumptions(self) -> dict:
+        # Get the necessary attributes.
+        report_consumptions_per_second = self.get_attribute("_report_consumptions_per_second")
+        if report_consumptions_per_second:
+            energy_consumptions = self._get_energy_consumptions_per_second()
+        else:
+            energy_consumptions = self._get_energy_consumptions_sums()
         # Return the energy consumptions dictionary.
         return energy_consumptions
