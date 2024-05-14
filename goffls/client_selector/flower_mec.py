@@ -103,17 +103,17 @@ def _map_available_participating_clients(comm_rounds: list,
                 # If the participating client is available...
                 if client_id_str in available_clients_map:
                     client_proxy = available_clients_map[client_id_str]["client_proxy"]
-                    num_training_examples_available \
-                        = available_clients_map[client_id_str]["num_training_examples_available"]
-                    num_testing_examples_available \
-                        = available_clients_map[client_id_str]["num_testing_examples_available"]
+                    client_num_training_examples_available \
+                        = available_clients_map[client_id_str]["client_num_training_examples_available"]
+                    client_num_testing_examples_available \
+                        = available_clients_map[client_id_str]["client_num_testing_examples_available"]
                     client_metrics = participating_client_dict.values()
                     # Verify if the available participating client has been mapped yet...
                     if client_id_str not in available_participating_clients_map:
                         # If not, append his information and his metrics of the current communication round to the map.
                         client_map = {"client_proxy": client_proxy,
-                                      "num_training_examples_available": num_training_examples_available,
-                                      "num_testing_examples_available": num_testing_examples_available,
+                                      "client_num_training_examples_available": client_num_training_examples_available,
+                                      "client_num_testing_examples_available": client_num_testing_examples_available,
                                       comm_round_key: client_metrics}
                         available_participating_clients_map.update({client_id_str: client_map})
                     else:

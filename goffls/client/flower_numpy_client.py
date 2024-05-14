@@ -3,8 +3,9 @@ from keras.saving import load_model, save_model
 from logging import Logger
 from multiprocessing import Process, Queue, set_start_method
 from numpy.random import randint
-from os import cpu_count, getpid
+from os import getpid
 from pathlib import Path
+from psutil import cpu_count
 from socket import gethostname
 from time import perf_counter, process_time
 
@@ -182,6 +183,7 @@ class FlowerNumpyClient(NumPyClient):
         self._train_measurements_callback = TrainMeasurementsCallback(energy_monitor)
         self._test_measurements_callback = TestMeasurementsCallback(energy_monitor)
         self._hostname = gethostname()
+        self._num_cpus = cpu_count(logical=True)
         # If the daemon mode is enabled...
         if daemon_mode:
             # Set the starting method of daemon processes.
@@ -194,12 +196,16 @@ class FlowerNumpyClient(NumPyClient):
             from os import sched_setaffinity
             # Get the necessary attributes.
             client_id = self.get_attribute("_client_id")
-            # Set the client process affinity (the list of CPU cores eligible for the client).
+            # Set the client process affinity (the list of CPU cores IDs to be used).
             affinity_list = self._get_affinity_list(affinity_method)
             sched_setaffinity(0, affinity_list)
+            # Set the number of CPU cores to be used by the client.
+            num_cpus = len(affinity_list)
+            self._set_attribute("_num_cpus", num_cpus)
             # Log a 'eligible CPU cores' message.
-            message = "[Client {0}] The following CPU cores will be used (list of IDs): {1}" \
+            message = "[Client {0}] {1} CPU cores will be used (list of IDs): {2}" \
                       .format(client_id,
+                              num_cpus,
                               ",".join([str(cpu_core_id) for cpu_core_id in affinity_list]))
             log_message(logger, message, "INFO")
 
@@ -242,8 +248,8 @@ class FlowerNumpyClient(NumPyClient):
                            affinity_method: str) -> list:
         # Get the necessary attributes.
         client_id = self.get_attribute("_client_id")
+        num_cpus = self.get_attribute("_num_cpus")
         affinity_list = []
-        num_cpus = cpu_count()
         cpus_ids = list(range(0, num_cpus))
         if affinity_method == "One_CPU_Core_Only":
             if client_id in cpus_ids:
@@ -260,15 +266,18 @@ class FlowerNumpyClient(NumPyClient):
         if "client_id" in config:
             client_id = self.get_attribute("_client_id")
             config.update({"client_id": client_id})
-        if "num_training_examples_available" in config:
-            num_training_examples_available = len(self.get_attribute("_x_train"))
-            config.update({"num_training_examples_available": num_training_examples_available})
-        if "num_testing_examples_available" in config:
-            num_testing_examples_available = len(self.get_attribute("_x_test"))
-            config.update({"num_testing_examples_available": num_testing_examples_available})
-        if "hostname" in config:
-            hostname = self.get_attribute("_hostname")
-            config.update({"hostname": hostname})
+        if "client_hostname" in config:
+            client_hostname = self.get_attribute("_hostname")
+            config.update({"client_hostname": client_hostname})
+        if "client_num_cpus" in config:
+            client_num_cpus = self.get_attribute("_num_cpus")
+            config.update({"client_num_cpus": client_num_cpus})
+        if "client_num_training_examples_available" in config:
+            client_num_training_examples_available = len(self.get_attribute("_x_train"))
+            config.update({"client_num_training_examples_available": client_num_training_examples_available})
+        if "client_num_testing_examples_available" in config:
+            client_num_testing_examples_available = len(self.get_attribute("_x_test"))
+            config.update({"client_num_testing_examples_available": client_num_testing_examples_available})
         # Return the properties requested by the server.
         return config
 

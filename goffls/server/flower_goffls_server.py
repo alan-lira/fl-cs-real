@@ -54,6 +54,7 @@ class FlowerGOFFLSServer(Strategy):
         self._evaluate_config = evaluate_config
         self._initial_parameters = initial_parameters
         self._logger = logger
+        self._available_clients_map = {}
         self._selected_fit_clients_history = {}
         self._selected_evaluate_clients_history = {}
         self._individual_fit_metrics_history = {}
@@ -106,23 +107,34 @@ class FlowerGOFFLSServer(Strategy):
         return fit_config
 
     @staticmethod
-    def _map_available_clients(available_clients: dict) -> dict:
+    def _map_available_clients(client_manager: ClientManager) -> dict:
+        available_clients = client_manager.all()
         available_clients_map = {}
         for _, client_proxy in available_clients.items():
             client_id_property = "client_id"
-            num_training_examples_available_property = "num_training_examples_available"
-            num_testing_examples_available_property = "num_testing_examples_available"
+            client_hostname_property = "client_hostname"
+            client_num_cpus_property = "client_num_cpus"
+            client_num_training_examples_available_property = "client_num_training_examples_available"
+            client_num_testing_examples_available_property = "client_num_testing_examples_available"
             gpi = GetPropertiesIns({client_id_property: "?",
-                                    num_training_examples_available_property: "?",
-                                    num_testing_examples_available_property: "?"})
+                                    client_hostname_property: "?",
+                                    client_num_cpus_property: "?",
+                                    client_num_training_examples_available_property: "?",
+                                    client_num_testing_examples_available_property: "?"})
             client_prompted = client_proxy.get_properties(gpi, timeout=9999)
             client_id = client_prompted.properties[client_id_property]
-            num_training_examples_available = client_prompted.properties[num_training_examples_available_property]
-            num_testing_examples_available = client_prompted.properties[num_testing_examples_available_property]
+            client_hostname = client_prompted.properties[client_hostname_property]
+            client_num_cpus = client_prompted.properties[client_num_cpus_property]
+            client_num_training_examples_available = \
+                client_prompted.properties[client_num_training_examples_available_property]
+            client_num_testing_examples_available = \
+                client_prompted.properties[client_num_testing_examples_available_property]
             client_id_str = "client_{0}".format(client_id)
             client_map = {"client_proxy": client_proxy,
-                          "num_training_examples_available": num_training_examples_available,
-                          "num_testing_examples_available": num_testing_examples_available}
+                          "client_hostname": client_hostname,
+                          "client_num_cpus": client_num_cpus,
+                          "client_num_training_examples_available": client_num_training_examples_available,
+                          "client_num_testing_examples_available": client_num_testing_examples_available}
             available_clients_map.update({client_id_str: client_map})
         return available_clients_map
 
@@ -179,12 +191,12 @@ class FlowerGOFFLSServer(Strategy):
         fit_config = self._update_fit_config(server_round)
         # Initialize the list of the selected clients for training (selected_fit_clients).
         selected_fit_clients = []
-        # Get the available fit clients.
-        available_fit_clients = client_manager.all()
-        # Get the number of available fit clients.
-        num_available_fit_clients = len(available_fit_clients)
         # Map the available fit clients.
-        available_fit_clients_map = self._map_available_clients(available_fit_clients)
+        available_fit_clients_map = self._map_available_clients(client_manager)
+        # Set the available clients map.
+        self._set_attribute("_available_clients_map", available_fit_clients_map)
+        # Get the number of available fit clients.
+        num_available_fit_clients = len(available_fit_clients_map)
         # Set the phase value.
         phase = "train"
         # Start the clients selection duration timer.
@@ -244,6 +256,72 @@ class FlowerGOFFLSServer(Strategy):
             fit_pairs.append((selected_fit_client_proxy, selected_fit_client_instructions))
         # Return the list of (fit_client_proxy, fit_client_instructions) pairs.
         return fit_pairs
+
+    @staticmethod
+    def _calculate_energy_timestamp_metrics_of_client_hostname(metrics: list[tuple[int, Metrics]],
+                                                               phase: str,
+                                                               hostname: str) -> None:
+        clients_key = "{0}ing_clients".format(phase)
+        energy_cpu_key = "{0}ing_energy_cpu".format(phase)
+        energy_cpu_timestamp = energy_cpu_key + "_"
+        energy_cpu_timestamps = {}
+        for metric_tuple in metrics:
+            client_metrics = metric_tuple[1]
+            client_hostname = client_metrics["client_hostname"]
+            if client_hostname == hostname:
+                client_id = client_metrics["client_id"]
+                client_num_cpus = client_metrics["client_num_cpus"]
+                client_energy_cpu_timestamps = []
+                client_metrics_to_delete = []
+                for client_metric_key, client_metric_value in client_metrics.items():
+                    if energy_cpu_timestamp in client_metric_key:
+                        client_timestamp = client_metric_key.split(energy_cpu_timestamp, 1)[1]
+                        client_energy_cpu_timestamps.append({client_timestamp: client_metric_value})
+                        client_metrics_to_delete.append(client_metric_key)
+                for client_metric_to_delete in client_metrics_to_delete:
+                    del client_metrics[client_metric_to_delete]
+                client_energy_cpu_timestamps = sorted(client_energy_cpu_timestamps, key=lambda x: list(x.keys()))
+                for client_energy_cpu_timestamp in client_energy_cpu_timestamps:
+                    for client_timestamp, client_metric_value in client_energy_cpu_timestamp.items():
+                        if client_timestamp not in energy_cpu_timestamps:
+                            energy_cpu_timestamp_dict = {energy_cpu_key: [client_metric_value],
+                                                         clients_key: [client_id],
+                                                         "total_cpus": client_num_cpus}
+                            energy_cpu_timestamps.update({client_timestamp: energy_cpu_timestamp_dict})
+                        else:
+                            energy_cpu_timestamps[client_timestamp][energy_cpu_key].append(client_metric_value)
+                            energy_cpu_timestamps[client_timestamp][clients_key].append(client_id)
+                            total_cpus = energy_cpu_timestamps[client_timestamp]["total_cpus"] + client_num_cpus
+                            energy_cpu_timestamps[client_timestamp]["total_cpus"] = total_cpus
+        for metric_tuple in metrics:
+            client_metrics = metric_tuple[1]
+            client_hostname = client_metrics["client_hostname"]
+            if client_hostname == hostname:
+                client_id = client_metrics["client_id"]
+                client_num_cpus = client_metrics["client_num_cpus"]
+                client_energy_cpu = 0
+                for _, energy_cpu_timestamp_dict in energy_cpu_timestamps.items():
+                    if energy_cpu_key in energy_cpu_timestamp_dict:
+                        clients = energy_cpu_timestamp_dict[clients_key]
+                        if client_id in clients:
+                            client_index = clients.index(client_id)
+                            energy_cpu = energy_cpu_timestamp_dict[energy_cpu_key][client_index]
+                            total_cpus = energy_cpu_timestamp_dict["total_cpus"]
+                            client_energy_cpu_t = (client_num_cpus * energy_cpu) / total_cpus
+                            client_energy_cpu += client_energy_cpu_t
+                        client_metrics.update({energy_cpu_key: client_energy_cpu})
+
+    def _calculate_energy_timestamp_metrics(self,
+                                            metrics: list[tuple[int, Metrics]],
+                                            phase: str) -> None:
+        hostnames = []
+        for metric_tuple in metrics:
+            client_metrics = metric_tuple[1]
+            client_hostname = client_metrics["client_hostname"]
+            hostnames.append(client_hostname)
+        hostnames = list(set(hostnames))
+        for hostname in hostnames:
+            self._calculate_energy_timestamp_metrics_of_client_hostname(metrics, phase, hostname)
 
     def _update_individual_fit_metrics_history(self,
                                                comm_round: int,
@@ -312,10 +390,24 @@ class FlowerGOFFLSServer(Strategy):
         metrics_aggregator = metrics_aggregation_settings["metrics_aggregator"]
         server_id = self.get_attribute("_server_id")
         logger = self.get_attribute("_logger")
+        available_clients_map = self.get_attribute("_available_clients_map")
+        # Update (from the available clients map) the hostname and number of CPUs for each participating client.
+        for metric_tuple in fit_metrics:
+            client_metrics = metric_tuple[1]
+            client_id = client_metrics["client_id"]
+            client_id_str = "client_{0}".format(client_id)
+            client_hostname = available_clients_map[client_id_str]["client_hostname"]
+            client_num_cpus = available_clients_map[client_id_str]["client_num_cpus"]
+            client_metrics.update({"client_hostname": client_hostname,
+                                   "client_num_cpus": client_num_cpus})
+        # Set the phase value.
+        phase = "train"
+        # Calculate the energy timestamp metrics.
+        self._calculate_energy_timestamp_metrics(fit_metrics, phase)
         # Update the individual training metrics history.
         self._update_individual_fit_metrics_history(comm_round, fit_metrics)
         # Remove the undesired metrics, if any.
-        undesired_metrics = ["client_id"]
+        undesired_metrics = ["client_id", "client_hostname", "client_num_cpus"]
         fit_metrics = self._remove_undesired_metrics(fit_metrics, undesired_metrics)
         # Initialize the aggregated training metrics dictionary (aggregated_fit_metrics).
         aggregated_fit_metrics = {}
@@ -439,12 +531,12 @@ class FlowerGOFFLSServer(Strategy):
         evaluate_config = self._update_evaluate_config(server_round)
         # Initialize the list of the selected clients for testing (selected_evaluate_clients).
         selected_evaluate_clients = []
-        # Get the available evaluate clients.
-        available_evaluate_clients = client_manager.all()
-        # Get the number of available evaluate clients.
-        num_available_evaluate_clients = len(available_evaluate_clients)
         # Map the available evaluate clients.
-        available_evaluate_clients_map = self._map_available_clients(available_evaluate_clients)
+        available_evaluate_clients_map = self._map_available_clients(client_manager)
+        # Set the available clients map.
+        self._set_attribute("_available_clients_map", available_evaluate_clients_map)
+        # Get the number of available evaluate clients.
+        num_available_evaluate_clients = len(available_evaluate_clients_map)
         # Set the phase value.
         phase = "test"
         # Start the clients selection duration timer.
@@ -562,10 +654,24 @@ class FlowerGOFFLSServer(Strategy):
         metrics_aggregator = metrics_aggregation_settings["metrics_aggregator"]
         server_id = self.get_attribute("_server_id")
         logger = self.get_attribute("_logger")
+        available_clients_map = self.get_attribute("_available_clients_map")
+        # Update (from the available clients map) the hostname and number of CPUs for each participating client.
+        for metric_tuple in evaluate_metrics:
+            client_metrics = metric_tuple[1]
+            client_id = client_metrics["client_id"]
+            client_id_str = "client_{0}".format(client_id)
+            client_hostname = available_clients_map[client_id_str]["client_hostname"]
+            client_num_cpus = available_clients_map[client_id_str]["client_num_cpus"]
+            client_metrics.update({"client_hostname": client_hostname,
+                                   "client_num_cpus": client_num_cpus})
+        # Set the phase value.
+        phase = "test"
+        # Calculate the energy timestamp metrics.
+        self._calculate_energy_timestamp_metrics(evaluate_metrics, phase)
         # Update the individual testing metrics history.
         self._update_individual_evaluate_metrics_history(comm_round, evaluate_metrics)
         # Remove the undesired metrics, if any.
-        undesired_metrics = ["client_id"]
+        undesired_metrics = ["client_id", "client_hostname", "client_num_cpus"]
         evaluate_metrics = self._remove_undesired_metrics(evaluate_metrics, undesired_metrics)
         # Initialize the aggregated testing metrics dictionary (aggregated_evaluate_metrics).
         aggregated_evaluate_metrics = {}
