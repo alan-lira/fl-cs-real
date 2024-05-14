@@ -104,20 +104,23 @@ class PowerJoularEnergyMonitor:
                     energy_cpu = float(line_split[3])
                     # Get the NVIDIA GPU energy consumption for the current timestamp, returned as Joules (J).
                     energy_nvidia_gpu = float(line_split[4])
-                    # Initialize the energy consumptions dictionary of current timestamp.
-                    energy_consumptions_t = {}
                     # Iterate through the list of monitoring domains.
                     for monitoring_domain in monitoring_domains:
                         if monitoring_domain == "Total":
-                            # Add the Total energy consumptions sum to the energy consumptions dictionary.
-                            energy_consumptions_t.update({monitoring_tag + "_total": total_energy})
+                            # Add the Total energy consumptions of current timestamp to energy_consumptions dict.
+                            energy_consumption_key = monitoring_tag + "_total_{0}".format(timestamp)
+                            energy_consumption_value = total_energy
+                            energy_consumptions.update({energy_consumption_key: energy_consumption_value})
                         elif monitoring_domain == "CPU":
-                            # Add the CPU energy consumptions sum to the energy consumptions dictionary.
-                            energy_consumptions_t.update({monitoring_tag + "_cpu": energy_cpu})
+                            # Add the CPU energy consumptions of current timestamp to energy_consumptions dict.
+                            energy_consumption_key = monitoring_tag + "_cpu_{0}".format(timestamp)
+                            energy_consumption_value = energy_cpu
+                            energy_consumptions.update({energy_consumption_key: energy_consumption_value})
                         elif monitoring_domain == "NVIDIA_GPU":
-                            # Add the NVIDIA GPU energy consumptions sum to the energy consumptions dictionary.
-                            energy_consumptions_t.update({monitoring_tag + "_nvidia_gpu": energy_nvidia_gpu})
-                    energy_consumptions.update({timestamp: energy_consumptions_t})
+                            # Add the NVIDIA GPU energy consumptions of current timestamp to energy_consumptions dict.
+                            energy_consumption_key = monitoring_tag + "_nvidia_gpu_{0}".format(timestamp)
+                            energy_consumption_value = energy_nvidia_gpu
+                            energy_consumptions.update({energy_consumption_key: energy_consumption_value})
             # Remove the energy consumptions temporary file.
             energy_consumptions_temp_file.unlink(missing_ok=True)
             # Remove the auto-generated energy consumptions .csv file, if any.
@@ -156,6 +159,23 @@ class PowerJoularEnergyMonitor:
                     total_energy_measurements.append(total_energy)
                     cpu_energy_measurements.append(energy_cpu)
                     nvidia_gpu_energy_measurements.append(energy_nvidia_gpu)
+            # Iterate through the list of monitoring domains.
+            for monitoring_domain in monitoring_domains:
+                if monitoring_domain == "Total":
+                    # Add the Total energy consumptions sums to energy_consumptions dict.
+                    energy_consumption_key = monitoring_tag + "_total"
+                    energy_consumption_value = sum(total_energy_measurements)
+                    energy_consumptions.update({energy_consumption_key: energy_consumption_value})
+                elif monitoring_domain == "CPU":
+                    # Add the CPU energy consumptions sums to energy_consumptions dict.
+                    energy_consumption_key = monitoring_tag + "_cpu"
+                    energy_consumption_value = sum(cpu_energy_measurements)
+                    energy_consumptions.update({energy_consumption_key: energy_consumption_value})
+                elif monitoring_domain == "NVIDIA_GPU":
+                    # Add the NVIDIA GPU energy consumptions sums to energy_consumptions dict.
+                    energy_consumption_key = monitoring_tag + "_nvidia_gpu"
+                    energy_consumption_value = sum(nvidia_gpu_energy_measurements)
+                    energy_consumptions.update({energy_consumption_key: energy_consumption_value})
             # Remove the energy consumptions temporary file.
             energy_consumptions_temp_file.unlink(missing_ok=True)
             # Remove the auto-generated energy consumptions .csv file, if any.
@@ -163,17 +183,6 @@ class PowerJoularEnergyMonitor:
                 energy_consumptions_csv_file = Path(str(energy_consumptions_temp_file)
                                                     + "-{0}.csv".format(to_monitor_pid)).absolute()
                 energy_consumptions_csv_file.unlink(missing_ok=True)
-            # Iterate through the list of monitoring domains.
-            for monitoring_domain in monitoring_domains:
-                if monitoring_domain == "Total":
-                    # Add the Total energy consumptions sum to the energy consumptions dictionary.
-                    energy_consumptions.update({monitoring_tag + "_total": sum(total_energy_measurements)})
-                elif monitoring_domain == "CPU":
-                    # Add the CPU energy consumptions sum to the energy consumptions dictionary.
-                    energy_consumptions.update({monitoring_tag + "_cpu": sum(cpu_energy_measurements)})
-                elif monitoring_domain == "NVIDIA_GPU":
-                    # Add the NVIDIA GPU energy consumptions sum to the energy consumptions dictionary.
-                    energy_consumptions.update({monitoring_tag + "_nvidia_gpu": sum(nvidia_gpu_energy_measurements)})
         # Return the energy consumptions dictionary.
         return energy_consumptions
 
