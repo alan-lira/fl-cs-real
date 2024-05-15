@@ -23,13 +23,7 @@ class FlowerGOFFLSServer(Strategy):
     def __init__(self,
                  *,
                  id_: int,
-                 enable_training: bool,
-                 enable_testing: bool,
-                 accept_clients_failures: bool,
-                 num_fit_tasks: int,
-                 fit_deadline_in_seconds: float,
-                 num_evaluate_tasks: int,
-                 evaluate_deadline_in_seconds: float,
+                 fl_settings: dict,
                  client_selection_settings: dict,
                  model_aggregation_settings: dict,
                  metrics_aggregation_settings: dict,
@@ -40,13 +34,7 @@ class FlowerGOFFLSServer(Strategy):
         # Initialize the attributes.
         super().__init__()
         self._server_id = id_
-        self._enable_training = enable_training
-        self._enable_testing = enable_testing
-        self._accept_clients_failures = accept_clients_failures
-        self._num_fit_tasks = num_fit_tasks
-        self._fit_deadline_in_seconds = fit_deadline_in_seconds
-        self._num_evaluate_tasks = num_evaluate_tasks
-        self._evaluate_deadline_in_seconds = evaluate_deadline_in_seconds
+        self._fl_settings = fl_settings
         self._client_selection_settings = client_selection_settings
         self._model_aggregation_settings = model_aggregation_settings
         self._metrics_aggregation_settings = metrics_aggregation_settings
@@ -177,13 +165,20 @@ class FlowerGOFFLSServer(Strategy):
         """Configure the next round of training.
            \nImplementation of the abstract method from the Strategy class."""
         # Get the necessary attributes.
-        enable_training = self.get_attribute("_enable_training")
-        num_fit_tasks = self.get_attribute("_num_fit_tasks")
-        fit_deadline_in_seconds = self.get_attribute("_fit_deadline_in_seconds")
+        fl_settings = self.get_attribute("_fl_settings")
+        enable_training = fl_settings["enable_training"]
+        num_fit_tasks = fl_settings["num_fit_tasks"]
+        fit_deadline_in_seconds = fl_settings["fit_deadline_in_seconds"]
         client_selection_settings = self.get_attribute("_client_selection_settings")
         client_selector = client_selection_settings["client_selector"]
         individual_fit_metrics_history = self.get_attribute("_individual_fit_metrics_history")
         logger = self.get_attribute("_logger")
+        # Wait for the initial clients to connect before starting the first round.
+        if server_round == 1:
+            wait_for_initial_clients = fl_settings["wait_for_initial_clients"]
+            num_clients_to_wait = wait_for_initial_clients["num_clients_to_wait"]
+            waiting_timeout_in_seconds = wait_for_initial_clients["waiting_timeout_in_seconds"]
+            client_manager.wait_for(num_clients_to_wait, waiting_timeout_in_seconds)
         # Do not configure federated training if it is not enabled.
         if not enable_training:
             return []
@@ -203,12 +198,10 @@ class FlowerGOFFLSServer(Strategy):
         selection_duration_start = perf_counter()
         if client_selector == "Random":
             # Select clients using the Random algorithm.
-            min_available_clients = client_selection_settings["min_available_clients"]
             fit_clients_fraction = client_selection_settings["fit_clients_fraction"]
             selected_fit_clients = select_clients_using_random(client_manager,
                                                                phase,
                                                                num_available_fit_clients,
-                                                               min_available_clients,
                                                                fit_clients_fraction,
                                                                logger)
         elif client_selector == "MEC":
@@ -436,7 +429,8 @@ class FlowerGOFFLSServer(Strategy):
         """Aggregate the model parameters and the training metrics based on the fit_results.
            \nImplementation of the abstract method from the Strategy class."""
         # Get the necessary attributes.
-        accept_clients_failures = self.get_attribute("_accept_clients_failures")
+        fl_settings = self.get_attribute("_fl_settings")
+        accept_clients_failures = fl_settings["accept_clients_failures"]
         model_aggregation_settings = self.get_attribute("_model_aggregation_settings")
         model_aggregator = model_aggregation_settings["model_aggregator"]
         # Do not aggregate if there are no results or if there are clients' failures and failures are not accepted.
@@ -517,9 +511,10 @@ class FlowerGOFFLSServer(Strategy):
         """Configure the next round of testing.
            \nImplementation of the abstract method from the Strategy class."""
         # Get the necessary attributes.
-        enable_testing = self.get_attribute("_enable_testing")
-        num_evaluate_tasks = self.get_attribute("_num_evaluate_tasks")
-        evaluate_deadline_in_seconds = self.get_attribute("_evaluate_deadline_in_seconds")
+        fl_settings = self.get_attribute("_fl_settings")
+        enable_testing = fl_settings["enable_testing"]
+        num_evaluate_tasks = fl_settings["num_evaluate_tasks"]
+        evaluate_deadline_in_seconds = fl_settings["evaluate_deadline_in_seconds"]
         client_selection_settings = self.get_attribute("_client_selection_settings")
         client_selector = client_selection_settings["client_selector"]
         individual_evaluate_metrics_history = self.get_attribute("_individual_evaluate_metrics_history")
@@ -543,12 +538,10 @@ class FlowerGOFFLSServer(Strategy):
         selection_duration_start = perf_counter()
         if client_selector == "Random":
             # Select clients for testing randomly.
-            min_available_clients = client_selection_settings["min_available_clients"]
             evaluate_clients_fraction = client_selection_settings["evaluate_clients_fraction"]
             selected_evaluate_clients = select_clients_using_random(client_manager,
                                                                     phase,
                                                                     num_available_evaluate_clients,
-                                                                    min_available_clients,
                                                                     evaluate_clients_fraction,
                                                                     logger)
         elif client_selector == "MEC":
@@ -700,7 +693,8 @@ class FlowerGOFFLSServer(Strategy):
         """Aggregate the testing metrics based on the evaluate_results.
            \nImplementation of the abstract method from the Strategy class."""
         # Get the necessary attributes.
-        accept_clients_failures = self.get_attribute("_accept_clients_failures")
+        fl_settings = self.get_attribute("_fl_settings")
+        accept_clients_failures = fl_settings["accept_clients_failures"]
         model_aggregation_settings = self.get_attribute("_model_aggregation_settings")
         model_aggregator = model_aggregation_settings["model_aggregator"]
         # Do not aggregate if there are no results or if there are clients' failures and failures are not accepted.

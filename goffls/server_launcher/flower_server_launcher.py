@@ -224,13 +224,6 @@ class FlowerServerLauncher:
         server_id = self.get_attribute("_server_id")
         logger = self.get_attribute("_logger")
         fl_settings = self.get_attribute("_fl_settings")
-        enable_training = fl_settings["enable_training"]
-        enable_testing = fl_settings["enable_testing"]
-        accept_clients_failures = fl_settings["accept_clients_failures"]
-        num_fit_tasks = fl_settings["num_fit_tasks"]
-        fit_deadline_in_seconds = fl_settings["fit_deadline_in_seconds"]
-        num_evaluate_tasks = fl_settings["num_evaluate_tasks"]
-        evaluate_deadline_in_seconds = fl_settings["evaluate_deadline_in_seconds"]
         server_strategy_settings = self.get_attribute("_server_strategy_settings")
         strategy = server_strategy_settings["strategy"]
         client_selection_settings = server_strategy_settings["client_selection"]
@@ -241,13 +234,7 @@ class FlowerServerLauncher:
         if strategy == "GOFFLS":
             # Instantiate the GOFFLS (Generic Optimization Framework for Federated Learning Schedules) server strategy.
             server_strategy = FlowerGOFFLSServer(id_=server_id,
-                                                 enable_training=enable_training,
-                                                 enable_testing=enable_testing,
-                                                 accept_clients_failures=accept_clients_failures,
-                                                 num_fit_tasks=num_fit_tasks,
-                                                 fit_deadline_in_seconds=fit_deadline_in_seconds,
-                                                 num_evaluate_tasks=num_evaluate_tasks,
-                                                 evaluate_deadline_in_seconds=evaluate_deadline_in_seconds,
+                                                 fl_settings=fl_settings,
                                                  client_selection_settings=client_selection_settings,
                                                  model_aggregation_settings=model_aggregation_settings,
                                                  metrics_aggregation_settings=metrics_aggregation_settings,
