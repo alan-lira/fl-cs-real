@@ -24,5 +24,5 @@ setup(name="goffls",
       packages=find_packages(),
       include_package_data=True,
       install_requires=get_requirements_list(__REQUIREMENTS_FILE),
-      python_requires=">=3.8",
+      python_requires=">=3.10",
       entry_points={"console_scripts": ["goffls=goffls.main:main"]})
