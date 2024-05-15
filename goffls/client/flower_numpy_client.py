@@ -13,8 +13,8 @@ from flwr.client import NumPyClient
 from flwr.common import NDArray, NDArrays
 from goffls.energy_monitor.powerjoular_energy_monitor import PowerJoularEnergyMonitor
 from goffls.energy_monitor.pyjoules_energy_monitor import PyJoulesEnergyMonitor
-from goffls.util.logger_util import log_message
-from goffls.util.platform_util import get_system
+from goffls.utils.logger_util import log_message
+from goffls.utils.platform_util import get_system
 
 
 class TrainMeasurementsCallback(Callback):

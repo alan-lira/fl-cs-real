@@ -2,7 +2,7 @@ from logging import Logger
 from numpy import array, inf
 
 from goffls.task_scheduler.mec import mec
-from goffls.util.logger_util import log_message
+from goffls.utils.logger_util import log_message
 
 
 def _select_all_available_clients(available_clients_map: dict,

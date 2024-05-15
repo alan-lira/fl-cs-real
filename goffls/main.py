@@ -7,8 +7,8 @@ from time import perf_counter
 from goffls.client_launcher.flower_client_launcher import FlowerClientLauncher
 from goffls.result_analyzer.result_analyzer import ResultAnalyzer
 from goffls.server_launcher.flower_server_launcher import FlowerServerLauncher
-from goffls.util.logger_util import load_logger, log_message
-from goffls.util.setup_tools_util import get_version
+from goffls.utils.logger_util import load_logger, log_message
+from goffls.utils.setup_tools_util import get_version
 
 # Paths.
 __BASE_PATH = Path(__file__).parent.resolve()

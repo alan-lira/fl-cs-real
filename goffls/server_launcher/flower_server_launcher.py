@@ -6,8 +6,8 @@ from flwr.server import Server, ServerConfig, SimpleClientManager, start_server
 from flwr.server.strategy import Strategy
 
 from goffls.server.flower_goffls_server import FlowerGOFFLSServer
-from goffls.util.config_parser_util import parse_config_section
-from goffls.util.logger_util import load_logger, log_message
+from goffls.utils.config_parser_util import parse_config_section
+from goffls.utils.logger_util import load_logger, log_message
 
 
 class FlowerServerLauncher:

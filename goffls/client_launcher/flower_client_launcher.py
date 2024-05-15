@@ -14,8 +14,8 @@ from flwr.common import NDArray
 from goffls.client.flower_numpy_client import FlowerNumpyClient
 from goffls.energy_monitor.powerjoular_energy_monitor import PowerJoularEnergyMonitor
 from goffls.energy_monitor.pyjoules_energy_monitor import PyJoulesEnergyMonitor
-from goffls.util.config_parser_util import parse_config_section
-from goffls.util.logger_util import load_logger, log_message
+from goffls.utils.config_parser_util import parse_config_section
+from goffls.utils.logger_util import load_logger, log_message
 
 
 class FlowerClientLauncher:

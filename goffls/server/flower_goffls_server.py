@@ -15,7 +15,7 @@ from goffls.client_selector.flower_random import select_clients_using_random
 from goffls.metrics_aggregator.flower_weighted_average import aggregate_loss_by_weighted_average, \
     aggregate_metrics_by_weighted_average
 from goffls.model_aggregator.flower_weighted_average import aggregate_parameters_by_weighted_average
-from goffls.util.logger_util import log_message
+from goffls.utils.logger_util import log_message
 
 
 class FlowerGOFFLSServer(Strategy):
