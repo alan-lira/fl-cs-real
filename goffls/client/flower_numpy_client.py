@@ -336,7 +336,7 @@ class FlowerNumpyClient(NumPyClient):
         model_training_result = {"history": history,
                                  "training_elapsed_time": training_elapsed_time,
                                  "training_cpu_time": training_cpu_time,
-                                 "energy_consumptions": training_energy_consumptions}
+                                 "training_energy_consumptions": training_energy_consumptions}
         fit_queue.put({"model_training_result": model_training_result})
 
     def fit(self,
