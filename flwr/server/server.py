@@ -398,8 +398,8 @@ def _handle_finished_future_after_fit(
     client_id = client_prompted.properties[client_id_property]
     client_id_prompt_duration = timeit.default_timer() - client_id_prompt_start
     elapsed_time += client_id_prompt_duration
-    client_training_time = result[1].metrics["training_time"]
-    client_communication_time = elapsed_time - client_training_time
+    client_training_elapsed_time = result[1].metrics["training_elapsed_time"]
+    client_communication_time = elapsed_time - client_training_elapsed_time
     result[1].metrics.update({"communication_time": client_communication_time,
                               "client_id": client_id})
     _, res = result
@@ -471,8 +471,8 @@ def _handle_finished_future_after_evaluate(
     client_id = client_prompted.properties[client_id_property]
     client_id_prompt_duration = timeit.default_timer() - client_id_prompt_start
     elapsed_time += client_id_prompt_duration
-    client_testing_time = result[1].metrics["testing_time"]
-    client_communication_time = elapsed_time - client_testing_time
+    client_testing_elapsed_time = result[1].metrics["testing_elapsed_time"]
+    client_communication_time = elapsed_time - client_testing_elapsed_time
     result[1].metrics.update({"communication_time": client_communication_time,
                               "client_id": client_id})
     _, res = result
