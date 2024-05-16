@@ -286,6 +286,7 @@ class FlowerGOFFLSServer(Strategy):
                             energy_cpu_timestamps[client_timestamp][clients_key].append(client_id)
                             total_cpus = energy_cpu_timestamps[client_timestamp]["total_cpus"] + client_num_cpus
                             energy_cpu_timestamps[client_timestamp]["total_cpus"] = total_cpus
+        energy_cpu_timestamps = dict(sorted(energy_cpu_timestamps.items()))
         for metric_tuple in metrics:
             client_metrics = metric_tuple[1]
             client_hostname = client_metrics["client_hostname"]
