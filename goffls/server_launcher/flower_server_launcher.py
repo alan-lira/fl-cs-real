@@ -403,6 +403,7 @@ class FlowerServerLauncher:
                 num_tasks = comm_round_values["num_tasks"]
                 num_available_clients = comm_round_values["num_available_clients"]
                 clients_metrics_dicts = comm_round_values["clients_metrics_dicts"]
+                clients_metrics_dicts = sorted(clients_metrics_dicts, key=lambda x: list(x.keys()))
                 for client_metrics_dict in clients_metrics_dicts:
                     client_id_str = list(client_metrics_dict.keys())[0]
                     client_metrics = list(client_metrics_dict.values())[0]
@@ -512,6 +513,7 @@ class FlowerServerLauncher:
                 num_tasks = comm_round_values["num_tasks"]
                 num_available_clients = comm_round_values["num_available_clients"]
                 clients_metrics_dicts = comm_round_values["clients_metrics_dicts"]
+                clients_metrics_dicts = sorted(clients_metrics_dicts, key=lambda x: list(x.keys()))
                 for client_metrics_dict in clients_metrics_dicts:
                     client_id_str = list(client_metrics_dict.keys())[0]
                     client_metrics = list(client_metrics_dict.values())[0]
