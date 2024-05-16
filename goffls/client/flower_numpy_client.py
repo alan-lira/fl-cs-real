@@ -61,6 +61,14 @@ class TrainingMeasurementsCallback(Callback):
 
     def on_train_end(self,
                      logs=None) -> None:
+        # Get the model training time start (CPU and elapsed times).
+        training_elapsed_time_start = self.get_attribute("_training_elapsed_time_start")
+        training_cpu_time_start = self.get_attribute("_training_cpu_time_start")
+        # Set the model training duration (CPU and elapsed times).
+        training_elapsed_time = perf_counter() - training_elapsed_time_start
+        training_cpu_time = process_time() - training_cpu_time_start
+        self._set_attribute("_training_elapsed_time", training_elapsed_time)
+        self._set_attribute("_training_cpu_time", training_cpu_time)
         # Get the energy consumption monitor.
         energy_monitor = self.get_attribute("_energy_monitor")
         # If there is an energy consumption monitor...
@@ -76,14 +84,6 @@ class TrainingMeasurementsCallback(Callback):
                 training_energy_consumptions = energy_monitor.get_energy_consumptions()
             # Set the model training energy consumptions.
             self._set_attribute("_training_energy_consumptions", training_energy_consumptions)
-        # Get the model training time start (CPU and elapsed times).
-        training_elapsed_time_start = self.get_attribute("_training_elapsed_time_start")
-        training_cpu_time_start = self.get_attribute("_training_cpu_time_start")
-        # Set the model training duration (CPU and elapsed times).
-        training_elapsed_time = perf_counter() - training_elapsed_time_start
-        training_cpu_time = process_time() - training_cpu_time_start
-        self._set_attribute("_training_elapsed_time", training_elapsed_time)
-        self._set_attribute("_training_cpu_time", training_cpu_time)
 
 
 class TestingMeasurementsCallback(Callback):
@@ -130,6 +130,14 @@ class TestingMeasurementsCallback(Callback):
 
     def on_test_end(self,
                     logs=None) -> None:
+        # Get the model testing time start (CPU and elapsed times).
+        testing_elapsed_time_start = self.get_attribute("_testing_elapsed_time_start")
+        testing_cpu_time_start = self.get_attribute("_testing_cpu_time_start")
+        # Set the model testing duration (CPU and elapsed times).
+        testing_elapsed_time = perf_counter() - testing_elapsed_time_start
+        testing_cpu_time = process_time() - testing_cpu_time_start
+        self._set_attribute("_testing_elapsed_time", testing_elapsed_time)
+        self._set_attribute("_testing_cpu_time", testing_cpu_time)
         # Get the energy consumption monitor.
         energy_monitor = self.get_attribute("_energy_monitor")
         # If there is an energy consumption monitor...
@@ -145,14 +153,6 @@ class TestingMeasurementsCallback(Callback):
                 testing_energy_consumptions = energy_monitor.get_energy_consumptions()
             # Set the model testing energy consumptions.
             self._set_attribute("_testing_energy_consumptions", testing_energy_consumptions)
-        # Get the model testing time start (CPU and elapsed times).
-        testing_elapsed_time_start = self.get_attribute("_testing_elapsed_time_start")
-        testing_cpu_time_start = self.get_attribute("_testing_cpu_time_start")
-        # Set the model testing duration (CPU and elapsed times).
-        testing_elapsed_time = perf_counter() - testing_elapsed_time_start
-        testing_cpu_time = process_time() - testing_cpu_time_start
-        self._set_attribute("_testing_elapsed_time", testing_elapsed_time)
-        self._set_attribute("_testing_cpu_time", testing_cpu_time)
 
 
 class FlowerNumpyClient(NumPyClient):
