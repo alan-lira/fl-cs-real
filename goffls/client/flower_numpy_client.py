@@ -165,9 +165,8 @@ class FlowerNumpyClient(NumPyClient):
                  x_test: NDArray,
                  y_test: NDArray,
                  energy_monitor: any,
-                 daemon_mode: bool,
-                 daemon_start_method: str,
-                 affinity_method: str,
+                 daemon_settings: dict,
+                 affinity_settings: dict,
                  logger: Logger) -> None:
         # Initialize the attributes.
         self._client_id = id_
@@ -177,19 +176,19 @@ class FlowerNumpyClient(NumPyClient):
         self._x_test = x_test
         self._y_test = y_test
         self._energy_monitor = energy_monitor
-        self._daemon_mode = daemon_mode
+        self._daemon_settings = daemon_settings
+        self._affinity_settings = affinity_settings
         self._logger = logger
         self._model_file = None
         self._training_measurements_callback = TrainingMeasurementsCallback(energy_monitor)
         self._testing_measurements_callback = TestingMeasurementsCallback(energy_monitor)
         self._hostname = gethostname()
         self._num_cpus = cpu_count(logical=True)
-        # If the daemon mode is enabled...
-        if daemon_mode:
-            # Set the starting method of daemon processes.
-            set_start_method(daemon_start_method)
-            # Dump the local model to file.
-            self._save_model(model)
+        # Set the starting method of daemon processes.
+        self._set_starting_method_of_daemon_processes()
+        # Set the list of CPU cores to be used by the client (Linux only).
+        self._set_list_of_cpu_cores()
+
         # If the operating system is Linux...
         if get_system() == "Linux":
             # Import the necessary functions.
@@ -197,7 +196,7 @@ class FlowerNumpyClient(NumPyClient):
             # Get the necessary attributes.
             client_id = self.get_attribute("_client_id")
             # Set the client process affinity (the list of CPU cores IDs to be used).
-            affinity_list = self._get_affinity_list(affinity_method)
+            affinity_list = self._get_affinity_list()
             sched_setaffinity(0, affinity_list)
             # Set the number of CPU cores to be used by the client.
             num_cpus = len(affinity_list)
@@ -222,8 +221,9 @@ class FlowerNumpyClient(NumPyClient):
                     model: any) -> None:
         # Get the necessary attributes.
         client_id = self.get_attribute("_client_id")
-        daemon_mode = self.get_attribute("_daemon_mode")
-        if daemon_mode:
+        daemon_settings = self.get_attribute("_daemon_settings")
+        enable_daemon_mode = daemon_settings["enable_daemon_mode"]
+        if enable_daemon_mode:
             # Set the local model file path.
             model_file = Path("output/models/flower_client_{0}.keras".format(client_id)).absolute()
             model_file.parent.mkdir(exist_ok=True, parents=True)
@@ -235,6 +235,62 @@ class FlowerNumpyClient(NumPyClient):
             # Set the local model.
             self._set_attribute("_model", model)
 
+    def _set_starting_method_of_daemon_processes(self) -> None:
+        # Get the necessary attributes.
+        daemon_settings = self.get_attribute("_daemon_settings")
+        enable_daemon_mode = daemon_settings["enable_daemon_mode"]
+        start_method = daemon_settings["start_method"]
+        model = self.get_attribute("_model")
+        # If the daemon mode is enabled...
+        if enable_daemon_mode:
+            # Set the starting method of daemon processes.
+            set_start_method(start_method)
+            # Dump the local model to file.
+            self._save_model(model)
+
+    def _get_affinity_list(self) -> list:
+        # Get the necessary attributes.
+        client_id = self.get_attribute("_client_id")
+        num_cpus = self.get_attribute("_num_cpus")
+        affinity_settings = self.get_attribute("_affinity_settings")
+        affinity_method = affinity_settings["affinity_method"]
+        affinity_list = []
+        cpus_ids = list(range(0, num_cpus))
+        if affinity_method == "One_CPU_Core_Only":
+            if client_id in cpus_ids:
+                cpu_index = client_id
+            else:
+                cpu_index = client_id % num_cpus
+            cpu_to_allocate = [cpus_ids[cpu_index]]
+            affinity_list.extend(cpu_to_allocate)
+        elif affinity_method == "CPU_Cores_List":
+            cpu_cores_list = affinity_settings["cpu_cores_list"]
+            if not cpu_cores_list:
+                cpu_cores_list = cpus_ids
+            affinity_list.extend(cpu_cores_list)
+        return affinity_list
+
+    def _set_list_of_cpu_cores(self) -> None:
+        # If the operating system is Linux...
+        if get_system() == "Linux":
+            # Import the necessary functions.
+            from os import sched_setaffinity
+            # Get the necessary attributes.
+            client_id = self.get_attribute("_client_id")
+            logger = self.get_attribute("_logger")
+            # Set the client process affinity (the list of CPU cores IDs to be used).
+            affinity_list = self._get_affinity_list()
+            sched_setaffinity(0, affinity_list)
+            # Set the number of CPU cores to be used by the client.
+            num_cpus = len(affinity_list)
+            self._set_attribute("_num_cpus", num_cpus)
+            # Log a 'eligible CPU cores' message.
+            message = "[Client {0}] {1} CPU cores will be used (list of IDs): {2}" \
+                      .format(client_id,
+                              num_cpus,
+                              ",".join([str(cpu_core_id) for cpu_core_id in affinity_list]))
+            log_message(logger, message, "INFO")
+
     def _load_model(self) -> any:
         # Get the necessary attributes.
         model = self.get_attribute("_model")
@@ -243,22 +299,6 @@ class FlowerNumpyClient(NumPyClient):
             # Load the local model from file.
             model = load_model(filepath=model_file, compile=True, safe_mode=True)
         return model
-
-    def _get_affinity_list(self,
-                           affinity_method: str) -> list:
-        # Get the necessary attributes.
-        client_id = self.get_attribute("_client_id")
-        num_cpus = self.get_attribute("_num_cpus")
-        affinity_list = []
-        cpus_ids = list(range(0, num_cpus))
-        if affinity_method == "One_CPU_Core_Only":
-            if client_id in cpus_ids:
-                cpu_index = client_id
-            else:
-                cpu_index = client_id % num_cpus
-            cpu_to_allocate = cpus_ids[cpu_index]
-            affinity_list.append(cpu_to_allocate)
-        return affinity_list
 
     def get_properties(self,
                        config: dict) -> dict:
@@ -347,7 +387,8 @@ class FlowerNumpyClient(NumPyClient):
         client_id = self.get_attribute("_client_id")
         x_train = self.get_attribute("_x_train")
         y_train = self.get_attribute("_y_train")
-        daemon_mode = self.get_attribute("_daemon_mode")
+        daemon_settings = self.get_attribute("_daemon_settings")
+        enable_daemon_mode = daemon_settings["enable_daemon_mode"]
         logger = self.get_attribute("_logger")
         # Initialize the training metrics dictionary.
         training_metrics = {}
@@ -372,13 +413,13 @@ class FlowerNumpyClient(NumPyClient):
         log_message(logger, message, "DEBUG")
         # Log a 'training the model' message.
         message = "[Client {0} | Round {1}] Training the model (daemon mode: {2})..." \
-                  .format(client_id, comm_round, str(daemon_mode).lower())
+                  .format(client_id, comm_round, str(enable_daemon_mode).lower())
         log_message(logger, message, "INFO")
         # Unset the logger.
         self._set_attribute("_logger", None)
         # Initialize the model training queue (fit_queue).
         fit_queue = Queue()
-        if daemon_mode:
+        if enable_daemon_mode:
             # Launch the model training process.
             target = self._train_model
             args = (global_parameters, x_train_sliced, y_train_sliced, fit_config, fit_queue)
@@ -459,7 +500,8 @@ class FlowerNumpyClient(NumPyClient):
         client_id = self.get_attribute("_client_id")
         x_test = self.get_attribute("_x_test")
         y_test = self.get_attribute("_y_test")
-        daemon_mode = self.get_attribute("_daemon_mode")
+        daemon_settings = self.get_attribute("_daemon_settings")
+        enable_daemon_mode = daemon_settings["enable_daemon_mode"]
         logger = self.get_attribute("_logger")
         # Initialize the testing metrics dictionary.
         testing_metrics = {}
@@ -485,13 +527,13 @@ class FlowerNumpyClient(NumPyClient):
         log_message(logger, message, "DEBUG")
         # Log a 'testing the model' message.
         message = "[Client {0} | Round {1}] Testing the model (daemon mode: {2})..." \
-                  .format(client_id, comm_round, str(daemon_mode).lower())
+                  .format(client_id, comm_round, str(enable_daemon_mode).lower())
         log_message(logger, message, "INFO")
         # Unset the logger.
         self._set_attribute("_logger", None)
         # Initialize the model testing queue (evaluate_queue).
         evaluate_queue = Queue()
-        if daemon_mode:
+        if enable_daemon_mode:
             # Launch the model testing process.
             target = self._test_model
             args = (global_parameters, x_test_sliced, y_test_sliced, evaluate_config, evaluate_queue)

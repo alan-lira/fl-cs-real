@@ -342,9 +342,8 @@ class FlowerClientLauncher:
                                    x_test: NDArray,
                                    y_test: NDArray,
                                    energy_monitor: any,
-                                   daemon_mode: bool,
-                                   daemon_start_method: str,
-                                   affinity_method: str,
+                                   daemon_settings: dict,
+                                   affinity_settings: dict,
                                    logger: Logger) -> Client:
         # Instantiate the flower client.
         flower_client = FlowerNumpyClient(id_=id_,
@@ -354,9 +353,8 @@ class FlowerClientLauncher:
                                           x_test=x_test,
                                           y_test=y_test,
                                           energy_monitor=energy_monitor,
-                                          daemon_mode=daemon_mode,
-                                          daemon_start_method=daemon_start_method,
-                                          affinity_method=affinity_method,
+                                          daemon_settings=daemon_settings,
+                                          affinity_settings=affinity_settings,
                                           logger=logger)
         flower_client = flower_client.to_client()
         # Return the flower server.
@@ -377,9 +375,8 @@ class FlowerClientLauncher:
         # Get the necessary attributes.
         client_id = self.get_attribute("_client_id")
         logger = self.get_attribute("_logger")
-        daemon_mode = self.get_attribute("_daemon_settings")["enable_daemon_mode"]
-        daemon_start_method = self.get_attribute("_daemon_settings")["start_method"]
-        affinity_method = self.get_attribute("_affinity_settings")["affinity_method"]
+        daemon_settings = self.get_attribute("_daemon_settings")
+        affinity_settings = self.get_attribute("_affinity_settings")
         # Get the Secure Socket Layer (SSL) certificates (SSL-enabled secure connection).
         ssl_certificates = self._get_ssl_certificates()
         # Get the flower server address (IP address and port).
@@ -398,8 +395,7 @@ class FlowerClientLauncher:
         model = self._instantiate_and_compile_model(optimizer, loss_function)
         # Instantiate the flower client.
         flower_client = self._instantiate_flower_client(client_id, model, x_train, y_train, x_test, y_test,
-                                                        energy_monitor, daemon_mode, daemon_start_method,
-                                                        affinity_method, logger)
+                                                        energy_monitor, daemon_settings, affinity_settings, logger)
         # Start the flower client.
         self._start_flower_client(flower_server_address,
                                   flower_client,
