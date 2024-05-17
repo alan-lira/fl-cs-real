@@ -189,25 +189,6 @@ class FlowerNumpyClient(NumPyClient):
         # Set the list of CPU cores to be used by the client (Linux only).
         self._set_list_of_cpu_cores()
 
-        # If the operating system is Linux...
-        if get_system() == "Linux":
-            # Import the necessary functions.
-            from os import sched_setaffinity
-            # Get the necessary attributes.
-            client_id = self.get_attribute("_client_id")
-            # Set the client process affinity (the list of CPU cores IDs to be used).
-            affinity_list = self._get_affinity_list()
-            sched_setaffinity(0, affinity_list)
-            # Set the number of CPU cores to be used by the client.
-            num_cpus = len(affinity_list)
-            self._set_attribute("_num_cpus", num_cpus)
-            # Log a 'eligible CPU cores' message.
-            message = "[Client {0}] {1} CPU cores will be used (list of IDs): {2}" \
-                      .format(client_id,
-                              num_cpus,
-                              ",".join([str(cpu_core_id) for cpu_core_id in affinity_list]))
-            log_message(logger, message, "INFO")
-
     def _set_attribute(self,
                        attribute_name: str,
                        attribute_value: any) -> None:
