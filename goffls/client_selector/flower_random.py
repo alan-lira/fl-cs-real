@@ -14,7 +14,7 @@ def select_clients_using_random(client_manager: ClientManager,
     message = "Selecting {0}ing clients using Random...".format(phase)
     log_message(logger, message, "INFO")
     selected_clients = []
-    num_clients_to_select = int(num_available_clients * clients_fraction)
+    num_clients_to_select = max(1, int(num_available_clients * clients_fraction))
     sampled_clients_proxies = client_manager.sample(num_clients_to_select)
     for sampled_client_proxy in sampled_clients_proxies:
         selected_clients.append({"client_proxy": sampled_client_proxy})
