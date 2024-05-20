@@ -105,7 +105,7 @@ def _map_available_participating_clients(comm_rounds: list,
             # If so, get the individual metrics entry for the communication round.
             individual_metrics_entry_comm_round = individual_metrics_history[comm_round_key]
             # Iterate through the list of clients who participated on the communication round.
-            for participating_client_dict in individual_metrics_entry_comm_round:
+            for participating_client_dict in individual_metrics_entry_comm_round["clients_metrics_dicts"]:
                 client_id_str = list(participating_client_dict.keys())[0]
                 # If the participating client is available...
                 if client_id_str in available_clients_map:
@@ -137,7 +137,7 @@ def _get_metric_mean_value(individual_metrics_history: dict,
     metric_mean_value = 0
     metric_values = []
     for comm_round_key, individual_metrics_entry_comm_round in individual_metrics_history.items():
-        for participating_client_dict in individual_metrics_entry_comm_round:
+        for participating_client_dict in individual_metrics_entry_comm_round["clients_metrics_dicts"]:
             if client_key in participating_client_dict:
                 comm_round_num_examples_used = participating_client_dict[client_key][num_examples_key]
                 if comm_round_num_examples_used == num_examples_used:
