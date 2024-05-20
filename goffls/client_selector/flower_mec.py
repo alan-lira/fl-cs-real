@@ -1,5 +1,6 @@
 from logging import Logger
 from numpy import array, inf
+from typing import Union
 
 from goffls.task_scheduler.mec import mec
 from goffls.utils.logger_util import log_message
@@ -10,16 +11,22 @@ def _select_all_available_clients(available_clients_map: dict,
     selected_clients = []
     for client_key, client_values in available_clients_map.items():
         client_proxy = client_values["client_proxy"]
-        client_capacity = client_values["num_{0}ing_examples_available".format(phase)]
+        client_capacity = client_values["client_num_{0}ing_examples_available".format(phase)]
         selected_clients.append({"client_proxy": client_proxy,
                                  "client_capacity": client_capacity,
                                  "client_num_tasks_scheduled": 0})
     return selected_clients
 
 
-def _sum_selected_clients_capacities(selected_clients: list) -> int:
-    selected_clients_capacities_sum = sum([client["client_capacity"] for client in selected_clients])
-    return selected_clients_capacities_sum
+def _sum_clients_capacities(clients: Union[list, dict],
+                            phase: str) -> int:
+    clients_capacities_sum = 0
+    if isinstance(clients, list):
+        clients_capacities_sum = sum([client["client_capacity"] for client in clients])
+    elif isinstance(clients, dict):
+        clients_capacities_sum = sum([client_values["client_num_{0}ing_examples_available".format(phase)]
+                                      for _, client_values in clients.items()])
+    return clients_capacities_sum
 
 
 def _schedule_tasks_to_selected_clients(num_tasks_to_schedule: int,
@@ -172,7 +179,7 @@ def select_clients_using_mec(comm_round: int,
         # If not, this means it is the first communication round. Therefore, all available clients will be selected.
         selected_all_available_clients = _select_all_available_clients(available_clients_map, phase)
         # Get the maximum number of tasks that can be scheduled to the selected clients.
-        selected_clients_capacities_sum = _sum_selected_clients_capacities(selected_all_available_clients)
+        selected_clients_capacities_sum = _sum_clients_capacities(selected_all_available_clients, phase)
         # Redefine the number of tasks to schedule, if the selected clients capacities sum is lower.
         num_tasks_to_schedule = min(num_tasks_to_schedule, selected_clients_capacities_sum)
         # Schedule the tasks to the selected clients.
@@ -195,6 +202,11 @@ def select_clients_using_mec(comm_round: int,
         # Set the number of resources,
         # based on the number of available clients with entries in the individual metrics history.
         num_resources = len(available_participating_clients_map)
+        # Get the maximum number of tasks that can be scheduled to the available participating clients.
+        available_participating_clients_capacities_sum = _sum_clients_capacities(available_participating_clients_map,
+                                                                                 phase)
+        # Redefine the number of tasks to schedule, if the available participating clients capacities sum is lower.
+        num_tasks_to_schedule = min(num_tasks_to_schedule, available_participating_clients_capacities_sum)
         # Initialize the global lists that will be transformed to array.
         client_ids = []
         assignment_capacities = []
@@ -270,7 +282,7 @@ def select_clients_using_mec(comm_round: int,
                 lower_bound = assignment_capacities_init_settings["lower_bound"]
                 upper_bound = assignment_capacities_init_settings["upper_bound"]
                 if upper_bound == "client_capacity":
-                    upper_bound = client_values["num_{0}ing_examples_available".format(phase)]
+                    upper_bound = client_values["client_num_{0}ing_examples_available".format(phase)]
                 step = assignment_capacities_init_settings["step"]
                 custom_range = list(range(lower_bound, min(upper_bound+1, num_tasks_to_schedule+1), step))
                 previous_num_tasks_assigned = [list(comm_round_metrics)[0]["num_{0}ing_examples_used".format(phase)]
@@ -346,7 +358,7 @@ def select_clients_using_mec(comm_round: int,
             client_id_str = client_ids[sel_index]
             client_map = available_participating_clients_map[client_id_str]
             client_proxy = client_map["client_proxy"]
-            client_capacity = client_map["num_{0}ing_examples_available".format(phase)]
+            client_capacity = client_map["client_num_{0}ing_examples_available".format(phase)]
             client_num_tasks_scheduled = int(optimal_schedule[sel_index])
             selected_clients.append({"client_proxy": client_proxy,
                                      "client_capacity": client_capacity,
