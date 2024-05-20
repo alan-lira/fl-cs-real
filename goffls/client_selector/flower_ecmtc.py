@@ -227,7 +227,7 @@ def select_clients_using_ecmtc(comm_round: int,
                 num_examples_key = "num_{0}ing_examples_used".format(phase)
                 num_examples = individual_metrics_history_entry[num_examples_key]
                 # Get the time spent by him (if available).
-                time_key = "{0}ing_time".format(phase)
+                time_key = "{0}ing_elapsed_time".format(phase)
                 if time_key in individual_metrics_history_entry:
                     # Update his time costs list for this number of examples.
                     time_cost = individual_metrics_history_entry[time_key]
