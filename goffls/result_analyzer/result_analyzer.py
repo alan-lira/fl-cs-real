@@ -829,18 +829,18 @@ class ResultAnalyzer:
                                                      (results_df["num_available_clients"] == n_available_clients) &
                                                      (results_df["comm_round"] == "comm_round_{0}".format(comm_round)) &
                                                      (results_df["client_selector"] == client_selector)]
-                            # If the current metric name equals to 'max_training_time'...
-                            if metric_name == "max_training_time":
-                                if "training_time" in filtered_df.columns:
-                                    # Get the maximum training time among the participating clients (Makespan).
-                                    max_training_time = filtered_df["training_time"].max()
-                                    # Convert the maximum training time, if needed to.
-                                    max_training_time, time_unit_symbol = self._convert_time(max_training_time,
-                                                                                             time_unit_to_output)
-                                    # Append the maximum training time to the plotting data.
+                            # If the current metric name equals to 'max_training_elapsed_time'...
+                            if metric_name == "max_training_elapsed_time":
+                                if "training_elapsed_time" in filtered_df.columns:
+                                    # Get the maximum training elapsed time among the participating clients (Makespan).
+                                    max_training_elapsed_time = filtered_df["training_elapsed_time"].max()
+                                    # Convert the maximum training elapsed time, if needed to.
+                                    max_training_elapsed_time, time_unit_symbol \
+                                        = self._convert_time(max_training_elapsed_time, time_unit_to_output)
+                                    # Append the maximum training elapsed time to the plotting data.
                                     plotting_data.append({"comm_round": comm_round,
                                                           "client_selector": client_selector,
-                                                          "max_training_time": max_training_time})
+                                                          "max_training_elapsed_time": max_training_elapsed_time})
                             # If the current metric name equals to 'sum_training_energy_cpu'...
                             elif metric_name == "sum_training_energy_cpu":
                                 if "training_energy_cpu" in filtered_df.columns:
@@ -871,11 +871,11 @@ class ResultAnalyzer:
                                                           "mean_accuracy": mean_accuracy})
                     # If there is data to plot...
                     if plotting_data:
-                        # If the current metric name equals to 'max_training_time'...
-                        if metric_name == "max_training_time":
+                        # If the current metric name equals to 'max_training_elapsed_time'...
+                        if metric_name == "max_training_elapsed_time":
                             # Set the 'y_data' value, if equals to 'Auto'.
                             if y_data == "Auto":
-                                y_data_new = "max_training_time"
+                                y_data_new = "max_training_elapsed_time"
                                 plotting_settings["y_data"] = y_data_new
                             # Set the 'y_label' value, if equals to 'Auto'.
                             if y_label == "Auto":
@@ -1086,18 +1086,18 @@ class ResultAnalyzer:
                                                      (results_df["num_available_clients"] == n_available_clients) &
                                                      (results_df["comm_round"] == "comm_round_{0}".format(comm_round)) &
                                                      (results_df["client_selector"] == client_selector)]
-                            # If the current metric name equals to 'max_testing_time'...
-                            if metric_name == "max_testing_time":
-                                if "testing_time" in filtered_df.columns:
-                                    # Get the maximum testing time among the participating clients (Makespan).
-                                    max_testing_time = filtered_df["testing_time"].max()
-                                    # Convert the maximum testing time, if needed to.
-                                    max_testing_time, time_unit_symbol = self._convert_time(max_testing_time,
-                                                                                            time_unit_to_output)
-                                    # Append the maximum testing time to the plotting data.
+                            # If the current metric name equals to 'max_testing_elapsed_time'...
+                            if metric_name == "max_testing_elapsed_time":
+                                if "testing_elapsed_time" in filtered_df.columns:
+                                    # Get the maximum testing elapsed time among the participating clients (Makespan).
+                                    max_testing_elapsed_time = filtered_df["testing_elapsed_time"].max()
+                                    # Convert the maximum testing elapsed time, if needed to.
+                                    max_testing_elapsed_time, time_unit_symbol \
+                                        = self._convert_time(max_testing_elapsed_time, time_unit_to_output)
+                                    # Append the maximum testing elapsed time to the plotting data.
                                     plotting_data.append({"comm_round": comm_round,
                                                           "client_selector": client_selector,
-                                                          "max_testing_time": max_testing_time})
+                                                          "max_testing_elapsed_time": max_testing_elapsed_time})
                             # If the current metric name equals to 'sum_testing_energy_cpu'...
                             elif metric_name == "sum_testing_energy_cpu":
                                 if "testing_energy_cpu" in filtered_df.columns:
@@ -1128,11 +1128,11 @@ class ResultAnalyzer:
                                                           "mean_accuracy": mean_accuracy})
                     # If there is data to plot...
                     if plotting_data:
-                        # If the current metric name equals to 'max_testing_time'...
-                        if metric_name == "max_testing_time":
+                        # If the current metric name equals to 'max_testing_elapsed_time'...
+                        if metric_name == "max_testing_elapsed_time":
                             # Set the 'y_data' value, if equals to 'Auto'.
                             if y_data == "Auto":
-                                y_data_new = "max_testing_time"
+                                y_data_new = "max_testing_elapsed_time"
                                 plotting_settings["y_data"] = y_data_new
                             # Set the 'y_label' value, if equals to 'Auto'.
                             if y_label == "Auto":
