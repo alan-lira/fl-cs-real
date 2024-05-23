@@ -146,6 +146,9 @@ class PowerJoularEnergyMonitor:
         unique_monitor = self.get_attribute("_unique_monitor")
         remove_energy_consumptions_files = self.get_attribute("_remove_energy_consumptions_files")
         energy_consumptions_file = self.get_attribute("_energy_consumptions_file")
+        # Set the energy consumptions file as the default one, if needed.
+        if not energy_consumptions_file:
+            energy_consumptions_file = Path("energy_consumptions").absolute()
         # If the energy consumptions file exists...
         if energy_consumptions_file.is_file():
             # Initialize the timestamps_consumptions dict.
@@ -207,6 +210,9 @@ class PowerJoularEnergyMonitor:
         unique_monitor = self.get_attribute("_unique_monitor")
         remove_energy_consumptions_files = self.get_attribute("_remove_energy_consumptions_files")
         energy_consumptions_file = self.get_attribute("_energy_consumptions_file")
+        # Set the energy consumptions file as the default one, if needed.
+        if not energy_consumptions_file:
+            energy_consumptions_file = Path("energy_consumptions").absolute()
         # If the energy consumptions file exists...
         if energy_consumptions_file.is_file():
             # Initialize the timestamps_consumptions dict.
