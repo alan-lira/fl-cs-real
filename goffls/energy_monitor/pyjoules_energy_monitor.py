@@ -13,7 +13,6 @@ class PyJoulesEnergyMonitor:
         # Initialize the attributes.
         self._monitoring_domains = monitoring_domains
         self._unit = unit
-        self._monitoring_tag = None
         self._energy_monitor = None
         # Load the energy monitor.
         self._load_energy_monitor()
@@ -83,8 +82,6 @@ class PyJoulesEnergyMonitor:
         if energy_monitor:
             # Start the energy consumption monitoring.
             energy_monitor.start(tag=monitoring_tag)
-        # Set the monitoring tag.
-        self._set_attribute("_monitoring_tag", monitoring_tag)
 
     def stop(self) -> None:
         # Get the necessary attributes.
@@ -93,13 +90,13 @@ class PyJoulesEnergyMonitor:
             # Stop the energy consumption monitoring.
             energy_monitor.stop()
 
-    def get_energy_consumptions(self) -> dict:
+    def get_energy_consumptions(self,
+                                monitoring_tag: str) -> dict:
         # Initialize the energy consumptions dictionary.
         energy_consumptions = {}
         # Get the necessary attributes.
         energy_monitor = self.get_attribute("_energy_monitor")
         unit = self.get_attribute("_unit")
-        monitoring_tag = self.get_attribute("_monitoring_tag")
         if energy_monitor:
             last_trace = vars(energy_monitor.get_trace()[0])
             if last_trace["tag"] == monitoring_tag:

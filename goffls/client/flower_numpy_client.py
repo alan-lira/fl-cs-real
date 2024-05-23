@@ -1,3 +1,4 @@
+from datetime import datetime
 from keras.callbacks import Callback
 from keras.saving import load_model, save_model
 from logging import Logger
@@ -24,6 +25,8 @@ class TrainingMeasurementsCallback(Callback):
         super().__init__()
         # Initialize the attributes.
         self._energy_monitor = energy_monitor
+        self._energy_monitor_tag = "training_energy"
+        self._training_start_timestamp = None
         self._training_elapsed_time_start = None
         self._training_elapsed_time = None
         self._training_cpu_time_start = None
@@ -43,34 +46,39 @@ class TrainingMeasurementsCallback(Callback):
                        logs=None) -> None:
         # Get the energy consumption monitor.
         energy_monitor = self.get_attribute("_energy_monitor")
+        energy_monitor_tag = self.get_attribute("_energy_monitor_tag")
         # If there is an energy consumption monitor...
         if energy_monitor:
-            # Set the energy consumption monitor's monitoring tag.
-            monitoring_tag = "training_energy"
             # Start the model training energy consumption monitoring.
             if isinstance(energy_monitor, PyJoulesEnergyMonitor):
-                energy_monitor.start(monitoring_tag)
+                energy_monitor.start(energy_monitor_tag)
             elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
                 model_training_pid = getpid()
-                energy_monitor.start(monitoring_tag, model_training_pid)
-        # Set the model training time start (CPU and elapsed times).
+                energy_monitor.start(model_training_pid)
+        # Set the model training start.
         training_elapsed_time_start = perf_counter()
         training_cpu_time_start = process_time()
+        training_start_timestamp = datetime.now()
         self._set_attribute("_training_elapsed_time_start", training_elapsed_time_start)
         self._set_attribute("_training_cpu_time_start", training_cpu_time_start)
+        self._set_attribute("_training_start_timestamp", training_start_timestamp)
 
     def on_train_end(self,
                      logs=None) -> None:
-        # Get the model training time start (CPU and elapsed times).
+        # Get the model training start.
         training_elapsed_time_start = self.get_attribute("_training_elapsed_time_start")
         training_cpu_time_start = self.get_attribute("_training_cpu_time_start")
-        # Set the model training duration (CPU and elapsed times).
+        training_start_timestamp = self.get_attribute("_training_start_timestamp")
+        # Set the model training duration (elapsed and CPU times).
         training_elapsed_time = perf_counter() - training_elapsed_time_start
         training_cpu_time = process_time() - training_cpu_time_start
         self._set_attribute("_training_elapsed_time", training_elapsed_time)
         self._set_attribute("_training_cpu_time", training_cpu_time)
+        # Get the model training end timestamp.
+        training_end_timestamp = datetime.now()
         # Get the energy consumption monitor.
         energy_monitor = self.get_attribute("_energy_monitor")
+        energy_monitor_tag = self.get_attribute("_energy_monitor_tag")
         # If there is an energy consumption monitor...
         if energy_monitor:
             # Initialize the model training energy consumptions.
@@ -78,10 +86,12 @@ class TrainingMeasurementsCallback(Callback):
             # Stop the model training energy consumption monitoring and get the energy consumptions measurements.
             if isinstance(energy_monitor, PyJoulesEnergyMonitor):
                 energy_monitor.stop()
-                training_energy_consumptions = energy_monitor.get_energy_consumptions()
+                training_energy_consumptions = energy_monitor.get_energy_consumptions(energy_monitor_tag)
             elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
                 energy_monitor.stop()
-                training_energy_consumptions = energy_monitor.get_energy_consumptions()
+                training_energy_consumptions = energy_monitor.get_energy_consumptions(energy_monitor_tag,
+                                                                                      training_start_timestamp,
+                                                                                      training_end_timestamp)
             # Set the model training energy consumptions.
             self._set_attribute("_training_energy_consumptions", training_energy_consumptions)
 
@@ -93,6 +103,8 @@ class TestingMeasurementsCallback(Callback):
         super().__init__()
         # Initialize the attributes.
         self._energy_monitor = energy_monitor
+        self._energy_monitor_tag = "testing_energy"
+        self._testing_start_timestamp = None
         self._testing_elapsed_time_start = None
         self._testing_elapsed_time = None
         self._testing_cpu_time_start = None
@@ -112,34 +124,39 @@ class TestingMeasurementsCallback(Callback):
                       logs=None) -> None:
         # Get the energy consumption monitor.
         energy_monitor = self.get_attribute("_energy_monitor")
+        energy_monitor_tag = self.get_attribute("_energy_monitor_tag")
         # If there is an energy consumption monitor...
         if energy_monitor:
-            # Set the energy consumption monitor's monitoring tag.
-            monitoring_tag = "testing_energy"
             # Start the model testing energy consumption monitoring.
             if isinstance(energy_monitor, PyJoulesEnergyMonitor):
-                energy_monitor.start(monitoring_tag)
+                energy_monitor.start(energy_monitor_tag)
             elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
                 model_testing_pid = getpid()
-                energy_monitor.start(monitoring_tag, model_testing_pid)
-        # Set the model testing time start (CPU and elapsed times).
+                energy_monitor.start(model_testing_pid)
+        # Set the model testing start.
         testing_elapsed_time_start = perf_counter()
         testing_cpu_time_start = process_time()
+        testing_start_timestamp = datetime.now()
         self._set_attribute("_testing_elapsed_time_start", testing_elapsed_time_start)
         self._set_attribute("_testing_cpu_time_start", testing_cpu_time_start)
+        self._set_attribute("_testing_start_timestamp", testing_start_timestamp)
 
     def on_test_end(self,
                     logs=None) -> None:
-        # Get the model testing time start (CPU and elapsed times).
+        # Get the model testing start.
         testing_elapsed_time_start = self.get_attribute("_testing_elapsed_time_start")
         testing_cpu_time_start = self.get_attribute("_testing_cpu_time_start")
-        # Set the model testing duration (CPU and elapsed times).
+        testing_start_timestamp = self.get_attribute("_testing_start_timestamp")
+        # Set the model testing duration (elapsed and CPU times).
         testing_elapsed_time = perf_counter() - testing_elapsed_time_start
         testing_cpu_time = process_time() - testing_cpu_time_start
         self._set_attribute("_testing_elapsed_time", testing_elapsed_time)
         self._set_attribute("_testing_cpu_time", testing_cpu_time)
+        # Get the model testing end timestamp.
+        testing_end_timestamp = datetime.now()
         # Get the energy consumption monitor.
         energy_monitor = self.get_attribute("_energy_monitor")
+        energy_monitor_tag = self.get_attribute("_energy_monitor_tag")
         # If there is an energy consumption monitor...
         if energy_monitor:
             # Initialize the model testing energy consumptions.
@@ -147,10 +164,12 @@ class TestingMeasurementsCallback(Callback):
             # Stop the model testing energy consumption monitoring and get the energy consumptions measurements.
             if isinstance(energy_monitor, PyJoulesEnergyMonitor):
                 energy_monitor.stop()
-                testing_energy_consumptions = energy_monitor.get_energy_consumptions()
+                testing_energy_consumptions = energy_monitor.get_energy_consumptions(energy_monitor_tag)
             elif isinstance(energy_monitor, PowerJoularEnergyMonitor):
                 energy_monitor.stop()
-                testing_energy_consumptions = energy_monitor.get_energy_consumptions()
+                testing_energy_consumptions = energy_monitor.get_energy_consumptions(energy_monitor_tag,
+                                                                                     testing_start_timestamp,
+                                                                                     testing_end_timestamp)
             # Set the model testing energy consumptions.
             self._set_attribute("_testing_energy_consumptions", testing_energy_consumptions)
 

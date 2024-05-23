@@ -245,12 +245,16 @@ class FlowerClientLauncher:
                 monitoring_domains = energy_monitor_settings["monitoring_domains"]
                 unit = energy_monitor_settings["unit"]
                 process_monitoring = energy_monitor_settings["process_monitoring"]
-                report_consumptions_per_second = energy_monitor_settings["report_consumptions_per_second"]
+                unique_monitor = energy_monitor_settings["unique_monitor"]
+                report_consumptions_per_timestamp = energy_monitor_settings["report_consumptions_per_timestamp"]
+                remove_energy_consumptions_files = energy_monitor_settings["remove_energy_consumptions_files"]
                 energy_monitor = PowerJoularEnergyMonitor(env_variables,
                                                           monitoring_domains,
                                                           unit,
                                                           process_monitoring,
-                                                          report_consumptions_per_second)
+                                                          unique_monitor,
+                                                          report_consumptions_per_timestamp,
+                                                          remove_energy_consumptions_files)
         # Return the energy monitor.
         return energy_monitor
 
@@ -393,6 +397,13 @@ class FlowerClientLauncher:
         loss_function = self._instantiate_loss_function()
         # Instantiate and compile the model.
         model = self._instantiate_and_compile_model(optimizer, loss_function)
+        # Verify if the energy consumptions monitor to be used is PowerJoular.
+        if isinstance(energy_monitor, PowerJoularEnergyMonitor):
+            # Verify if only one monitoring process is allowed to run in the system.
+            unique_monitor = energy_monitor.get_attribute("_unique_monitor")
+            if unique_monitor:
+                # If so, start the unique PowerJoular monitoring process.
+                energy_monitor.start()
         # Instantiate the flower client.
         flower_client = self._instantiate_flower_client(client_id, model, x_train, y_train, x_test, y_test,
                                                         energy_monitor, daemon_settings, affinity_settings, logger)
@@ -401,5 +412,13 @@ class FlowerClientLauncher:
                                   flower_client,
                                   max_message_length_in_bytes,
                                   ssl_certificates)
+        # Verify if the energy consumptions monitor used was PowerJoular.
+        if isinstance(energy_monitor, PowerJoularEnergyMonitor):
+            # Verify if only one monitoring process was allowed to run in the system.
+            unique_monitor = energy_monitor.get_attribute("_unique_monitor")
+            if unique_monitor:
+                # If so, stop the unique PowerJoular monitoring process and remove the unique energy consumptions file.
+                energy_monitor.stop()
+                energy_monitor.remove_energy_consumption_files()
         # End.
         exit(0)
