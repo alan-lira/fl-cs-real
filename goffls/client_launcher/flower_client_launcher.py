@@ -400,14 +400,15 @@ class FlowerClientLauncher:
         # Verify if the energy consumptions monitor to be used is PowerJoular
         # and if only one monitoring process is allowed to run in the system.
         if isinstance(energy_monitor, PowerJoularEnergyMonitor) and energy_monitor.get_attribute("_unique_monitor"):
-            # Get the unique PowerJoular attributes dict.
-            powerjoular_unique_dict = vars(energy_monitor)
-            powerjoular_unique_dict.update({"_energy_monitor": "PowerJoular_Unique"})
+            # Get the unique PowerJoular attributes.
+            powerjoular_unique_attributes = vars(energy_monitor)
+            powerjoular_unique_attributes.update({"_energy_monitor": "PowerJoular_Unique"})
+            powerjoular_unique_attributes = list(powerjoular_unique_attributes.items())
             # If so, start the unique PowerJoular monitoring process.
             energy_monitor.start()
             # Instantiate the flower client.
             flower_client = self._instantiate_flower_client(client_id, model, x_train, y_train, x_test, y_test,
-                                                            powerjoular_unique_dict, daemon_settings,
+                                                            powerjoular_unique_attributes, daemon_settings,
                                                             affinity_settings, logger)
             # Start the flower client.
             self._start_flower_client(flower_server_address,

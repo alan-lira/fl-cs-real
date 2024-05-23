@@ -92,7 +92,8 @@ class TrainingMeasurementsCallback(Callback):
                 training_energy_consumptions = energy_monitor.get_energy_consumptions(energy_monitor_tag,
                                                                                       training_start_timestamp,
                                                                                       training_end_timestamp)
-            elif isinstance(energy_monitor, dict):
+            elif isinstance(energy_monitor, list):
+                energy_monitor = dict(energy_monitor)
                 if energy_monitor["_energy_monitor"] == "PowerJoular_Unique":
                     env_variables = energy_monitor["_env_variables"]
                     monitoring_domains = energy_monitor["_monitoring_domains"]
@@ -189,7 +190,8 @@ class TestingMeasurementsCallback(Callback):
                 testing_energy_consumptions = energy_monitor.get_energy_consumptions(energy_monitor_tag,
                                                                                      testing_start_timestamp,
                                                                                      testing_end_timestamp)
-            elif isinstance(energy_monitor, dict):
+            elif isinstance(energy_monitor, list):
+                energy_monitor = dict(energy_monitor)
                 if energy_monitor["_energy_monitor"] == "PowerJoular_Unique":
                     env_variables = energy_monitor["_env_variables"]
                     monitoring_domains = energy_monitor["_monitoring_domains"]
