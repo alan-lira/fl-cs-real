@@ -1,4 +1,5 @@
 from copy import deepcopy
+from dateutil import parser
 from logging import Logger
 from time import perf_counter
 from typing import Dict, List, Optional, Tuple, Union
@@ -293,6 +294,8 @@ class FlowerGOFFLSServer(Strategy):
             if client_hostname == hostname:
                 client_id = client_metrics["client_id"]
                 client_num_cpus = client_metrics["client_num_cpus"]
+                client_start_timestamp = client_metrics["{0}ing_start_timestamp".format(phase)]
+                client_end_timestamp = client_metrics["{0}ing_end_timestamp".format(phase)]
                 client_energy_cpu = 0
                 for _, energy_cpu_timestamp_dict in energy_cpu_timestamps.items():
                     if energy_cpu_key in energy_cpu_timestamp_dict:
@@ -301,7 +304,20 @@ class FlowerGOFFLSServer(Strategy):
                             client_index = clients.index(client_id)
                             energy_cpu = energy_cpu_timestamp_dict[energy_cpu_key][client_index]
                             total_cpus = energy_cpu_timestamp_dict["total_cpus"]
+                            microseconds_diff_factor = 1
+                            if str(client_start_timestamp).startswith(energy_cpu_timestamp):
+                                client_start_timestamp = parser.parse(client_start_timestamp).replace(tzinfo=None)
+                                client_start_timestamp_microseconds = client_start_timestamp.microsecond
+                                if client_start_timestamp_microseconds > 0:
+                                    microseconds_diff_factor = (1000000 - client_start_timestamp_microseconds) / 1000000
+                            if str(client_end_timestamp).startswith(energy_cpu_timestamp):
+                                client_end_timestamp = parser.parse(client_end_timestamp).replace(tzinfo=None)
+                                client_end_timestamp_microseconds = client_end_timestamp.microsecond
+                                if client_end_timestamp_microseconds:
+                                    microseconds_diff_factor \
+                                        = 1 - ((1000000 - client_end_timestamp_microseconds) / 1000000)
                             client_energy_cpu_t = (client_num_cpus * energy_cpu) / total_cpus
+                            client_energy_cpu_t *= microseconds_diff_factor
                             client_energy_cpu += client_energy_cpu_t
                         client_metrics.update({energy_cpu_key: client_energy_cpu})
 
@@ -401,7 +417,8 @@ class FlowerGOFFLSServer(Strategy):
         # Update the individual training metrics history.
         self._update_individual_fit_metrics_history(comm_round, fit_metrics)
         # Remove the undesired metrics, if any.
-        undesired_metrics = ["client_id", "client_hostname", "client_num_cpus"]
+        undesired_metrics = ["client_id", "client_hostname", "client_num_cpus",
+                             "training_start_timestamp", "training_end_timestamp"]
         fit_metrics = self._remove_undesired_metrics(fit_metrics, undesired_metrics)
         # Initialize the aggregated training metrics dictionary (aggregated_fit_metrics).
         aggregated_fit_metrics = {}
@@ -665,7 +682,8 @@ class FlowerGOFFLSServer(Strategy):
         # Update the individual testing metrics history.
         self._update_individual_evaluate_metrics_history(comm_round, evaluate_metrics)
         # Remove the undesired metrics, if any.
-        undesired_metrics = ["client_id", "client_hostname", "client_num_cpus"]
+        undesired_metrics = ["client_id", "client_hostname", "client_num_cpus",
+                             "testing_start_timestamp", "testing_end_timestamp"]
         evaluate_metrics = self._remove_undesired_metrics(evaluate_metrics, undesired_metrics)
         # Initialize the aggregated testing metrics dictionary (aggregated_evaluate_metrics).
         aggregated_evaluate_metrics = {}

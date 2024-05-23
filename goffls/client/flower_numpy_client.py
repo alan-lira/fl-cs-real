@@ -27,6 +27,7 @@ class TrainingMeasurementsCallback(Callback):
         self._energy_monitor = energy_monitor
         self._energy_monitor_tag = "training_energy"
         self._training_start_timestamp = None
+        self._training_end_timestamp = None
         self._training_elapsed_time_start = None
         self._training_elapsed_time = None
         self._training_cpu_time_start = None
@@ -74,8 +75,9 @@ class TrainingMeasurementsCallback(Callback):
         training_cpu_time = process_time() - training_cpu_time_start
         self._set_attribute("_training_elapsed_time", training_elapsed_time)
         self._set_attribute("_training_cpu_time", training_cpu_time)
-        # Get the model training end timestamp.
+        # Set the model training end timestamp.
         training_end_timestamp = datetime.now()
+        self._set_attribute("_training_end_timestamp", training_end_timestamp)
         # Get the energy consumption monitor.
         energy_monitor = self.get_attribute("_energy_monitor")
         energy_monitor_tag = self.get_attribute("_energy_monitor_tag")
@@ -125,6 +127,7 @@ class TestingMeasurementsCallback(Callback):
         self._energy_monitor = energy_monitor
         self._energy_monitor_tag = "testing_energy"
         self._testing_start_timestamp = None
+        self._testing_end_timestamp = None
         self._testing_elapsed_time_start = None
         self._testing_elapsed_time = None
         self._testing_cpu_time_start = None
@@ -172,8 +175,9 @@ class TestingMeasurementsCallback(Callback):
         testing_cpu_time = process_time() - testing_cpu_time_start
         self._set_attribute("_testing_elapsed_time", testing_elapsed_time)
         self._set_attribute("_testing_cpu_time", testing_cpu_time)
-        # Get the model testing end timestamp.
+        # Set the model testing end timestamp.
         testing_end_timestamp = datetime.now()
+        self._set_attribute("_testing_end_timestamp", testing_end_timestamp)
         # Get the energy consumption monitor.
         energy_monitor = self.get_attribute("_energy_monitor")
         energy_monitor_tag = self.get_attribute("_energy_monitor_tag")
@@ -410,10 +414,14 @@ class FlowerNumpyClient(NumPyClient):
         # Save the local model with the parameters (weights) obtained from the training.
         self._save_model(model)
         # Put the model training result into the fit_queue.
+        training_start_timestamp = training_measurements_callback.get_attribute("_training_start_timestamp")
+        training_end_timestamp = training_measurements_callback.get_attribute("_training_end_timestamp")
         training_elapsed_time = training_measurements_callback.get_attribute("_training_elapsed_time")
         training_cpu_time = training_measurements_callback.get_attribute("_training_cpu_time")
         training_energy_consumptions = training_measurements_callback.get_attribute("_training_energy_consumptions")
         model_training_result = {"history": history,
+                                 "training_start_timestamp": str(training_start_timestamp),
+                                 "training_end_timestamp": str(training_end_timestamp),
                                  "training_elapsed_time": training_elapsed_time,
                                  "training_cpu_time": training_cpu_time,
                                  "training_energy_consumptions": training_energy_consumptions}
@@ -474,11 +482,15 @@ class FlowerNumpyClient(NumPyClient):
         fit_queue_element = fit_queue.get()
         model_training_result = fit_queue_element["model_training_result"]
         history = model_training_result["history"]
+        training_start_timestamp = model_training_result["training_start_timestamp"]
+        training_end_timestamp = model_training_result["training_end_timestamp"]
         training_elapsed_time = model_training_result["training_elapsed_time"]
         training_cpu_time = model_training_result["training_cpu_time"]
         training_energy_consumptions = model_training_result["training_energy_consumptions"]
         # Add the model training duration to the training metrics.
-        training_metrics.update({"training_elapsed_time": training_elapsed_time,
+        training_metrics.update({"training_start_timestamp": training_start_timestamp,
+                                 "training_end_timestamp": training_end_timestamp,
+                                 "training_elapsed_time": training_elapsed_time,
                                  "training_cpu_time": training_cpu_time})
         # Add the model training energy consumptions to the training metrics.
         training_metrics = training_metrics | training_energy_consumptions
@@ -523,10 +535,14 @@ class FlowerNumpyClient(NumPyClient):
         # Save the local model with the parameters (weights) received from the server (global parameters).
         self._save_model(model)
         # Put the model testing result into the evaluate_queue.
+        testing_start_timestamp = testing_measurements_callback.get_attribute("_testing_start_timestamp")
+        testing_end_timestamp = testing_measurements_callback.get_attribute("_testing_end_timestamp")
         testing_elapsed_time = testing_measurements_callback.get_attribute("_testing_elapsed_time")
         testing_cpu_time = testing_measurements_callback.get_attribute("_testing_cpu_time")
         testing_energy_consumptions = testing_measurements_callback.get_attribute("_testing_energy_consumptions")
         model_testing_result = {"history": history,
+                                "testing_start_timestamp": str(testing_start_timestamp),
+                                "testing_end_timestamp": str(testing_end_timestamp),
                                 "testing_elapsed_time": testing_elapsed_time,
                                 "testing_cpu_time": testing_cpu_time,
                                 "testing_energy_consumptions": testing_energy_consumptions}
@@ -588,11 +604,15 @@ class FlowerNumpyClient(NumPyClient):
         evaluate_queue_element = evaluate_queue.get()
         model_testing_result = evaluate_queue_element["model_testing_result"]
         history = model_testing_result["history"]
+        testing_start_timestamp = model_testing_result["testing_start_timestamp"]
+        testing_end_timestamp = model_testing_result["testing_end_timestamp"]
         testing_elapsed_time = model_testing_result["testing_elapsed_time"]
         testing_cpu_time = model_testing_result["testing_cpu_time"]
         testing_energy_consumptions = model_testing_result["testing_energy_consumptions"]
         # Add the model testing duration to the testing metrics.
-        testing_metrics.update({"testing_elapsed_time": testing_elapsed_time,
+        testing_metrics.update({"testing_start_timestamp": testing_start_timestamp,
+                                "testing_end_timestamp": testing_end_timestamp,
+                                "testing_elapsed_time": testing_elapsed_time,
                                 "testing_cpu_time": testing_cpu_time})
         # Add the model testing energy consumptions to the testing metrics.
         testing_metrics = testing_metrics | testing_energy_consumptions
