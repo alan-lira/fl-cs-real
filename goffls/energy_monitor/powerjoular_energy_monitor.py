@@ -11,13 +11,13 @@ from typing import Optional
 class PowerJoularEnergyMonitor:
 
     def __init__(self,
-                 env_variables: dict,
-                 monitoring_domains: list,
-                 unit: str,
-                 process_monitoring: bool,
-                 unique_monitor: bool,
-                 report_consumptions_per_timestamp: bool,
-                 remove_energy_consumptions_files: bool) -> None:
+                 env_variables: Optional[dict] = None,
+                 monitoring_domains: Optional[list] = None,
+                 unit: Optional[str] = None,
+                 process_monitoring: Optional[bool] = None,
+                 unique_monitor: Optional[bool] = None,
+                 report_consumptions_per_timestamp: Optional[bool] = None,
+                 remove_energy_consumptions_files: Optional[bool] = None) -> None:
         # Initialize the attributes.
         self._env_variables = env_variables
         self._monitoring_domains = monitoring_domains

@@ -92,6 +92,12 @@ class TrainingMeasurementsCallback(Callback):
                 training_energy_consumptions = energy_monitor.get_energy_consumptions(energy_monitor_tag,
                                                                                       training_start_timestamp,
                                                                                       training_end_timestamp)
+            elif isinstance(energy_monitor, str):
+                if energy_monitor == "Power_Joular_Unique":
+                    pj_unique = PowerJoularEnergyMonitor()
+                    training_energy_consumptions = pj_unique.get_energy_consumptions(energy_monitor_tag,
+                                                                                     training_start_timestamp,
+                                                                                     training_end_timestamp)
             # Set the model training energy consumptions.
             self._set_attribute("_training_energy_consumptions", training_energy_consumptions)
 
@@ -170,6 +176,12 @@ class TestingMeasurementsCallback(Callback):
                 testing_energy_consumptions = energy_monitor.get_energy_consumptions(energy_monitor_tag,
                                                                                      testing_start_timestamp,
                                                                                      testing_end_timestamp)
+            elif isinstance(energy_monitor, str):
+                if energy_monitor == "Power_Joular_Unique":
+                    pj_unique = PowerJoularEnergyMonitor()
+                    testing_energy_consumptions = pj_unique.get_energy_consumptions(energy_monitor_tag,
+                                                                                    testing_start_timestamp,
+                                                                                    testing_end_timestamp)
             # Set the model testing energy consumptions.
             self._set_attribute("_testing_energy_consumptions", testing_energy_consumptions)
 
