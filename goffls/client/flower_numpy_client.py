@@ -92,9 +92,22 @@ class TrainingMeasurementsCallback(Callback):
                 training_energy_consumptions = energy_monitor.get_energy_consumptions(energy_monitor_tag,
                                                                                       training_start_timestamp,
                                                                                       training_end_timestamp)
-            elif isinstance(energy_monitor, str):
-                if energy_monitor == "Power_Joular_Unique":
-                    pj_unique = PowerJoularEnergyMonitor()
+            elif isinstance(energy_monitor, dict):
+                if energy_monitor["_energy_monitor"] == "PowerJoular_Unique":
+                    env_variables = energy_monitor["_env_variables"]
+                    monitoring_domains = energy_monitor["_monitoring_domains"]
+                    unit = energy_monitor["_unit"]
+                    process_monitoring = energy_monitor["_process_monitoring"]
+                    unique_monitor = energy_monitor["_unique_monitor"]
+                    report_consumptions_per_timestamp = energy_monitor["_report_consumptions_per_timestamp"]
+                    remove_energy_consumptions_files = energy_monitor["_remove_energy_consumptions_files"]
+                    pj_unique = PowerJoularEnergyMonitor(env_variables,
+                                                         monitoring_domains,
+                                                         unit,
+                                                         process_monitoring,
+                                                         unique_monitor,
+                                                         report_consumptions_per_timestamp,
+                                                         remove_energy_consumptions_files)
                     training_energy_consumptions = pj_unique.get_energy_consumptions(energy_monitor_tag,
                                                                                      training_start_timestamp,
                                                                                      training_end_timestamp)
@@ -176,9 +189,22 @@ class TestingMeasurementsCallback(Callback):
                 testing_energy_consumptions = energy_monitor.get_energy_consumptions(energy_monitor_tag,
                                                                                      testing_start_timestamp,
                                                                                      testing_end_timestamp)
-            elif isinstance(energy_monitor, str):
-                if energy_monitor == "Power_Joular_Unique":
-                    pj_unique = PowerJoularEnergyMonitor()
+            elif isinstance(energy_monitor, dict):
+                if energy_monitor["_energy_monitor"] == "PowerJoular_Unique":
+                    env_variables = energy_monitor["_env_variables"]
+                    monitoring_domains = energy_monitor["_monitoring_domains"]
+                    unit = energy_monitor["_unit"]
+                    process_monitoring = energy_monitor["_process_monitoring"]
+                    unique_monitor = energy_monitor["_unique_monitor"]
+                    report_consumptions_per_timestamp = energy_monitor["_report_consumptions_per_timestamp"]
+                    remove_energy_consumptions_files = energy_monitor["_remove_energy_consumptions_files"]
+                    pj_unique = PowerJoularEnergyMonitor(env_variables,
+                                                         monitoring_domains,
+                                                         unit,
+                                                         process_monitoring,
+                                                         unique_monitor,
+                                                         report_consumptions_per_timestamp,
+                                                         remove_energy_consumptions_files)
                     testing_energy_consumptions = pj_unique.get_energy_consumptions(energy_monitor_tag,
                                                                                     testing_start_timestamp,
                                                                                     testing_end_timestamp)
