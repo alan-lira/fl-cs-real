@@ -1,3 +1,4 @@
+#!/bin/bash
 # Script begin.
 
 # Get the number of provided arguments.

@@ -1,3 +1,5 @@
+#!/bin/bash
+# Script begin.
 
 powerjoular_version=0.7.3
 

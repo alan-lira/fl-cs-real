@@ -1,3 +1,4 @@
+#!/bin/bash
 # Script begin.
 
 # Get the number of provided arguments.
@@ -38,6 +39,7 @@ implementation=${3}
 # Launch the clients (background processes).
 for ((client_id = 0; client_id < $num_clients; client_id++)); do
     python3 main.py launch_client --id $client_id --config-file $config_file --implementation $implementation &
+    sleep 1
 done
 
 # Print the number of clients launched.
