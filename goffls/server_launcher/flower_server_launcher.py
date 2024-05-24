@@ -6,8 +6,8 @@ from flwr.server import Server, ServerConfig, SimpleClientManager, start_server
 from flwr.server.strategy import Strategy
 
 from goffls.server.flower_goffls_server import FlowerGOFFLSServer
-from goffls.util.config_parser_util import parse_config_section
-from goffls.util.logger_util import load_logger, log_message
+from goffls.utils.config_parser_util import parse_config_section
+from goffls.utils.logger_util import load_logger, log_message
 
 
 class FlowerServerLauncher:
@@ -118,7 +118,7 @@ class FlowerServerLauncher:
         logging_settings = self.get_attribute("_logging_settings")
         server_id = self.get_attribute("_server_id")
         # Append the server's id to the output file name.
-        file_name = Path(logging_settings["file_name"])
+        file_name = Path(logging_settings["file_name"]).absolute()
         file_name = str(file_name.parent.joinpath(file_name.stem + "_{0}".format(server_id) + file_name.suffix))
         logging_settings["file_name"] = file_name
         # Set the logger name.
@@ -194,7 +194,7 @@ class FlowerServerLauncher:
         return evaluate_config
 
     def _load_initial_parameters(self) -> Optional[NDArrays]:
-        """Server-side parameter initialization. A powerful mechanism which can be used, for example:
+        """Server-side parameter initialization. A powerful mechanism which can be used, for instance:
         \n - To resume the training from a previously saved checkpoint;
         \n - To implement hybrid approaches, such as to fine-tune a pre-trained model using federated learning.
         \n If no parameters are set, the server will randomly select one client and ask its parameters."""
@@ -224,13 +224,6 @@ class FlowerServerLauncher:
         server_id = self.get_attribute("_server_id")
         logger = self.get_attribute("_logger")
         fl_settings = self.get_attribute("_fl_settings")
-        enable_training = fl_settings["enable_training"]
-        enable_testing = fl_settings["enable_testing"]
-        accept_clients_failures = fl_settings["accept_clients_failures"]
-        num_fit_tasks = fl_settings["num_fit_tasks"]
-        fit_deadline_in_seconds = fl_settings["fit_deadline_in_seconds"]
-        num_evaluate_tasks = fl_settings["num_evaluate_tasks"]
-        evaluate_deadline_in_seconds = fl_settings["evaluate_deadline_in_seconds"]
         server_strategy_settings = self.get_attribute("_server_strategy_settings")
         strategy = server_strategy_settings["strategy"]
         client_selection_settings = server_strategy_settings["client_selection"]
@@ -241,13 +234,7 @@ class FlowerServerLauncher:
         if strategy == "GOFFLS":
             # Instantiate the GOFFLS (Generic Optimization Framework for Federated Learning Schedules) server strategy.
             server_strategy = FlowerGOFFLSServer(id_=server_id,
-                                                 enable_training=enable_training,
-                                                 enable_testing=enable_testing,
-                                                 accept_clients_failures=accept_clients_failures,
-                                                 num_fit_tasks=num_fit_tasks,
-                                                 fit_deadline_in_seconds=fit_deadline_in_seconds,
-                                                 num_evaluate_tasks=num_evaluate_tasks,
-                                                 evaluate_deadline_in_seconds=evaluate_deadline_in_seconds,
+                                                 fl_settings=fl_settings,
                                                  client_selection_settings=client_selection_settings,
                                                  model_aggregation_settings=model_aggregation_settings,
                                                  metrics_aggregation_settings=metrics_aggregation_settings,
@@ -294,11 +281,10 @@ class FlowerServerLauncher:
     def _generate_selected_fit_clients_history_output_file(self) -> None:
         # Get the necessary attributes.
         server_strategy = self.get_attribute("_server_strategy")
-        num_fit_tasks = server_strategy.get_attribute("_num_fit_tasks")
         selected_fit_clients_history = server_strategy.get_attribute("_selected_fit_clients_history")
         output_settings = self.get_attribute("_output_settings")
         remove_output_files = output_settings["remove_output_files"]
-        selected_fit_clients_history_file = Path(output_settings["selected_fit_clients_history_file"])
+        selected_fit_clients_history_file = Path(output_settings["selected_fit_clients_history_file"]).absolute()
         # Remove the history output file (if it exists and if removing is enabled).
         if remove_output_files:
             selected_fit_clients_history_file.unlink(missing_ok=True)
@@ -321,14 +307,15 @@ class FlowerServerLauncher:
             for comm_round_key, comm_round_values in selected_fit_clients_history.items():
                 client_selector = comm_round_values["client_selector"]
                 selection_duration = comm_round_values["selection_duration"]
+                num_tasks = comm_round_values["num_tasks"]
                 num_available_clients = comm_round_values["num_available_clients"]
+                num_selected_clients = comm_round_values["num_selected_clients"]
                 selected_clients = comm_round_values["selected_clients"]
-                num_selected_clients = len(selected_clients)
                 data_line = "{0},{1},{2},{3},{4},{5},{6}\n" \
                             .format(comm_round_key,
                                     client_selector,
                                     selection_duration,
-                                    num_fit_tasks,
+                                    num_tasks,
                                     num_available_clients,
                                     num_selected_clients,
                                     "|".join(selected_clients))
@@ -337,11 +324,11 @@ class FlowerServerLauncher:
     def _generate_selected_evaluate_clients_history_output_file(self) -> None:
         # Get the necessary attributes.
         server_strategy = self.get_attribute("_server_strategy")
-        num_evaluate_tasks = server_strategy.get_attribute("_num_evaluate_tasks")
         selected_evaluate_clients_history = server_strategy.get_attribute("_selected_evaluate_clients_history")
         output_settings = self.get_attribute("_output_settings")
         remove_output_files = output_settings["remove_output_files"]
-        selected_evaluate_clients_history_file = Path(output_settings["selected_evaluate_clients_history_file"])
+        selected_evaluate_clients_history_file = \
+            Path(output_settings["selected_evaluate_clients_history_file"]).absolute()
         # Remove the history output file (if it exists and if removing is enabled).
         if remove_output_files:
             selected_evaluate_clients_history_file.unlink(missing_ok=True)
@@ -364,14 +351,15 @@ class FlowerServerLauncher:
             for comm_round_key, comm_round_values in selected_evaluate_clients_history.items():
                 client_selector = comm_round_values["client_selector"]
                 selection_duration = comm_round_values["selection_duration"]
+                num_tasks = comm_round_values["num_tasks"]
                 num_available_clients = comm_round_values["num_available_clients"]
+                num_selected_clients = comm_round_values["num_selected_clients"]
                 selected_clients = comm_round_values["selected_clients"]
-                num_selected_clients = len(selected_clients)
                 data_line = "{0},{1},{2},{3},{4},{5},{6}\n" \
                             .format(comm_round_key,
                                     client_selector,
                                     selection_duration,
-                                    num_evaluate_tasks,
+                                    num_tasks,
                                     num_available_clients,
                                     num_selected_clients,
                                     "|".join(selected_clients))
@@ -380,194 +368,220 @@ class FlowerServerLauncher:
     def _generate_individual_fit_metrics_history_output_file(self) -> None:
         # Get the necessary attributes.
         server_strategy = self.get_attribute("_server_strategy")
-        num_fit_tasks = server_strategy.get_attribute("_num_fit_tasks")
-        client_selection_settings = server_strategy.get_attribute("_client_selection_settings")
-        client_selector = client_selection_settings["client_selector"]
         individual_fit_metrics_history = server_strategy.get_attribute("_individual_fit_metrics_history")
         output_settings = self.get_attribute("_output_settings")
         remove_output_files = output_settings["remove_output_files"]
-        individual_fit_metrics_history_file = Path(output_settings["individual_fit_metrics_history_file"])
+        individual_fit_metrics_history_file = Path(output_settings["individual_fit_metrics_history_file"]).absolute()
         # Remove the history output file (if it exists and if removing is enabled).
         if remove_output_files:
             individual_fit_metrics_history_file.unlink(missing_ok=True)
         # Create the parents directories of the output file (if not exist yet).
         individual_fit_metrics_history_file.parent.mkdir(exist_ok=True, parents=True)
-        # Get the ordered set of fit metrics.
-        fit_metrics = []
+        # Get the ordered set of fit metrics names.
+        fit_metrics_names = []
         for _, comm_round_values in individual_fit_metrics_history.items():
-            for individual_fit_metrics in comm_round_values:
-                for _, fit_client_values in individual_fit_metrics.items():
-                    fit_metrics.extend(fit_client_values.keys())
-        fit_metrics = sorted(set(fit_metrics))
+            clients_metrics_dicts = comm_round_values["clients_metrics_dicts"]
+            for client_metrics_dict in clients_metrics_dicts:
+                client_metrics = list(client_metrics_dict.values())[0]
+                fit_metrics_names.extend(client_metrics.keys())
+        fit_metrics_names = sorted(set(fit_metrics_names))
         # Write the header line to the output file (if not exist yet).
         if not individual_fit_metrics_history_file.is_file():
             with open(file=individual_fit_metrics_history_file, mode="a", encoding="utf-8") as file:
-                header_line = "{0},{1},{2},{3},{4}\n" \
+                header_line = "{0},{1},{2},{3},{4},{5}\n" \
                               .format("comm_round",
                                       "client_selector",
-                                      "client_id",
                                       "num_tasks",
-                                      ",".join(fit_metrics))
+                                      "num_available_clients",
+                                      "client_id",
+                                      ",".join(fit_metrics_names))
                 file.write(header_line)
         # Write the history data lines to the output file.
         with open(file=individual_fit_metrics_history_file, mode="a", encoding="utf-8") as file:
             for comm_round_key, comm_round_values in individual_fit_metrics_history.items():
-                for individual_fit_metrics in comm_round_values:
-                    for fit_client_key, fit_client_values in individual_fit_metrics.items():
-                        fit_client_metrics_values = []
-                        for fit_metric in fit_metrics:
-                            fit_metric_value = "N/A"
-                            if fit_metric in fit_client_values:
-                                fit_metric_value = str(fit_client_values[fit_metric])
-                            fit_client_metrics_values.append(fit_metric_value)
-                        data_line = "{0},{1},{2},{3},{4}\n" \
-                                    .format(comm_round_key,
-                                            client_selector,
-                                            fit_client_key,
-                                            num_fit_tasks,
-                                            ",".join(fit_client_metrics_values))
-                        file.write(data_line)
+                client_selector = comm_round_values["client_selector"]
+                num_tasks = comm_round_values["num_tasks"]
+                num_available_clients = comm_round_values["num_available_clients"]
+                clients_metrics_dicts = comm_round_values["clients_metrics_dicts"]
+                clients_metrics_dicts = sorted(clients_metrics_dicts, key=lambda x: list(x.keys()))
+                for client_metrics_dict in clients_metrics_dicts:
+                    client_id_str = list(client_metrics_dict.keys())[0]
+                    client_metrics = list(client_metrics_dict.values())[0]
+                    fit_metrics_values = []
+                    for fit_metric_name in fit_metrics_names:
+                        fit_metric_value = "N/A"
+                        if fit_metric_name in client_metrics:
+                            fit_metric_value = str(client_metrics[fit_metric_name])
+                        fit_metrics_values.append(fit_metric_value)
+                    data_line = "{0},{1},{2},{3},{4},{5}\n" \
+                                .format(comm_round_key,
+                                        client_selector,
+                                        num_tasks,
+                                        num_available_clients,
+                                        client_id_str,
+                                        ",".join(fit_metrics_values))
+                    file.write(data_line)
 
     def _generate_aggregated_fit_metrics_history_output_file(self) -> None:
         # Get the necessary attributes.
         server_strategy = self.get_attribute("_server_strategy")
-        client_selection_settings = server_strategy.get_attribute("_client_selection_settings")
-        client_selector = client_selection_settings["client_selector"]
-        metrics_aggregation_settings = server_strategy.get_attribute("_metrics_aggregation_settings")
-        metrics_aggregator = metrics_aggregation_settings["metrics_aggregator"]
         aggregated_fit_metrics_history = server_strategy.get_attribute("_aggregated_fit_metrics_history")
         output_settings = self.get_attribute("_output_settings")
         remove_output_files = output_settings["remove_output_files"]
-        aggregated_fit_metrics_history_file = Path(output_settings["aggregated_fit_metrics_history_file"])
+        aggregated_fit_metrics_history_file = Path(output_settings["aggregated_fit_metrics_history_file"]).absolute()
         # Remove the history output file (if it exists and if removing is enabled).
         if remove_output_files:
             aggregated_fit_metrics_history_file.unlink(missing_ok=True)
         # Create the parents directories of the output file (if not exist yet).
         aggregated_fit_metrics_history_file.parent.mkdir(exist_ok=True, parents=True)
-        # Get the ordered set of fit metrics.
-        fit_metrics = []
-        for _, comm_round_aggregated_fit_metrics in aggregated_fit_metrics_history.items():
-            fit_metrics.extend(comm_round_aggregated_fit_metrics.keys())
-        fit_metrics = sorted(set(fit_metrics))
+        # Get the ordered set of fit metrics names.
+        fit_metrics_names = []
+        for _, comm_round_values in aggregated_fit_metrics_history.items():
+            aggregated_metrics = comm_round_values["aggregated_metrics"]
+            fit_metrics_names.extend(aggregated_metrics.keys())
+        fit_metrics_names = sorted(set(fit_metrics_names))
         # Write the header line to the output file (if not exist yet).
         if not aggregated_fit_metrics_history_file.is_file():
             with open(file=aggregated_fit_metrics_history_file, mode="a", encoding="utf-8") as file:
-                header_line = "{0},{1},{2},{3}\n" \
+                header_line = "{0},{1},{2},{3},{4},{5}\n" \
                               .format("comm_round",
                                       "client_selector",
                                       "metrics_aggregator",
-                                      ",".join(fit_metrics))
+                                      "num_tasks",
+                                      "num_available_clients",
+                                      ",".join(fit_metrics_names))
                 file.write(header_line)
         # Write the history data lines to the output file.
         with open(file=aggregated_fit_metrics_history_file, mode="a", encoding="utf-8") as file:
-            for comm_round, comm_round_aggregated_fit_metrics in aggregated_fit_metrics_history.items():
+            for comm_round, comm_round_values in aggregated_fit_metrics_history.items():
+                client_selector = comm_round_values["client_selector"]
+                metrics_aggregator = comm_round_values["metrics_aggregator"]
+                num_tasks = comm_round_values["num_tasks"]
+                num_available_clients = comm_round_values["num_available_clients"]
+                aggregated_metrics = comm_round_values["aggregated_metrics"]
                 fit_metrics_values = []
-                for fit_metric in fit_metrics:
+                for fit_metric_name in fit_metrics_names:
                     fit_metric_value = "N/A"
-                    if fit_metric in comm_round_aggregated_fit_metrics:
-                        fit_metric_value = str(comm_round_aggregated_fit_metrics[fit_metric])
+                    if fit_metric_name in aggregated_metrics:
+                        fit_metric_value = str(aggregated_metrics[fit_metric_name])
                     fit_metrics_values.append(fit_metric_value)
-                data_line = "{0},{1},{2},{3}\n" \
+                data_line = "{0},{1},{2},{3},{4},{5}\n" \
                             .format(comm_round,
                                     client_selector,
                                     metrics_aggregator,
+                                    num_tasks,
+                                    num_available_clients,
                                     ",".join(fit_metrics_values))
                 file.write(data_line)
 
     def _generate_individual_evaluate_metrics_history_output_file(self) -> None:
         # Get the necessary attributes.
         server_strategy = self.get_attribute("_server_strategy")
-        num_evaluate_tasks = server_strategy.get_attribute("_num_evaluate_tasks")
-        client_selection_settings = server_strategy.get_attribute("_client_selection_settings")
-        client_selector = client_selection_settings["client_selector"]
         individual_evaluate_metrics_history = server_strategy.get_attribute("_individual_evaluate_metrics_history")
         output_settings = self.get_attribute("_output_settings")
         remove_output_files = output_settings["remove_output_files"]
-        individual_evaluate_metrics_history_file = Path(output_settings["individual_evaluate_metrics_history_file"])
+        individual_evaluate_metrics_history_file = \
+            Path(output_settings["individual_evaluate_metrics_history_file"]).absolute()
         # Remove the history output file (if it exists and if removing is enabled).
         if remove_output_files:
             individual_evaluate_metrics_history_file.unlink(missing_ok=True)
         # Create the parents directories of the output file (if not exist yet).
         individual_evaluate_metrics_history_file.parent.mkdir(exist_ok=True, parents=True)
-        # Get the ordered set of evaluate metrics.
-        evaluate_metrics = []
+        # Get the ordered set of evaluate metrics names.
+        evaluate_metrics_names = []
         for _, comm_round_values in individual_evaluate_metrics_history.items():
-            for individual_evaluate_metrics in comm_round_values:
-                for _, evaluate_client_values in individual_evaluate_metrics.items():
-                    evaluate_metrics.extend(evaluate_client_values.keys())
-        evaluate_metrics = sorted(set(evaluate_metrics))
+            clients_metrics_dicts = comm_round_values["clients_metrics_dicts"]
+            for client_metrics_dict in clients_metrics_dicts:
+                client_metrics = list(client_metrics_dict.values())[0]
+                evaluate_metrics_names.extend(client_metrics.keys())
+        evaluate_metrics_names = sorted(set(evaluate_metrics_names))
         # Write the header line to the output file (if not exist yet).
         if not individual_evaluate_metrics_history_file.is_file():
             with open(file=individual_evaluate_metrics_history_file, mode="a", encoding="utf-8") as file:
-                header_line = "{0},{1},{2},{3},{4}\n" \
+                header_line = "{0},{1},{2},{3},{4},{5}\n" \
                               .format("comm_round",
                                       "client_selector",
-                                      "client_id",
                                       "num_tasks",
-                                      ",".join(evaluate_metrics))
+                                      "num_available_clients",
+                                      "client_id",
+                                      ",".join(evaluate_metrics_names))
                 file.write(header_line)
         # Write the history data lines to the output file.
         with open(file=individual_evaluate_metrics_history_file, mode="a", encoding="utf-8") as file:
             for comm_round_key, comm_round_values in individual_evaluate_metrics_history.items():
-                for individual_evaluate_metrics in comm_round_values:
-                    for evaluate_client_key, evaluate_client_values in individual_evaluate_metrics.items():
-                        evaluate_client_metrics_values = []
-                        for evaluate_metric in evaluate_metrics:
-                            evaluate_metric_value = "N/A"
-                            if evaluate_metric in evaluate_client_values:
-                                evaluate_metric_value = str(evaluate_client_values[evaluate_metric])
-                            evaluate_client_metrics_values.append(evaluate_metric_value)
-                        data_line = "{0},{1},{2},{3},{4}\n" \
-                                    .format(comm_round_key,
-                                            client_selector,
-                                            evaluate_client_key,
-                                            num_evaluate_tasks,
-                                            ",".join(evaluate_client_metrics_values))
-                        file.write(data_line)
+                client_selector = comm_round_values["client_selector"]
+                num_tasks = comm_round_values["num_tasks"]
+                num_available_clients = comm_round_values["num_available_clients"]
+                clients_metrics_dicts = comm_round_values["clients_metrics_dicts"]
+                clients_metrics_dicts = sorted(clients_metrics_dicts, key=lambda x: list(x.keys()))
+                for client_metrics_dict in clients_metrics_dicts:
+                    client_id_str = list(client_metrics_dict.keys())[0]
+                    client_metrics = list(client_metrics_dict.values())[0]
+                    evaluate_metrics_values = []
+                    for evaluate_metric_name in evaluate_metrics_names:
+                        evaluate_metric_value = "N/A"
+                        if evaluate_metric_name in client_metrics:
+                            evaluate_metric_value = str(client_metrics[evaluate_metric_name])
+                        evaluate_metrics_values.append(evaluate_metric_value)
+                    data_line = "{0},{1},{2},{3},{4},{5}\n" \
+                                .format(comm_round_key,
+                                        client_selector,
+                                        num_tasks,
+                                        num_available_clients,
+                                        client_id_str,
+                                        ",".join(evaluate_metrics_values))
+                    file.write(data_line)
 
     def _generate_aggregated_evaluate_metrics_history_output_file(self) -> None:
         # Get the necessary attributes.
         server_strategy = self.get_attribute("_server_strategy")
-        client_selection_settings = server_strategy.get_attribute("_client_selection_settings")
-        client_selector = client_selection_settings["client_selector"]
-        metrics_aggregation_settings = server_strategy.get_attribute("_metrics_aggregation_settings")
-        metrics_aggregator = metrics_aggregation_settings["metrics_aggregator"]
         aggregated_evaluate_metrics_history = server_strategy.get_attribute("_aggregated_evaluate_metrics_history")
         output_settings = self.get_attribute("_output_settings")
         remove_output_files = output_settings["remove_output_files"]
-        aggregated_evaluate_metrics_history_file = Path(output_settings["aggregated_evaluate_metrics_history_file"])
+        aggregated_evaluate_metrics_history_file = \
+            Path(output_settings["aggregated_evaluate_metrics_history_file"]).absolute()
         # Remove the history output file (if it exists and if removing is enabled).
         if remove_output_files:
             aggregated_evaluate_metrics_history_file.unlink(missing_ok=True)
         # Create the parents directories of the output file (if not exist yet).
         aggregated_evaluate_metrics_history_file.parent.mkdir(exist_ok=True, parents=True)
-        # Get the ordered set of evaluate metrics.
-        evaluate_metrics = []
-        for _, comm_round_aggregated_evaluate_metrics in aggregated_evaluate_metrics_history.items():
-            evaluate_metrics.extend(comm_round_aggregated_evaluate_metrics.keys())
-        evaluate_metrics = sorted(set(evaluate_metrics))
+        # Get the ordered set of evaluate metrics names.
+        evaluate_metrics_names = []
+        for _, comm_round_values in aggregated_evaluate_metrics_history.items():
+            aggregated_metrics = comm_round_values["aggregated_metrics"]
+            evaluate_metrics_names.extend(aggregated_metrics.keys())
+        evaluate_metrics_names = sorted(set(evaluate_metrics_names))
         # Write the header line to the output file (if not exist yet).
         if not aggregated_evaluate_metrics_history_file.is_file():
             with open(file=aggregated_evaluate_metrics_history_file, mode="a", encoding="utf-8") as file:
-                header_line = "{0},{1},{2},{3}\n" \
+                header_line = "{0},{1},{2},{3},{4},{5}\n" \
                               .format("comm_round",
                                       "client_selector",
                                       "metrics_aggregator",
-                                      ",".join(evaluate_metrics))
+                                      "num_tasks",
+                                      "num_available_clients",
+                                      ",".join(evaluate_metrics_names))
                 file.write(header_line)
         # Write the history data lines to the output file.
         with open(file=aggregated_evaluate_metrics_history_file, mode="a", encoding="utf-8") as file:
-            for comm_round, comm_round_aggregated_evaluate_metrics in aggregated_evaluate_metrics_history.items():
+            for comm_round, comm_round_values in aggregated_evaluate_metrics_history.items():
+                client_selector = comm_round_values["client_selector"]
+                metrics_aggregator = comm_round_values["metrics_aggregator"]
+                num_tasks = comm_round_values["num_tasks"]
+                num_available_clients = comm_round_values["num_available_clients"]
+                aggregated_metrics = comm_round_values["aggregated_metrics"]
                 evaluate_metrics_values = []
-                for evaluate_metric in evaluate_metrics:
+                for evaluate_metric_name in evaluate_metrics_names:
                     evaluate_metric_value = "N/A"
-                    if evaluate_metric in comm_round_aggregated_evaluate_metrics:
-                        evaluate_metric_value = str(comm_round_aggregated_evaluate_metrics[evaluate_metric])
+                    if evaluate_metric_name in aggregated_metrics:
+                        evaluate_metric_value = str(aggregated_metrics[evaluate_metric_name])
                     evaluate_metrics_values.append(evaluate_metric_value)
-                data_line = "{0},{1},{2},{3}\n" \
+                data_line = "{0},{1},{2},{3},{4},{5}\n" \
                             .format(comm_round,
                                     client_selector,
                                     metrics_aggregator,
+                                    num_tasks,
+                                    num_available_clients,
                                     ",".join(evaluate_metrics_values))
                 file.write(data_line)
 
@@ -578,7 +592,7 @@ class FlowerServerLauncher:
         round_timeout_in_seconds = fl_settings["round_timeout_in_seconds"]
         # Get the Secure Socket Layer (SSL) certificates (SSL-enabled secure connection).
         ssl_certificates = self._get_ssl_certificates()
-        # Get the flower server address (listen IP address and port).
+        # Get the flower server address (to-listen IP address and port).
         flower_server_address = self._get_flower_server_address()
         # Get the maximum message length in bytes.
         max_message_length_in_bytes = self._get_max_message_length_in_bytes()

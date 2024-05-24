@@ -1,8 +1,9 @@
 from logging import Logger
 from numpy import array, inf
+from typing import Union
 
 from goffls.task_scheduler.ecmtc import ecmtc
-from goffls.util.logger_util import log_message
+from goffls.utils.logger_util import log_message
 
 
 def _select_all_available_clients(available_clients_map: dict,
@@ -10,16 +11,22 @@ def _select_all_available_clients(available_clients_map: dict,
     selected_clients = []
     for client_key, client_values in available_clients_map.items():
         client_proxy = client_values["client_proxy"]
-        client_capacity = client_values["num_{0}ing_examples_available".format(phase)]
+        client_capacity = client_values["client_num_{0}ing_examples_available".format(phase)]
         selected_clients.append({"client_proxy": client_proxy,
                                  "client_capacity": client_capacity,
                                  "client_num_tasks_scheduled": 0})
     return selected_clients
 
 
-def _sum_selected_clients_capacities(selected_clients: list) -> int:
-    selected_clients_capacities_sum = sum([client["client_capacity"] for client in selected_clients])
-    return selected_clients_capacities_sum
+def _sum_clients_capacities(clients: Union[list, dict],
+                            phase: str) -> int:
+    clients_capacities_sum = 0
+    if isinstance(clients, list):
+        clients_capacities_sum = sum([client["client_capacity"] for client in clients])
+    elif isinstance(clients, dict):
+        clients_capacities_sum = sum([client_values["client_num_{0}ing_examples_available".format(phase)]
+                                      for _, client_values in clients.items()])
+    return clients_capacities_sum
 
 
 def _schedule_tasks_to_selected_clients(num_tasks_to_schedule: int,
@@ -91,33 +98,33 @@ def _map_available_participating_clients(comm_rounds: list,
     available_participating_clients_map = {}
     # Iterate through the list of communication rounds.
     for comm_round in comm_rounds:
-        # Get the communication round key.
+        # Get the communication round's key.
         comm_round_key = "comm_round_{0}".format(comm_round)
         # Verify if there is an entry in the individual metrics history for the communication round.
         if comm_round_key in individual_metrics_history:
             # If so, get the individual metrics entry for the communication round.
             individual_metrics_entry_comm_round = individual_metrics_history[comm_round_key]
             # Iterate through the list of clients who participated on the communication round.
-            for participating_client_dict in individual_metrics_entry_comm_round:
+            for participating_client_dict in individual_metrics_entry_comm_round["clients_metrics_dicts"]:
                 client_id_str = list(participating_client_dict.keys())[0]
                 # If the participating client is available...
                 if client_id_str in available_clients_map:
                     client_proxy = available_clients_map[client_id_str]["client_proxy"]
-                    num_training_examples_available \
-                        = available_clients_map[client_id_str]["num_training_examples_available"]
-                    num_testing_examples_available \
-                        = available_clients_map[client_id_str]["num_testing_examples_available"]
+                    client_num_training_examples_available \
+                        = available_clients_map[client_id_str]["client_num_training_examples_available"]
+                    client_num_testing_examples_available \
+                        = available_clients_map[client_id_str]["client_num_testing_examples_available"]
                     client_metrics = participating_client_dict.values()
                     # Verify if the available participating client has been mapped yet...
                     if client_id_str not in available_participating_clients_map:
                         # If not, append his information and his metrics of the current communication round to the map.
                         client_map = {"client_proxy": client_proxy,
-                                      "num_training_examples_available": num_training_examples_available,
-                                      "num_testing_examples_available": num_testing_examples_available,
+                                      "client_num_training_examples_available": client_num_training_examples_available,
+                                      "client_num_testing_examples_available": client_num_testing_examples_available,
                                       comm_round_key: client_metrics}
                         available_participating_clients_map.update({client_id_str: client_map})
                     else:
-                        # If so, just append his metrics of the current communication round to the map.
+                        # If so, append his metrics of the current communication round to the map.
                         available_participating_clients_map[client_id_str].update({comm_round_key: client_metrics})
     return available_participating_clients_map
 
@@ -130,7 +137,7 @@ def _get_metric_mean_value(individual_metrics_history: dict,
     metric_mean_value = 0
     metric_values = []
     for comm_round_key, individual_metrics_entry_comm_round in individual_metrics_history.items():
-        for participating_client_dict in individual_metrics_entry_comm_round:
+        for participating_client_dict in individual_metrics_entry_comm_round["clients_metrics_dicts"]:
             if client_key in participating_client_dict:
                 comm_round_num_examples_used = participating_client_dict[client_key][num_examples_key]
                 if comm_round_num_examples_used == num_examples_used:
@@ -173,7 +180,7 @@ def select_clients_using_ecmtc(comm_round: int,
         # If not, this means it is the first communication round. Therefore, all available clients will be selected.
         selected_all_available_clients = _select_all_available_clients(available_clients_map, phase)
         # Get the maximum number of tasks that can be scheduled to the selected clients.
-        selected_clients_capacities_sum = _sum_selected_clients_capacities(selected_all_available_clients)
+        selected_clients_capacities_sum = _sum_clients_capacities(selected_all_available_clients, phase)
         # Redefine the number of tasks to schedule, if the selected clients capacities sum is lower.
         num_tasks_to_schedule = min(num_tasks_to_schedule, selected_clients_capacities_sum)
         # Schedule the tasks to the selected clients.
@@ -196,6 +203,11 @@ def select_clients_using_ecmtc(comm_round: int,
         # Set the number of resources,
         # based on the number of available clients with entries in the individual metrics history.
         num_resources = len(available_participating_clients_map)
+        # Get the maximum number of tasks that can be scheduled to the available participating clients.
+        available_participating_clients_capacities_sum = _sum_clients_capacities(available_participating_clients_map,
+                                                                                 phase)
+        # Redefine the number of tasks to schedule, if the available participating clients capacities sum is lower.
+        num_tasks_to_schedule = min(num_tasks_to_schedule, available_participating_clients_capacities_sum)
         # Initialize the global lists that will be transformed to array.
         client_ids = []
         assignment_capacities = []
@@ -215,7 +227,7 @@ def select_clients_using_ecmtc(comm_round: int,
                 num_examples_key = "num_{0}ing_examples_used".format(phase)
                 num_examples = individual_metrics_history_entry[num_examples_key]
                 # Get the time spent by him (if available).
-                time_key = "{0}ing_time".format(phase)
+                time_key = "{0}ing_elapsed_time".format(phase)
                 if time_key in individual_metrics_history_entry:
                     # Update his time costs list for this number of examples.
                     time_cost = individual_metrics_history_entry[time_key]
@@ -258,7 +270,7 @@ def select_clients_using_ecmtc(comm_round: int,
             assignment_capacities_client = None
             assignment_capacities_initializer = assignment_capacities_init_settings["assignment_capacities_initializer"]
             if assignment_capacities_initializer == "Only_Previous_Num_Tasks_Assigned_Set":
-                # Based only on his previous round(s) participation, i.e., the set of previously numbers of tasks
+                # Based only on his previous round(s) participation, i.e., the set of previous numbers of tasks
                 # assigned to him.
                 previous_num_tasks_assigned = [list(comm_round_metrics)[0]["num_{0}ing_examples_used".format(phase)]
                                                for key, comm_round_metrics in client_values.items()
@@ -267,11 +279,11 @@ def select_clients_using_ecmtc(comm_round: int,
                 assignment_capacities_client = previous_num_tasks_assigned_set
             elif assignment_capacities_initializer == "Custom_Range_Set_Union_Previous_Num_Tasks_Assigned_Set":
                 # Based on a custom range set (ordered in ascending order), which also includes his previous round(s)
-                # participation, i.e., the set of previously numbers of tasks assigned to him.
+                # participation, i.e., the set of previous numbers of tasks assigned to him.
                 lower_bound = assignment_capacities_init_settings["lower_bound"]
                 upper_bound = assignment_capacities_init_settings["upper_bound"]
                 if upper_bound == "client_capacity":
-                    upper_bound = client_values["num_{0}ing_examples_available".format(phase)]
+                    upper_bound = client_values["client_num_{0}ing_examples_available".format(phase)]
                 step = assignment_capacities_init_settings["step"]
                 custom_range = list(range(lower_bound, min(upper_bound+1, num_tasks_to_schedule+1), step))
                 previous_num_tasks_assigned = [list(comm_round_metrics)[0]["num_{0}ing_examples_used".format(phase)]
@@ -290,7 +302,7 @@ def select_clients_using_ecmtc(comm_round: int,
                 # Estimates the costs for the unknown values via linear interpolation/extrapolation.
                 for assignment_capacity in assignment_capacities_client:
                     if assignment_capacity not in previous_num_tasks_assigned:
-                        # Determine x1 and x2, which are two known values of previously numbers of tasks assigned.
+                        # Determine x1 and x2, which are two known previous numbers of tasks assigned.
                         x1_candidates = [i for i in previous_num_tasks_assigned if i < assignment_capacity]
                         x2_candidates = [i for i in previous_num_tasks_assigned if i > assignment_capacity]
                         if x2_candidates:
@@ -317,7 +329,7 @@ def select_clients_using_ecmtc(comm_round: int,
                                                                                                   y1_energy,
                                                                                                   y2_energy,
                                                                                                   assignment_capacity)
-                        # Update the costs lists with the estimated values.
+                        # Update the cost lists with the estimated values.
                         time_costs_client[assignment_capacity] = time_cost_estimation
                         energy_costs_client[assignment_capacity] = energy_cost_estimation
             # Append his lists into the global lists.
@@ -340,7 +352,7 @@ def select_clients_using_ecmtc(comm_round: int,
         message = "X*: {0}\nMinimal makespan (Cₘₐₓ): {1}\nMinimal energy consumption (ΣE): {2}" \
                   .format(optimal_schedule, minimal_makespan, minimal_energy_consumption)
         log_message(logger, message, "DEBUG")
-        # Get the list of indices of the selected clients.
+        # Get the list of indices from the selected clients.
         selected_clients_indices = [sel_index for sel_index, client_num_tasks_scheduled
                                     in enumerate(optimal_schedule) if client_num_tasks_scheduled > 0]
         # Append their corresponding proxies objects and numbers of tasks scheduled into the selected clients list.
@@ -348,13 +360,15 @@ def select_clients_using_ecmtc(comm_round: int,
             client_id_str = client_ids[sel_index]
             client_map = available_participating_clients_map[client_id_str]
             client_proxy = client_map["client_proxy"]
-            client_capacity = client_map["num_{0}ing_examples_available".format(phase)]
+            client_capacity = client_map["client_num_{0}ing_examples_available".format(phase)]
             client_num_tasks_scheduled = int(optimal_schedule[sel_index])
             selected_clients.append({"client_proxy": client_proxy,
                                      "client_capacity": client_capacity,
                                      "client_num_tasks_scheduled": client_num_tasks_scheduled})
     # Log a 'number of clients selected' message.
-    message = "{0} {1} selected!".format(len(selected_clients),
-                                         "clients were" if len(selected_clients) != 1 else "client was")
+    message = "{0} {1} (out of {2}) {3} selected!".format(len(selected_clients),
+                                                          "clients" if len(selected_clients) != 1 else "client",
+                                                          len(available_clients_map),
+                                                          "were" if len(selected_clients) != 1 else "was")
     log_message(logger, message, "INFO")
     return selected_clients

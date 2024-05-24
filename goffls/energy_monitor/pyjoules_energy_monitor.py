@@ -13,7 +13,6 @@ class PyJoulesEnergyMonitor:
         # Initialize the attributes.
         self._monitoring_domains = monitoring_domains
         self._unit = unit
-        self._monitoring_tag = None
         self._energy_monitor = None
         # Load the energy monitor.
         self._load_energy_monitor()
@@ -35,7 +34,7 @@ class PyJoulesEnergyMonitor:
     def _load_energy_monitor(self) -> any:
         # Get the necessary attributes.
         monitoring_domains = self.get_attribute("_monitoring_domains")
-        # Instantiate the pyJoules monitor (EnergyMeter), if the hardware supports monitoring.
+        # Instantiate the pyJoules monitor (EnergyMeter) if the hardware supports monitoring.
         any_monitorable_devices = len(DeviceFactory.create_devices()) > 0
         if any_monitorable_devices:
             devices_to_monitor = []
@@ -83,8 +82,6 @@ class PyJoulesEnergyMonitor:
         if energy_monitor:
             # Start the energy consumption monitoring.
             energy_monitor.start(tag=monitoring_tag)
-        # Set the monitoring tag.
-        self._set_attribute("_monitoring_tag", monitoring_tag)
 
     def stop(self) -> None:
         # Get the necessary attributes.
@@ -93,13 +90,13 @@ class PyJoulesEnergyMonitor:
             # Stop the energy consumption monitoring.
             energy_monitor.stop()
 
-    def get_energy_consumptions(self) -> dict:
+    def get_energy_consumptions(self,
+                                monitoring_tag: str) -> dict:
         # Initialize the energy consumptions dictionary.
         energy_consumptions = {}
         # Get the necessary attributes.
         energy_monitor = self.get_attribute("_energy_monitor")
         unit = self.get_attribute("_unit")
-        monitoring_tag = self.get_attribute("_monitoring_tag")
         if energy_monitor:
             last_trace = vars(energy_monitor.get_trace()[0])
             if last_trace["tag"] == monitoring_tag:
@@ -110,39 +107,49 @@ class PyJoulesEnergyMonitor:
                     if unit == "Joules":
                         # Convert the CPU energy consumption to Joules (J).
                         energy_cpu /= (1 * pow(10, 6))
-                    # Add the CPU energy consumption to the energy consumptions dictionary.
-                    energy_consumptions.update({monitoring_tag + "_cpu": energy_cpu})
+                    # Add the CPU energy consumption to energy_consumptions dict.
+                    energy_consumption_key = monitoring_tag + "_cpu"
+                    energy_consumption_value = energy_cpu
+                    energy_consumptions.update({energy_consumption_key: energy_consumption_value})
                 if "core_0" in energy_dict:
                     # Get the CPU Cores energy consumption, returned as Micro-Joules (μJ).
                     energy_cpu_cores = energy_dict["core_0"]
                     if unit == "Joules":
                         # Convert the CPU Cores energy consumption to Joules (J).
                         energy_cpu_cores /= (1 * pow(10, 6))
-                    # Add the CPU Cores energy consumption to the energy consumptions dictionary.
-                    energy_consumptions.update({monitoring_tag + "_cpu_cores": energy_cpu_cores})
+                    # Add the CPU Cores energy consumption to energy_consumptions dict.
+                    energy_consumption_key = monitoring_tag + "_cpu_cores"
+                    energy_consumption_value = energy_cpu_cores
+                    energy_consumptions.update({energy_consumption_key: energy_consumption_value})
                 if "uncore_0" in energy_dict:
                     # Get the Integrated GPU energy consumption, returned as Micro-Joules (μJ).
                     energy_integrated_gpu = energy_dict["uncore_0"]
                     if unit == "Joules":
                         # Convert the Integrated GPU energy consumption to Joules (J).
                         energy_integrated_gpu /= (1 * pow(10, 6))
-                    # Add the Integrated GPU energy consumption to the energy consumptions dictionary.
-                    energy_consumptions.update({monitoring_tag + "_integrated_gpu": energy_integrated_gpu})
+                    # Add the Integrated GPU energy consumption to energy_consumptions dict.
+                    energy_consumption_key = monitoring_tag + "_integrated_gpu"
+                    energy_consumption_value = energy_integrated_gpu
+                    energy_consumptions.update({energy_consumption_key: energy_consumption_value})
                 if "nvidia_gpu_0" in energy_dict:
                     # Get the NVIDIA GPU energy consumption, returned as Milli-Joules (mJ).
                     energy_nvidia_gpu = energy_dict["nvidia_gpu_0"]
                     if unit == "Joules":
                         # Convert the NVIDIA GPU energy consumption to Joules (J).
                         energy_nvidia_gpu /= (1 * pow(10, 3))
-                    # Add the NVIDIA GPU energy consumption to the energy consumptions dictionary.
-                    energy_consumptions.update({monitoring_tag + "_nvidia_gpu": energy_nvidia_gpu})
+                    # Add the NVIDIA GPU energy consumption to energy_consumptions dict.
+                    energy_consumption_key = monitoring_tag + "_nvidia_gpu"
+                    energy_consumption_value = energy_nvidia_gpu
+                    energy_consumptions.update({energy_consumption_key: energy_consumption_value})
                 if "dram_0" in energy_dict:
                     # Get the RAM energy consumption, returned as Micro-Joules (μJ).
                     energy_ram = energy_dict["dram_0"]
                     if unit == "Joules":
                         # Convert the RAM energy consumption to Joules (J).
                         energy_ram /= (1 * pow(10, 6))
-                    # Add the RAM energy consumption to the energy consumptions dictionary.
-                    energy_consumptions.update({monitoring_tag + "_ram": energy_ram})
+                    # Add the RAM energy consumption to energy_consumptions dict.
+                    energy_consumption_key = monitoring_tag + "_ram"
+                    energy_consumption_value = energy_ram
+                    energy_consumptions.update({energy_consumption_key: energy_consumption_value})
         # Return the energy consumptions dictionary.
         return energy_consumptions

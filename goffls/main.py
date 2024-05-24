@@ -1,4 +1,5 @@
 from argparse import ArgumentParser, RawTextHelpFormatter, SUPPRESS
+from logging import Logger
 from pathlib import Path
 from sys import argv
 from time import perf_counter
@@ -6,8 +7,8 @@ from time import perf_counter
 from goffls.client_launcher.flower_client_launcher import FlowerClientLauncher
 from goffls.result_analyzer.result_analyzer import ResultAnalyzer
 from goffls.server_launcher.flower_server_launcher import FlowerServerLauncher
-from goffls.util.logger_util import load_logger, log_message
-from goffls.util.setup_tools_util import get_version
+from goffls.utils.logger_util import load_logger, log_message
+from goffls.utils.setup_tools_util import get_version
 
 # Paths.
 __BASE_PATH = Path(__file__).parent.resolve()
@@ -71,6 +72,21 @@ def _verify_if_tool_action_is_valid(tool_name: str,
         raise ValueError(error_message)
 
 
+def _set_logger() -> Logger:
+    logging_settings = {"enable_logging": True,
+                        "log_to_file": False,
+                        "log_to_console": True,
+                        "file_name": None,
+                        "file_mode": None,
+                        "encoding": None,
+                        "level": "INFO",
+                        "format_str": "%(asctime)s.%(msecs)03d %(levelname)s: %(message)s",
+                        "date_format": "%Y/%m/%d %H:%M:%S"}
+    logger_name = "GOFFLS_Logger"
+    logger = load_logger(logging_settings, logger_name)
+    return logger
+
+
 def _verify_if_config_file_is_valid(config_file: Path) -> None:
     if not config_file.is_file():
         error_message = "The '{0}' config file was not found!".format(config_file)
@@ -84,7 +100,7 @@ def main() -> None:
     # Get the version.
     version = get_version(__VERSION_FILE)
     # Parse the GOFFLS arguments.
-    usage = "goffls [--version] [--help] <action> [args]"
+    usage = "goffls [-v | --version] [-h | --help] <action> [args]"
     description = '''Generic Optimization Framework for Federated Learning Schedules (GOFFLS).\n'''
     epilog = ('''{0}'''.format("\n".join([tool_info for tool_info in _get_tools_info()])))
     ap = ArgumentParser(usage=usage,
@@ -135,14 +151,7 @@ def main() -> None:
     # Verify if the user-provided action is valid.
     _verify_if_tool_action_is_valid("GOFFLS", action)
     # Set the logger.
-    logging_settings = {"enable_logging": True,
-                        "level": "INFO",
-                        "format": "%(asctime)s.%(msecs)03d %(levelname)s: %(message)s",
-                        "date_format": "%Y/%m/%d %H:%M:%S",
-                        "log_to_file": False,
-                        "log_to_console": True}
-    logger_name = "GOFFLS_Logger"
-    logger = load_logger(logging_settings, logger_name)
+    logger = _set_logger()
     if action == "launch_server":
         id_ = int(parsed_args.id)
         config_file = Path(parsed_args.config_file)
@@ -169,7 +178,7 @@ def main() -> None:
         ra.analyze_results()
     # Stop the performance counter.
     perf_counter_stop = perf_counter()
-    # Log a 'elapsed time in seconds' message.
+    # Log an 'elapsed time in seconds' message.
     elapsed_time_seconds = round((perf_counter_stop - perf_counter_start), 2)
     message = "Elapsed time: {0} {1}.".format(elapsed_time_seconds,
                                               "seconds" if elapsed_time_seconds != 1 else "second")

@@ -1,4 +1,5 @@
 from copy import deepcopy
+from dateutil import parser
 from logging import Logger
 from time import perf_counter
 from typing import Dict, List, Optional, Tuple, Union
@@ -15,7 +16,7 @@ from goffls.client_selector.flower_random import select_clients_using_random
 from goffls.metrics_aggregator.flower_weighted_average import aggregate_loss_by_weighted_average, \
     aggregate_metrics_by_weighted_average
 from goffls.model_aggregator.flower_weighted_average import aggregate_parameters_by_weighted_average
-from goffls.util.logger_util import log_message
+from goffls.utils.logger_util import log_message
 
 
 class FlowerGOFFLSServer(Strategy):
@@ -23,13 +24,7 @@ class FlowerGOFFLSServer(Strategy):
     def __init__(self,
                  *,
                  id_: int,
-                 enable_training: bool,
-                 enable_testing: bool,
-                 accept_clients_failures: bool,
-                 num_fit_tasks: int,
-                 fit_deadline_in_seconds: float,
-                 num_evaluate_tasks: int,
-                 evaluate_deadline_in_seconds: float,
+                 fl_settings: dict,
                  client_selection_settings: dict,
                  model_aggregation_settings: dict,
                  metrics_aggregation_settings: dict,
@@ -40,13 +35,7 @@ class FlowerGOFFLSServer(Strategy):
         # Initialize the attributes.
         super().__init__()
         self._server_id = id_
-        self._enable_training = enable_training
-        self._enable_testing = enable_testing
-        self._accept_clients_failures = accept_clients_failures
-        self._num_fit_tasks = num_fit_tasks
-        self._fit_deadline_in_seconds = fit_deadline_in_seconds
-        self._num_evaluate_tasks = num_evaluate_tasks
-        self._evaluate_deadline_in_seconds = evaluate_deadline_in_seconds
+        self._fl_settings = fl_settings
         self._client_selection_settings = client_selection_settings
         self._model_aggregation_settings = model_aggregation_settings
         self._metrics_aggregation_settings = metrics_aggregation_settings
@@ -54,6 +43,7 @@ class FlowerGOFFLSServer(Strategy):
         self._evaluate_config = evaluate_config
         self._initial_parameters = initial_parameters
         self._logger = logger
+        self._available_clients_map = {}
         self._selected_fit_clients_history = {}
         self._selected_evaluate_clients_history = {}
         self._individual_fit_metrics_history = {}
@@ -73,7 +63,7 @@ class FlowerGOFFLSServer(Strategy):
     def initialize_parameters(self,
                               client_manager: ClientManager) -> Optional[Parameters]:
         """Initialize the model parameters.
-           \nImplementation of the abstract method of the Strategy class."""
+           \nImplementation of the abstract method from the Strategy class."""
         # Get the initial parameters.
         initial_parameters = self.get_attribute("_initial_parameters")
         # Discard it from the memory.
@@ -106,68 +96,90 @@ class FlowerGOFFLSServer(Strategy):
         return fit_config
 
     @staticmethod
-    def _map_available_clients(available_clients: dict) -> dict:
+    def _map_available_clients(client_manager: ClientManager) -> dict:
+        available_clients = client_manager.all()
         available_clients_map = {}
         for _, client_proxy in available_clients.items():
             client_id_property = "client_id"
-            num_training_examples_available_property = "num_training_examples_available"
-            num_testing_examples_available_property = "num_testing_examples_available"
+            client_hostname_property = "client_hostname"
+            client_num_cpus_property = "client_num_cpus"
+            client_num_training_examples_available_property = "client_num_training_examples_available"
+            client_num_testing_examples_available_property = "client_num_testing_examples_available"
             gpi = GetPropertiesIns({client_id_property: "?",
-                                    num_training_examples_available_property: "?",
-                                    num_testing_examples_available_property: "?"})
+                                    client_hostname_property: "?",
+                                    client_num_cpus_property: "?",
+                                    client_num_training_examples_available_property: "?",
+                                    client_num_testing_examples_available_property: "?"})
             client_prompted = client_proxy.get_properties(gpi, timeout=9999)
             client_id = client_prompted.properties[client_id_property]
-            num_training_examples_available = client_prompted.properties[num_training_examples_available_property]
-            num_testing_examples_available = client_prompted.properties[num_testing_examples_available_property]
+            client_hostname = client_prompted.properties[client_hostname_property]
+            client_num_cpus = client_prompted.properties[client_num_cpus_property]
+            client_num_training_examples_available = \
+                client_prompted.properties[client_num_training_examples_available_property]
+            client_num_testing_examples_available = \
+                client_prompted.properties[client_num_testing_examples_available_property]
             client_id_str = "client_{0}".format(client_id)
             client_map = {"client_proxy": client_proxy,
-                          "num_training_examples_available": num_training_examples_available,
-                          "num_testing_examples_available": num_testing_examples_available}
+                          "client_hostname": client_hostname,
+                          "client_num_cpus": client_num_cpus,
+                          "client_num_training_examples_available": client_num_training_examples_available,
+                          "client_num_testing_examples_available": client_num_testing_examples_available}
             available_clients_map.update({client_id_str: client_map})
         return available_clients_map
 
     def _update_selected_fit_clients_history(self,
                                              comm_round: int,
+                                             num_fit_tasks: int,
                                              available_fit_clients_map: dict,
                                              selection_duration: float,
                                              selected_fit_clients: list) -> None:
-        client_selection_settings = self.get_attribute("_client_selection_settings")
-        client_selector = client_selection_settings["client_selector"]
         selected_fit_clients_history = self.get_attribute("_selected_fit_clients_history")
-        available_fit_clients_ids = list(available_fit_clients_map.keys())
-        num_available_fit_clients = len(available_fit_clients_ids)
-        available_fit_clients_proxies = [client_values["client_proxy"]
-                                         for client_values in list(available_fit_clients_map.values())]
-        for client in selected_fit_clients:
-            client_proxy = client["client_proxy"]
-            client_index = available_fit_clients_proxies.index(client_proxy)
-            client_id_str = available_fit_clients_ids[client_index]
-            comm_round_key = "comm_round_{0}".format(comm_round)
-            if comm_round_key not in selected_fit_clients_history:
-                comm_round_selected_fit_metrics_dict = {comm_round_key:
-                                                        {"client_selector": client_selector,
-                                                         "selection_duration": selection_duration,
-                                                         "num_available_clients": num_available_fit_clients,
-                                                         "selected_clients": [client_id_str]}}
-                selected_fit_clients_history.update(comm_round_selected_fit_metrics_dict)
-            else:
-                selected_fit_clients_history[comm_round_key]["selected_clients"].append(client_id_str)
-        self._set_attribute("_selected_fit_clients_history", selected_fit_clients_history)
+        comm_round_key = "comm_round_{0}".format(comm_round)
+        if comm_round_key not in selected_fit_clients_history:
+            client_selection_settings = self.get_attribute("_client_selection_settings")
+            client_selector = client_selection_settings["client_selector"]
+            available_fit_clients_ids = list(available_fit_clients_map.keys())
+            num_available_fit_clients = len(available_fit_clients_ids)
+            num_selected_fit_clients = len(selected_fit_clients)
+            available_fit_clients_proxies = [client_values["client_proxy"]
+                                             for client_values in list(available_fit_clients_map.values())]
+            selected_fit_clients_ids = []
+            for client in selected_fit_clients:
+                client_proxy = client["client_proxy"]
+                client_index = available_fit_clients_proxies.index(client_proxy)
+                client_id_str = available_fit_clients_ids[client_index]
+                selected_fit_clients_ids.append(client_id_str)
+            comm_round_values = {"client_selector": client_selector,
+                                 "selection_duration": selection_duration,
+                                 "num_tasks": num_fit_tasks,
+                                 "num_available_clients": num_available_fit_clients,
+                                 "num_selected_clients": num_selected_fit_clients,
+                                 "selected_clients": selected_fit_clients_ids}
+            comm_round_selected_fit_clients = {comm_round_key: comm_round_values}
+            selected_fit_clients_history.update(comm_round_selected_fit_clients)
+            self._set_attribute("_selected_fit_clients_history", selected_fit_clients_history)
 
     def configure_fit(self,
                       server_round: int,
                       parameters: Parameters,
                       client_manager: ClientManager) -> List[Tuple[ClientProxy, FitIns]]:
         """Configure the next round of training.
-           \nImplementation of the abstract method of the Strategy class."""
+           \nImplementation of the abstract method from the Strategy class."""
         # Get the necessary attributes.
-        enable_training = self.get_attribute("_enable_training")
-        num_fit_tasks = self.get_attribute("_num_fit_tasks")
-        fit_deadline_in_seconds = self.get_attribute("_fit_deadline_in_seconds")
+        fl_settings = self.get_attribute("_fl_settings")
+        enable_training = fl_settings["enable_training"]
+        num_fit_tasks = fl_settings["num_fit_tasks"]
+        fit_deadline_in_seconds = fl_settings["fit_deadline_in_seconds"]
         client_selection_settings = self.get_attribute("_client_selection_settings")
         client_selector = client_selection_settings["client_selector"]
         individual_fit_metrics_history = self.get_attribute("_individual_fit_metrics_history")
         logger = self.get_attribute("_logger")
+        # Wait for the initial clients to connect before starting the first round.
+        if server_round == 1:
+            wait_for_initial_clients = fl_settings["wait_for_initial_clients"]
+            num_clients_to_wait = wait_for_initial_clients["num_clients_to_wait"]
+            waiting_timeout_in_seconds = wait_for_initial_clients["waiting_timeout_in_seconds"]
+            client_manager.wait_for(num_clients_to_wait, waiting_timeout_in_seconds)
         # Do not configure federated training if it is not enabled.
         if not enable_training:
             return []
@@ -175,24 +187,22 @@ class FlowerGOFFLSServer(Strategy):
         fit_config = self._update_fit_config(server_round)
         # Initialize the list of the selected clients for training (selected_fit_clients).
         selected_fit_clients = []
-        # Get the available fit clients.
-        available_fit_clients = client_manager.all()
-        # Get the number of available fit clients.
-        num_available_fit_clients = len(available_fit_clients)
         # Map the available fit clients.
-        available_fit_clients_map = self._map_available_clients(available_fit_clients)
+        available_fit_clients_map = self._map_available_clients(client_manager)
+        # Set the available clients map.
+        self._set_attribute("_available_clients_map", available_fit_clients_map)
+        # Get the number of available fit clients.
+        num_available_fit_clients = len(available_fit_clients_map)
         # Set the phase value.
         phase = "train"
         # Start the clients selection duration timer.
         selection_duration_start = perf_counter()
         if client_selector == "Random":
             # Select clients using the Random algorithm.
-            min_available_clients = client_selection_settings["min_available_clients"]
             fit_clients_fraction = client_selection_settings["fit_clients_fraction"]
             selected_fit_clients = select_clients_using_random(client_manager,
                                                                phase,
                                                                num_available_fit_clients,
-                                                               min_available_clients,
                                                                fit_clients_fraction,
                                                                logger)
         elif client_selector == "MEC":
@@ -224,6 +234,7 @@ class FlowerGOFFLSServer(Strategy):
         selection_duration = perf_counter() - selection_duration_start
         # Update the history of selected clients for training (selected_fit_clients).
         self._update_selected_fit_clients_history(server_round,
+                                                  num_fit_tasks,
                                                   available_fit_clients_map,
                                                   selection_duration,
                                                   selected_fit_clients)
@@ -240,23 +251,113 @@ class FlowerGOFFLSServer(Strategy):
         # Return the list of (fit_client_proxy, fit_client_instructions) pairs.
         return fit_pairs
 
+    @staticmethod
+    def _calculate_energy_timestamp_metrics_of_client_hostname(metrics: list[tuple[int, Metrics]],
+                                                               phase: str,
+                                                               hostname: str) -> None:
+        clients_key = "{0}ing_clients".format(phase)
+        energy_cpu_key = "{0}ing_energy_cpu".format(phase)
+        energy_cpu_timestamp = energy_cpu_key + "_"
+        energy_cpu_timestamps = {}
+        for metric_tuple in metrics:
+            client_metrics = metric_tuple[1]
+            client_hostname = client_metrics["client_hostname"]
+            if client_hostname == hostname:
+                client_id = client_metrics["client_id"]
+                client_num_cpus = client_metrics["client_num_cpus"]
+                client_energy_cpu_timestamps = []
+                client_metrics_to_delete = []
+                for client_metric_key, client_metric_value in client_metrics.items():
+                    if energy_cpu_timestamp in client_metric_key:
+                        client_timestamp = client_metric_key.split(energy_cpu_timestamp, 1)[1]
+                        client_energy_cpu_timestamps.append({client_timestamp: client_metric_value})
+                        client_metrics_to_delete.append(client_metric_key)
+                for client_metric_to_delete in client_metrics_to_delete:
+                    del client_metrics[client_metric_to_delete]
+                client_energy_cpu_timestamps = sorted(client_energy_cpu_timestamps, key=lambda x: list(x.keys()))
+                for client_energy_cpu_timestamp in client_energy_cpu_timestamps:
+                    for client_timestamp, client_metric_value in client_energy_cpu_timestamp.items():
+                        if client_timestamp not in energy_cpu_timestamps:
+                            energy_cpu_timestamp_dict = {energy_cpu_key: [client_metric_value],
+                                                         clients_key: [client_id],
+                                                         "total_cpus": client_num_cpus}
+                            energy_cpu_timestamps.update({client_timestamp: energy_cpu_timestamp_dict})
+                        else:
+                            energy_cpu_timestamps[client_timestamp][energy_cpu_key].append(client_metric_value)
+                            energy_cpu_timestamps[client_timestamp][clients_key].append(client_id)
+                            total_cpus = energy_cpu_timestamps[client_timestamp]["total_cpus"] + client_num_cpus
+                            energy_cpu_timestamps[client_timestamp]["total_cpus"] = total_cpus
+        energy_cpu_timestamps = dict(sorted(energy_cpu_timestamps.items()))
+        for metric_tuple in metrics:
+            client_metrics = metric_tuple[1]
+            client_hostname = client_metrics["client_hostname"]
+            if client_hostname == hostname:
+                client_id = client_metrics["client_id"]
+                client_num_cpus = client_metrics["client_num_cpus"]
+                client_start_timestamp = client_metrics["{0}ing_start_timestamp".format(phase)]
+                client_end_timestamp = client_metrics["{0}ing_end_timestamp".format(phase)]
+                client_energy_cpu = 0
+                for energy_cpu_timestamp, energy_cpu_timestamp_dict in energy_cpu_timestamps.items():
+                    if energy_cpu_key in energy_cpu_timestamp_dict:
+                        clients = energy_cpu_timestamp_dict[clients_key]
+                        if client_id in clients:
+                            client_index = clients.index(client_id)
+                            energy_cpu = energy_cpu_timestamp_dict[energy_cpu_key][client_index]
+                            total_cpus = energy_cpu_timestamp_dict["total_cpus"]
+                            microseconds_diff_factor = 1
+                            if str(client_start_timestamp).startswith(energy_cpu_timestamp):
+                                client_start_timestamp = parser.parse(client_start_timestamp).replace(tzinfo=None)
+                                client_start_timestamp_microseconds = client_start_timestamp.microsecond
+                                if client_start_timestamp_microseconds > 0:
+                                    microseconds_diff_factor = (1000000 - client_start_timestamp_microseconds) / 1000000
+                            if str(client_end_timestamp).startswith(energy_cpu_timestamp):
+                                client_end_timestamp = parser.parse(client_end_timestamp).replace(tzinfo=None)
+                                client_end_timestamp_microseconds = client_end_timestamp.microsecond
+                                if client_end_timestamp_microseconds:
+                                    microseconds_diff_factor \
+                                        = 1 - ((1000000 - client_end_timestamp_microseconds) / 1000000)
+                            client_energy_cpu_t = (client_num_cpus * energy_cpu) / total_cpus
+                            client_energy_cpu_t *= microseconds_diff_factor
+                            client_energy_cpu += client_energy_cpu_t
+                        client_metrics.update({energy_cpu_key: client_energy_cpu})
+
+    def _calculate_energy_timestamp_metrics(self,
+                                            metrics: list[tuple[int, Metrics]],
+                                            phase: str) -> None:
+        hostnames = []
+        for metric_tuple in metrics:
+            client_metrics = metric_tuple[1]
+            client_hostname = client_metrics["client_hostname"]
+            hostnames.append(client_hostname)
+        hostnames = list(set(hostnames))
+        for hostname in hostnames:
+            self._calculate_energy_timestamp_metrics_of_client_hostname(metrics, phase, hostname)
+
     def _update_individual_fit_metrics_history(self,
                                                comm_round: int,
                                                fit_metrics: list[tuple[int, Metrics]]) -> None:
         individual_fit_metrics_history = self.get_attribute("_individual_fit_metrics_history")
-        for metric_tuple in fit_metrics:
-            client_metrics = metric_tuple[1]
-            client_id = client_metrics["client_id"]
-            client_id_str = "client_{0}".format(client_id)
-            del client_metrics["client_id"]
-            client_metrics_dict = {client_id_str: client_metrics}
-            comm_round_key = "comm_round_{0}".format(comm_round)
-            if comm_round_key not in individual_fit_metrics_history:
-                comm_round_individual_fit_metrics_dict = {comm_round_key: [client_metrics_dict]}
-                individual_fit_metrics_history.update(comm_round_individual_fit_metrics_dict)
-            else:
-                individual_fit_metrics_history[comm_round_key].append(client_metrics_dict)
-        self._set_attribute("_individual_fit_metrics_history", individual_fit_metrics_history)
+        comm_round_key = "comm_round_{0}".format(comm_round)
+        if comm_round_key not in individual_fit_metrics_history:
+            client_selection_settings = self.get_attribute("_client_selection_settings")
+            client_selector = client_selection_settings["client_selector"]
+            selected_fit_clients_history = self.get_attribute("_selected_fit_clients_history")
+            num_tasks = selected_fit_clients_history[comm_round_key]["num_tasks"]
+            num_available_clients = selected_fit_clients_history[comm_round_key]["num_available_clients"]
+            fit_clients_metrics = []
+            for metric_tuple in fit_metrics:
+                client_metrics = metric_tuple[1]
+                client_id = client_metrics["client_id"]
+                client_id_str = "client_{0}".format(client_id)
+                del client_metrics["client_id"]
+                fit_clients_metrics.append({client_id_str: client_metrics})
+            comm_round_values = {"client_selector": client_selector,
+                                 "num_tasks": num_tasks,
+                                 "num_available_clients": num_available_clients,
+                                 "clients_metrics_dicts": fit_clients_metrics}
+            comm_round_individual_fit_metrics = {comm_round_key: comm_round_values}
+            individual_fit_metrics_history.update(comm_round_individual_fit_metrics)
+            self._set_attribute("_individual_fit_metrics_history", individual_fit_metrics_history)
 
     @staticmethod
     def _remove_undesired_metrics(metrics_tuples: list[tuple[int, Metrics]],
@@ -270,13 +371,24 @@ class FlowerGOFFLSServer(Strategy):
 
     def _update_aggregated_fit_metrics_history(self,
                                                comm_round: int,
+                                               metrics_aggregator: str,
                                                aggregated_fit_metrics: dict) -> None:
         aggregated_fit_metrics_history = self.get_attribute("_aggregated_fit_metrics_history")
         comm_round_key = "comm_round_{0}".format(comm_round)
         if comm_round_key not in aggregated_fit_metrics_history:
-            comm_round_aggregated_fit_metrics_dict = {comm_round_key: aggregated_fit_metrics}
-            aggregated_fit_metrics_history.update(comm_round_aggregated_fit_metrics_dict)
-        self._set_attribute("_aggregated_fit_metrics_history", aggregated_fit_metrics_history)
+            client_selection_settings = self.get_attribute("_client_selection_settings")
+            client_selector = client_selection_settings["client_selector"]
+            selected_fit_clients_history = self.get_attribute("_selected_fit_clients_history")
+            num_tasks = selected_fit_clients_history[comm_round_key]["num_tasks"]
+            num_available_clients = selected_fit_clients_history[comm_round_key]["num_available_clients"]
+            comm_round_values = {"client_selector": client_selector,
+                                 "metrics_aggregator": metrics_aggregator,
+                                 "num_tasks": num_tasks,
+                                 "num_available_clients": num_available_clients,
+                                 "aggregated_metrics": aggregated_fit_metrics}
+            comm_round_aggregated_fit_metrics = {comm_round_key: comm_round_values}
+            aggregated_fit_metrics_history.update(comm_round_aggregated_fit_metrics)
+            self._set_attribute("_aggregated_fit_metrics_history", aggregated_fit_metrics_history)
 
     def _aggregate_fit_metrics(self,
                                comm_round: int,
@@ -288,10 +400,25 @@ class FlowerGOFFLSServer(Strategy):
         metrics_aggregator = metrics_aggregation_settings["metrics_aggregator"]
         server_id = self.get_attribute("_server_id")
         logger = self.get_attribute("_logger")
+        available_clients_map = self.get_attribute("_available_clients_map")
+        # Update (from the available clients map) the hostname and number of CPUs for each participating client.
+        for metric_tuple in fit_metrics:
+            client_metrics = metric_tuple[1]
+            client_id = client_metrics["client_id"]
+            client_id_str = "client_{0}".format(client_id)
+            client_hostname = available_clients_map[client_id_str]["client_hostname"]
+            client_num_cpus = available_clients_map[client_id_str]["client_num_cpus"]
+            client_metrics.update({"client_hostname": client_hostname,
+                                   "client_num_cpus": client_num_cpus})
+        # Set the phase value.
+        phase = "train"
+        # Calculate the energy timestamp metrics.
+        self._calculate_energy_timestamp_metrics(fit_metrics, phase)
         # Update the individual training metrics history.
         self._update_individual_fit_metrics_history(comm_round, fit_metrics)
         # Remove the undesired metrics, if any.
-        undesired_metrics = ["client_id"]
+        undesired_metrics = ["client_id", "client_hostname", "client_num_cpus",
+                             "training_start_timestamp", "training_end_timestamp"]
         fit_metrics = self._remove_undesired_metrics(fit_metrics, undesired_metrics)
         # Initialize the aggregated training metrics dictionary (aggregated_fit_metrics).
         aggregated_fit_metrics = {}
@@ -299,7 +426,7 @@ class FlowerGOFFLSServer(Strategy):
         if metrics_aggregator == "Weighted_Average":
             aggregated_fit_metrics = aggregate_metrics_by_weighted_average(fit_metrics)
         # Update the aggregated training metrics history.
-        self._update_aggregated_fit_metrics_history(comm_round, aggregated_fit_metrics)
+        self._update_aggregated_fit_metrics_history(comm_round, metrics_aggregator, aggregated_fit_metrics)
         # Get the number of participating clients.
         num_participating_clients = len(fit_metrics)
         num_participating_clients_str = "".join([str(num_participating_clients),
@@ -315,14 +442,16 @@ class FlowerGOFFLSServer(Strategy):
     def aggregate_fit(self,
                       server_round: int,
                       results: List[Tuple[ClientProxy, FitRes]],
-                      failures: List[Union[Tuple[ClientProxy, FitRes], BaseException]]) -> Tuple[Optional[Parameters], Dict[str, Scalar]]:
+                      failures: List[Union[Tuple[ClientProxy, FitRes], BaseException]]) \
+            -> Tuple[Optional[Parameters], Dict[str, Scalar]]:
         """Aggregate the model parameters and the training metrics based on the fit_results.
-           \nImplementation of the abstract method of the Strategy class."""
+           \nImplementation of the abstract method from the Strategy class."""
         # Get the necessary attributes.
-        accept_clients_failures = self.get_attribute("_accept_clients_failures")
+        fl_settings = self.get_attribute("_fl_settings")
+        accept_clients_failures = fl_settings["accept_clients_failures"]
         model_aggregation_settings = self.get_attribute("_model_aggregation_settings")
         model_aggregator = model_aggregation_settings["model_aggregator"]
-        # Do not aggregate if there are no results or if there are clients failures and failures are not accepted.
+        # Do not aggregate if there are no results or if there are clients' failures and failures are not accepted.
         if not results or (failures and not accept_clients_failures):
             return None, {}
         # Initialize the aggregated model parameters.
@@ -363,42 +492,47 @@ class FlowerGOFFLSServer(Strategy):
 
     def _update_selected_evaluate_clients_history(self,
                                                   comm_round: int,
+                                                  num_evaluate_tasks: int,
                                                   available_evaluate_clients_map: dict,
                                                   selection_duration: float,
                                                   selected_evaluate_clients: list) -> None:
-        client_selection_settings = self.get_attribute("_client_selection_settings")
-        client_selector = client_selection_settings["client_selector"]
         selected_evaluate_clients_history = self.get_attribute("_selected_evaluate_clients_history")
-        available_evaluate_clients_ids = list(available_evaluate_clients_map.keys())
-        num_available_evaluate_clients = len(available_evaluate_clients_ids)
-        available_evaluate_clients_proxies = [client_values["client_proxy"]
-                                              for client_values in list(available_evaluate_clients_map.values())]
-        for client in selected_evaluate_clients:
-            client_proxy = client["client_proxy"]
-            client_index = available_evaluate_clients_proxies.index(client_proxy)
-            client_id_str = available_evaluate_clients_ids[client_index]
-            comm_round_key = "comm_round_{0}".format(comm_round)
-            if comm_round_key not in selected_evaluate_clients_history:
-                comm_round_selected_evaluate_metrics_dict = {comm_round_key:
-                                                             {"client_selector": client_selector,
-                                                              "selection_duration": selection_duration,
-                                                              "num_available_clients": num_available_evaluate_clients,
-                                                              "selected_clients": [client_id_str]}}
-                selected_evaluate_clients_history.update(comm_round_selected_evaluate_metrics_dict)
-            else:
-                selected_evaluate_clients_history[comm_round_key]["selected_clients"].append(client_id_str)
-        self._set_attribute("_selected_evaluate_clients_history", selected_evaluate_clients_history)
+        comm_round_key = "comm_round_{0}".format(comm_round)
+        if comm_round_key not in selected_evaluate_clients_history:
+            client_selection_settings = self.get_attribute("_client_selection_settings")
+            client_selector = client_selection_settings["client_selector"]
+            available_evaluate_clients_ids = list(available_evaluate_clients_map.keys())
+            num_available_evaluate_clients = len(available_evaluate_clients_ids)
+            num_selected_evaluate_clients = len(selected_evaluate_clients)
+            available_evaluate_clients_proxies = [client_values["client_proxy"]
+                                                  for client_values in list(available_evaluate_clients_map.values())]
+            selected_evaluate_clients_ids = []
+            for client in selected_evaluate_clients:
+                client_proxy = client["client_proxy"]
+                client_index = available_evaluate_clients_proxies.index(client_proxy)
+                client_id_str = available_evaluate_clients_ids[client_index]
+                selected_evaluate_clients_ids.append(client_id_str)
+            comm_round_values = {"client_selector": client_selector,
+                                 "selection_duration": selection_duration,
+                                 "num_tasks": num_evaluate_tasks,
+                                 "num_available_clients": num_available_evaluate_clients,
+                                 "num_selected_clients": num_selected_evaluate_clients,
+                                 "selected_clients": selected_evaluate_clients_ids}
+            comm_round_selected_evaluate_clients = {comm_round_key: comm_round_values}
+            selected_evaluate_clients_history.update(comm_round_selected_evaluate_clients)
+            self._set_attribute("_selected_evaluate_clients_history", selected_evaluate_clients_history)
 
     def configure_evaluate(self,
                            server_round: int,
                            parameters: Parameters,
                            client_manager: ClientManager) -> List[Tuple[ClientProxy, EvaluateIns]]:
         """Configure the next round of testing.
-           \nImplementation of the abstract method of the Strategy class."""
+           \nImplementation of the abstract method from the Strategy class."""
         # Get the necessary attributes.
-        enable_testing = self.get_attribute("_enable_testing")
-        num_evaluate_tasks = self.get_attribute("_num_evaluate_tasks")
-        evaluate_deadline_in_seconds = self.get_attribute("_evaluate_deadline_in_seconds")
+        fl_settings = self.get_attribute("_fl_settings")
+        enable_testing = fl_settings["enable_testing"]
+        num_evaluate_tasks = fl_settings["num_evaluate_tasks"]
+        evaluate_deadline_in_seconds = fl_settings["evaluate_deadline_in_seconds"]
         client_selection_settings = self.get_attribute("_client_selection_settings")
         client_selector = client_selection_settings["client_selector"]
         individual_evaluate_metrics_history = self.get_attribute("_individual_evaluate_metrics_history")
@@ -410,24 +544,22 @@ class FlowerGOFFLSServer(Strategy):
         evaluate_config = self._update_evaluate_config(server_round)
         # Initialize the list of the selected clients for testing (selected_evaluate_clients).
         selected_evaluate_clients = []
-        # Get the available evaluate clients.
-        available_evaluate_clients = client_manager.all()
-        # Get the number of available evaluate clients.
-        num_available_evaluate_clients = len(available_evaluate_clients)
         # Map the available evaluate clients.
-        available_evaluate_clients_map = self._map_available_clients(available_evaluate_clients)
+        available_evaluate_clients_map = self._map_available_clients(client_manager)
+        # Set the available clients map.
+        self._set_attribute("_available_clients_map", available_evaluate_clients_map)
+        # Get the number of available evaluate clients.
+        num_available_evaluate_clients = len(available_evaluate_clients_map)
         # Set the phase value.
         phase = "test"
         # Start the clients selection duration timer.
         selection_duration_start = perf_counter()
         if client_selector == "Random":
             # Select clients for testing randomly.
-            min_available_clients = client_selection_settings["min_available_clients"]
             evaluate_clients_fraction = client_selection_settings["evaluate_clients_fraction"]
             selected_evaluate_clients = select_clients_using_random(client_manager,
                                                                     phase,
                                                                     num_available_evaluate_clients,
-                                                                    min_available_clients,
                                                                     evaluate_clients_fraction,
                                                                     logger)
         elif client_selector == "MEC":
@@ -459,6 +591,7 @@ class FlowerGOFFLSServer(Strategy):
         selection_duration = perf_counter() - selection_duration_start
         # Update the history of selected clients for testing (selected_evaluate_clients).
         self._update_selected_evaluate_clients_history(server_round,
+                                                       num_evaluate_tasks,
                                                        available_evaluate_clients_map,
                                                        selection_duration,
                                                        selected_evaluate_clients)
@@ -479,29 +612,48 @@ class FlowerGOFFLSServer(Strategy):
                                                     comm_round: int,
                                                     evaluate_metrics: list[tuple[int, Metrics]]) -> None:
         individual_evaluate_metrics_history = self.get_attribute("_individual_evaluate_metrics_history")
-        for metric_tuple in evaluate_metrics:
-            client_metrics = metric_tuple[1]
-            client_id = client_metrics["client_id"]
-            client_id_str = "client_{0}".format(client_id)
-            del client_metrics["client_id"]
-            client_metrics_dict = {client_id_str: client_metrics}
-            comm_round_key = "comm_round_{0}".format(comm_round)
-            if comm_round_key not in individual_evaluate_metrics_history:
-                comm_round_individual_evaluate_metrics_dict = {comm_round_key: [client_metrics_dict]}
-                individual_evaluate_metrics_history.update(comm_round_individual_evaluate_metrics_dict)
-            else:
-                individual_evaluate_metrics_history[comm_round_key].append(client_metrics_dict)
-        self._set_attribute("_individual_evaluate_metrics_history", individual_evaluate_metrics_history)
+        comm_round_key = "comm_round_{0}".format(comm_round)
+        if comm_round_key not in individual_evaluate_metrics_history:
+            client_selection_settings = self.get_attribute("_client_selection_settings")
+            client_selector = client_selection_settings["client_selector"]
+            selected_evaluate_clients_history = self.get_attribute("_selected_evaluate_clients_history")
+            num_tasks = selected_evaluate_clients_history[comm_round_key]["num_tasks"]
+            num_available_clients = selected_evaluate_clients_history[comm_round_key]["num_available_clients"]
+            evaluate_clients_metrics = []
+            for metric_tuple in evaluate_metrics:
+                client_metrics = metric_tuple[1]
+                client_id = client_metrics["client_id"]
+                client_id_str = "client_{0}".format(client_id)
+                del client_metrics["client_id"]
+                evaluate_clients_metrics.append({client_id_str: client_metrics})
+            comm_round_values = {"client_selector": client_selector,
+                                 "num_tasks": num_tasks,
+                                 "num_available_clients": num_available_clients,
+                                 "clients_metrics_dicts": evaluate_clients_metrics}
+            comm_round_individual_evaluate_metrics = {comm_round_key: comm_round_values}
+            individual_evaluate_metrics_history.update(comm_round_individual_evaluate_metrics)
+            self._set_attribute("_individual_evaluate_metrics_history", individual_evaluate_metrics_history)
 
     def _update_aggregated_evaluate_metrics_history(self,
                                                     comm_round: int,
+                                                    metrics_aggregator: str,
                                                     aggregated_evaluate_metrics: dict) -> None:
         aggregated_evaluate_metrics_history = self.get_attribute("_aggregated_evaluate_metrics_history")
         comm_round_key = "comm_round_{0}".format(comm_round)
         if comm_round_key not in aggregated_evaluate_metrics_history:
-            comm_round_aggregated_evaluate_metrics_dict = {comm_round_key: aggregated_evaluate_metrics}
-            aggregated_evaluate_metrics_history.update(comm_round_aggregated_evaluate_metrics_dict)
-        self._set_attribute("_aggregated_evaluate_metrics_history", aggregated_evaluate_metrics_history)
+            client_selection_settings = self.get_attribute("_client_selection_settings")
+            client_selector = client_selection_settings["client_selector"]
+            selected_evaluate_clients_history = self.get_attribute("_selected_evaluate_clients_history")
+            num_tasks = selected_evaluate_clients_history[comm_round_key]["num_tasks"]
+            num_available_clients = selected_evaluate_clients_history[comm_round_key]["num_available_clients"]
+            comm_round_values = {"client_selector": client_selector,
+                                 "metrics_aggregator": metrics_aggregator,
+                                 "num_tasks": num_tasks,
+                                 "num_available_clients": num_available_clients,
+                                 "aggregated_metrics": aggregated_evaluate_metrics}
+            comm_round_aggregated_evaluate_metrics = {comm_round_key: comm_round_values}
+            aggregated_evaluate_metrics_history.update(comm_round_aggregated_evaluate_metrics)
+            self._set_attribute("_aggregated_evaluate_metrics_history", aggregated_evaluate_metrics_history)
 
     def _aggregate_evaluate_metrics(self,
                                     comm_round: int,
@@ -513,10 +665,25 @@ class FlowerGOFFLSServer(Strategy):
         metrics_aggregator = metrics_aggregation_settings["metrics_aggregator"]
         server_id = self.get_attribute("_server_id")
         logger = self.get_attribute("_logger")
+        available_clients_map = self.get_attribute("_available_clients_map")
+        # Update (from the available clients map) the hostname and number of CPUs for each participating client.
+        for metric_tuple in evaluate_metrics:
+            client_metrics = metric_tuple[1]
+            client_id = client_metrics["client_id"]
+            client_id_str = "client_{0}".format(client_id)
+            client_hostname = available_clients_map[client_id_str]["client_hostname"]
+            client_num_cpus = available_clients_map[client_id_str]["client_num_cpus"]
+            client_metrics.update({"client_hostname": client_hostname,
+                                   "client_num_cpus": client_num_cpus})
+        # Set the phase value.
+        phase = "test"
+        # Calculate the energy timestamp metrics.
+        self._calculate_energy_timestamp_metrics(evaluate_metrics, phase)
         # Update the individual testing metrics history.
         self._update_individual_evaluate_metrics_history(comm_round, evaluate_metrics)
         # Remove the undesired metrics, if any.
-        undesired_metrics = ["client_id"]
+        undesired_metrics = ["client_id", "client_hostname", "client_num_cpus",
+                             "testing_start_timestamp", "testing_end_timestamp"]
         evaluate_metrics = self._remove_undesired_metrics(evaluate_metrics, undesired_metrics)
         # Initialize the aggregated testing metrics dictionary (aggregated_evaluate_metrics).
         aggregated_evaluate_metrics = {}
@@ -524,7 +691,7 @@ class FlowerGOFFLSServer(Strategy):
         if metrics_aggregator == "Weighted_Average":
             aggregated_evaluate_metrics = aggregate_metrics_by_weighted_average(evaluate_metrics)
         # Update the aggregated testing metrics history.
-        self._update_aggregated_evaluate_metrics_history(comm_round, aggregated_evaluate_metrics)
+        self._update_aggregated_evaluate_metrics_history(comm_round, metrics_aggregator, aggregated_evaluate_metrics)
         # Get the number of participating clients.
         num_participating_clients = len(evaluate_metrics)
         num_participating_clients_str = "".join([str(num_participating_clients),
@@ -540,14 +707,16 @@ class FlowerGOFFLSServer(Strategy):
     def aggregate_evaluate(self,
                            server_round: int,
                            results: List[Tuple[ClientProxy, EvaluateRes]],
-                           failures: List[Union[Tuple[ClientProxy, EvaluateRes], BaseException]]) -> Tuple[Optional[float], Dict[str, Scalar]]:
+                           failures: List[Union[Tuple[ClientProxy, EvaluateRes], BaseException]]) \
+            -> Tuple[Optional[float], Dict[str, Scalar]]:
         """Aggregate the testing metrics based on the evaluate_results.
-           \nImplementation of the abstract method of the Strategy class."""
+           \nImplementation of the abstract method from the Strategy class."""
         # Get the necessary attributes.
-        accept_clients_failures = self.get_attribute("_accept_clients_failures")
+        fl_settings = self.get_attribute("_fl_settings")
+        accept_clients_failures = fl_settings["accept_clients_failures"]
         model_aggregation_settings = self.get_attribute("_model_aggregation_settings")
         model_aggregator = model_aggregation_settings["model_aggregator"]
-        # Do not aggregate if there are no results or if there are clients failures and failures are not accepted.
+        # Do not aggregate if there are no results or if there are clients' failures and failures are not accepted.
         if not results or (failures and not accept_clients_failures):
             return None, {}
         # Initialize the aggregated loss value.
@@ -568,14 +737,14 @@ class FlowerGOFFLSServer(Strategy):
         """Evaluates, in a centralized fashion (server-sided), the updated model parameters.
         \nCalled by Flower after each training phase.
         \nRequires a local testing dataset on the server.
-        \nThe outcome will be stored in the 'losses_centralized' and 'metrics_centralized' dictionaries."""
+        \nThe evaluation outcome will be stored in the 'losses_centralized' and 'metrics_centralized' dictionaries."""
         return None
 
     def evaluate(self,
                  server_round: int,
                  parameters: Parameters) -> Optional[Tuple[float, Dict[str, Scalar]]]:
         """Evaluate in a centralized fashion the updated model parameters.
-           \nImplementation of the abstract method of the Strategy class."""
+           \nImplementation of the abstract method from the Strategy class."""
         # Convert the model parameters to NumPy ndarrays.
         parameters_ndarrays = parameters_to_ndarrays(parameters)
         # Evaluate the model parameters centrally on the server.

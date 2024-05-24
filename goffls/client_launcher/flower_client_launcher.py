@@ -1,6 +1,6 @@
 from keras.applications import MobileNetV2
-from keras.src.losses import SparseCategoricalCrossentropy
-from keras.src.optimizers import SGD
+from keras.losses import SparseCategoricalCrossentropy
+from keras.optimizers import SGD
 from logging import Logger
 from numpy import empty
 from pathlib import Path
@@ -14,8 +14,8 @@ from flwr.common import NDArray
 from goffls.client.flower_numpy_client import FlowerNumpyClient
 from goffls.energy_monitor.powerjoular_energy_monitor import PowerJoularEnergyMonitor
 from goffls.energy_monitor.pyjoules_energy_monitor import PyJoulesEnergyMonitor
-from goffls.util.config_parser_util import parse_config_section
-from goffls.util.logger_util import load_logger, log_message
+from goffls.utils.config_parser_util import parse_config_section
+from goffls.utils.logger_util import load_logger, log_message
 
 
 class FlowerClientLauncher:
@@ -27,6 +27,7 @@ class FlowerClientLauncher:
         self._config_file = config_file
         self._logging_settings = None
         self._daemon_settings = None
+        self._affinity_settings = None
         self._ssl_settings = None
         self._grpc_settings = None
         self._dataset_settings = None
@@ -58,6 +59,10 @@ class FlowerClientLauncher:
         daemon_section = "Daemon Settings"
         daemon_settings = parse_config_section(config_file, daemon_section)
         self._set_attribute("_daemon_settings", daemon_settings)
+        # Parse and set the affinity settings.
+        affinity_section = "Affinity Settings"
+        affinity_settings = parse_config_section(config_file, affinity_section)
+        self._set_attribute("_affinity_settings", affinity_settings)
         # Parse and set the ssl settings.
         ssl_section = "SSL Settings"
         ssl_settings = parse_config_section(config_file, ssl_section)
@@ -105,7 +110,7 @@ class FlowerClientLauncher:
         logging_settings = self.get_attribute("_logging_settings")
         client_id = self.get_attribute("_client_id")
         # Append the client's id to the output file name.
-        file_name = Path(logging_settings["file_name"])
+        file_name = Path(logging_settings["file_name"]).absolute()
         file_name = str(file_name.parent.joinpath(file_name.stem + "_{0}".format(client_id) + file_name.suffix))
         logging_settings["file_name"] = file_name
         # Set the logger name.
@@ -166,7 +171,7 @@ class FlowerClientLauncher:
                                                        phase: str) -> tuple:
         # Get the necessary attributes.
         dataset_settings = self.get_attribute("_dataset_settings")
-        root_folder = Path(dataset_settings["root_folder"])
+        root_folder = Path(dataset_settings["root_folder"]).absolute()
         x_phase_folder = root_folder.joinpath("x_{0}".format(phase))
         y_phase_folder = root_folder.joinpath("y_{0}".format(phase))
         y_phase_labels_file = y_phase_folder.joinpath("labels.txt")
@@ -239,7 +244,17 @@ class FlowerClientLauncher:
                 env_variables = energy_monitor_settings["env_variables"]
                 monitoring_domains = energy_monitor_settings["monitoring_domains"]
                 unit = energy_monitor_settings["unit"]
-                energy_monitor = PowerJoularEnergyMonitor(env_variables, monitoring_domains, unit)
+                process_monitoring = energy_monitor_settings["process_monitoring"]
+                unique_monitor = energy_monitor_settings["unique_monitor"]
+                report_consumptions_per_timestamp = energy_monitor_settings["report_consumptions_per_timestamp"]
+                remove_energy_consumptions_files = energy_monitor_settings["remove_energy_consumptions_files"]
+                energy_monitor = PowerJoularEnergyMonitor(env_variables,
+                                                          monitoring_domains,
+                                                          unit,
+                                                          process_monitoring,
+                                                          unique_monitor,
+                                                          report_consumptions_per_timestamp,
+                                                          remove_energy_consumptions_files)
         # Return the energy monitor.
         return energy_monitor
 
@@ -331,8 +346,8 @@ class FlowerClientLauncher:
                                    x_test: NDArray,
                                    y_test: NDArray,
                                    energy_monitor: any,
-                                   daemon_mode: bool,
-                                   daemon_start_method: str,
+                                   daemon_settings: dict,
+                                   affinity_settings: dict,
                                    logger: Logger) -> Client:
         # Instantiate the flower client.
         flower_client = FlowerNumpyClient(id_=id_,
@@ -342,8 +357,8 @@ class FlowerClientLauncher:
                                           x_test=x_test,
                                           y_test=y_test,
                                           energy_monitor=energy_monitor,
-                                          daemon_mode=daemon_mode,
-                                          daemon_start_method=daemon_start_method,
+                                          daemon_settings=daemon_settings,
+                                          affinity_settings=affinity_settings,
                                           logger=logger)
         flower_client = flower_client.to_client()
         # Return the flower server.
@@ -364,8 +379,8 @@ class FlowerClientLauncher:
         # Get the necessary attributes.
         client_id = self.get_attribute("_client_id")
         logger = self.get_attribute("_logger")
-        daemon_mode = self.get_attribute("_daemon_settings")["enable_daemon_mode"]
-        daemon_start_method = self.get_attribute("_daemon_settings")["start_method"]
+        daemon_settings = self.get_attribute("_daemon_settings")
+        affinity_settings = self.get_attribute("_affinity_settings")
         # Get the Secure Socket Layer (SSL) certificates (SSL-enabled secure connection).
         ssl_certificates = self._get_ssl_certificates()
         # Get the flower server address (IP address and port).
@@ -382,13 +397,35 @@ class FlowerClientLauncher:
         loss_function = self._instantiate_loss_function()
         # Instantiate and compile the model.
         model = self._instantiate_and_compile_model(optimizer, loss_function)
-        # Instantiate the flower client.
-        flower_client = self._instantiate_flower_client(client_id, model, x_train, y_train, x_test, y_test,
-                                                        energy_monitor, daemon_mode, daemon_start_method, logger)
-        # Start the flower client.
-        self._start_flower_client(flower_server_address,
-                                  flower_client,
-                                  max_message_length_in_bytes,
-                                  ssl_certificates)
+        # Verify if the energy consumptions monitor to be used is PowerJoular
+        # and if only one monitoring process is allowed to run in the system.
+        if isinstance(energy_monitor, PowerJoularEnergyMonitor) and energy_monitor.get_attribute("_unique_monitor"):
+            # Get the unique PowerJoular attributes.
+            powerjoular_unique_attributes = vars(energy_monitor)
+            powerjoular_unique_attributes.update({"_energy_monitor": "PowerJoular_Unique"})
+            powerjoular_unique_attributes = list(powerjoular_unique_attributes.items())
+            # If so, start the unique PowerJoular monitoring process.
+            energy_monitor.start()
+            # Instantiate the flower client.
+            flower_client = self._instantiate_flower_client(client_id, model, x_train, y_train, x_test, y_test,
+                                                            powerjoular_unique_attributes, daemon_settings,
+                                                            affinity_settings, logger)
+            # Start the flower client.
+            self._start_flower_client(flower_server_address,
+                                      flower_client,
+                                      max_message_length_in_bytes,
+                                      ssl_certificates)
+            # Stop the unique PowerJoular monitoring process and remove the unique energy consumptions file.
+            energy_monitor.stop()
+            energy_monitor.remove_energy_consumption_files()
+        else:
+            # Instantiate the flower client.
+            flower_client = self._instantiate_flower_client(client_id, model, x_train, y_train, x_test, y_test,
+                                                            energy_monitor, daemon_settings, affinity_settings, logger)
+            # Start the flower client.
+            self._start_flower_client(flower_server_address,
+                                      flower_client,
+                                      max_message_length_in_bytes,
+                                      ssl_certificates)
         # End.
         exit(0)
