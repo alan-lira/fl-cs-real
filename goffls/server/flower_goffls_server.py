@@ -297,7 +297,7 @@ class FlowerGOFFLSServer(Strategy):
                 client_start_timestamp = client_metrics["{0}ing_start_timestamp".format(phase)]
                 client_end_timestamp = client_metrics["{0}ing_end_timestamp".format(phase)]
                 client_energy_cpu = 0
-                for _, energy_cpu_timestamp_dict in energy_cpu_timestamps.items():
+                for energy_cpu_timestamp, energy_cpu_timestamp_dict in energy_cpu_timestamps.items():
                     if energy_cpu_key in energy_cpu_timestamp_dict:
                         clients = energy_cpu_timestamp_dict[clients_key]
                         if client_id in clients:

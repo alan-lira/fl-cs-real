@@ -5,6 +5,7 @@ from pathlib import Path
 from psutil import AccessDenied, NoSuchProcess, process_iter, ZombieProcess
 from random import randint
 from subprocess import Popen, PIPE, TimeoutExpired
+from time import sleep
 from typing import Optional
 
 
@@ -270,6 +271,8 @@ class PowerJoularEnergyMonitor:
                                 end_timestamp: datetime) -> dict:
         # Get the necessary attributes.
         report_consumptions_per_timestamp = self.get_attribute("_report_consumptions_per_timestamp")
+        # Wait for one second before reading the energy consumptions file.
+        sleep(1)
         if report_consumptions_per_timestamp:
             energy_consumptions = self._get_energy_consumptions_per_timestamp(monitoring_tag,
                                                                               start_timestamp,
