@@ -1,6 +1,8 @@
 from keras.applications import MobileNetV2
-from keras.losses import SparseCategoricalCrossentropy
-from keras.optimizers import SGD
+from keras.losses import Loss, SparseCategoricalCrossentropy
+from keras.metrics import Metric, SparseCategoricalAccuracy
+from keras.models import Model
+from keras.optimizers import Optimizer, SGD
 from logging import Logger
 from numpy import empty
 from pathlib import Path
@@ -258,7 +260,7 @@ class FlowerClientLauncher:
         # Return the energy monitor.
         return energy_monitor
 
-    def _instantiate_optimizer(self) -> any:
+    def _instantiate_optimizer(self) -> Optimizer:
         # Get the necessary attributes.
         model_settings = self.get_attribute("_model_settings")
         model_provider = model_settings["provider"]
@@ -277,7 +279,7 @@ class FlowerClientLauncher:
         # Return the optimizer.
         return optimizer
 
-    def _instantiate_loss_function(self) -> any:
+    def _instantiate_loss_function(self) -> Loss:
         # Get the necessary attributes.
         model_settings = self.get_attribute("_model_settings")
         model_provider = model_settings["provider"]
@@ -296,9 +298,24 @@ class FlowerClientLauncher:
         # Return the loss function.
         return loss
 
+    def _instantiate_metrics(self) -> list[Metric]:
+        # Get the necessary attributes.
+        model_settings = self.get_attribute("_model_settings")
+        model_provider = model_settings["provider"]
+        model_provider_settings = model_settings[model_provider]
+        metrics = model_provider_settings["metrics"]
+        for index, metric in enumerate(metrics):
+            if model_provider == "Keras":
+                if metric == "sparse_categorical_accuracy":
+                    # Instantiate the Kera's SparseCategoricalAccuracy metric.
+                    metrics[index] = SparseCategoricalAccuracy()
+        # Return the list of metrics.
+        return metrics
+
     def _instantiate_and_compile_model(self,
-                                       optimizer: any,
-                                       loss_function: any) -> any:
+                                       optimizer: Optimizer,
+                                       loss_function: Loss,
+                                       metrics: list[Metric]) -> Model:
         # Get the necessary attributes.
         model_settings = self.get_attribute("_model_settings")
         model_provider = model_settings["provider"]
@@ -320,7 +337,6 @@ class FlowerClientLauncher:
                                     classifier_activation=model_provider_specific_settings["classifier_activation"])
             # Compile the Kera's model.
             loss_weights = model_provider_settings["loss_weights"]
-            metrics = model_provider_settings["metrics"]
             weighted_metrics = model_provider_settings["weighted_metrics"]
             run_eagerly = model_provider_settings["run_eagerly"]
             steps_per_execution = model_provider_settings["steps_per_execution"]
@@ -340,7 +356,7 @@ class FlowerClientLauncher:
 
     @staticmethod
     def _instantiate_flower_client(id_: int,
-                                   model: any,
+                                   model: Model,
                                    x_train: NDArray,
                                    y_train: NDArray,
                                    x_test: NDArray,
@@ -395,8 +411,10 @@ class FlowerClientLauncher:
         optimizer = self._instantiate_optimizer()
         # Instantiate the loss function.
         loss_function = self._instantiate_loss_function()
+        # Instantiate the list of metrics.
+        metrics = self._instantiate_metrics()
         # Instantiate and compile the model.
-        model = self._instantiate_and_compile_model(optimizer, loss_function)
+        model = self._instantiate_and_compile_model(optimizer, loss_function, metrics)
         # Verify if the energy consumptions monitor to be used is PowerJoular
         # and if only one monitoring process is allowed to run in the system.
         if isinstance(energy_monitor, PowerJoularEnergyMonitor) and energy_monitor.get_attribute("_unique_monitor"):

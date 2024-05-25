@@ -103,17 +103,20 @@ class FlowerGOFFLSServer(Strategy):
             client_id_property = "client_id"
             client_hostname_property = "client_hostname"
             client_num_cpus_property = "client_num_cpus"
+            client_cpu_cores_list_property = "client_cpu_cores_list"
             client_num_training_examples_available_property = "client_num_training_examples_available"
             client_num_testing_examples_available_property = "client_num_testing_examples_available"
             gpi = GetPropertiesIns({client_id_property: "?",
                                     client_hostname_property: "?",
                                     client_num_cpus_property: "?",
+                                    client_cpu_cores_list_property: "?",
                                     client_num_training_examples_available_property: "?",
                                     client_num_testing_examples_available_property: "?"})
             client_prompted = client_proxy.get_properties(gpi, timeout=9999)
             client_id = client_prompted.properties[client_id_property]
             client_hostname = client_prompted.properties[client_hostname_property]
             client_num_cpus = client_prompted.properties[client_num_cpus_property]
+            client_cpu_cores_list = client_prompted.properties[client_cpu_cores_list_property]
             client_num_training_examples_available = \
                 client_prompted.properties[client_num_training_examples_available_property]
             client_num_testing_examples_available = \
@@ -122,6 +125,7 @@ class FlowerGOFFLSServer(Strategy):
             client_map = {"client_proxy": client_proxy,
                           "client_hostname": client_hostname,
                           "client_num_cpus": client_num_cpus,
+                          "client_cpu_cores_list": client_cpu_cores_list,
                           "client_num_training_examples_available": client_num_training_examples_available,
                           "client_num_testing_examples_available": client_num_testing_examples_available}
             available_clients_map.update({client_id_str: client_map})
@@ -349,8 +353,12 @@ class FlowerGOFFLSServer(Strategy):
                 client_metrics = metric_tuple[1]
                 client_id = client_metrics["client_id"]
                 client_id_str = "client_{0}".format(client_id)
-                del client_metrics["client_id"]
-                fit_clients_metrics.append({client_id_str: client_metrics})
+                client_metrics_copy = client_metrics.copy()
+                client_metrics_copy.pop("client_id")
+                client_metrics_copy["hostname"] = client_metrics_copy.pop("client_hostname")
+                client_metrics_copy["num_cpus"] = client_metrics_copy.pop("client_num_cpus")
+                client_metrics_copy["cpu_cores_list"] = client_metrics_copy.pop("client_cpu_cores_list")
+                fit_clients_metrics.append({client_id_str: client_metrics_copy})
             comm_round_values = {"client_selector": client_selector,
                                  "num_tasks": num_tasks,
                                  "num_available_clients": num_available_clients,
@@ -408,8 +416,10 @@ class FlowerGOFFLSServer(Strategy):
             client_id_str = "client_{0}".format(client_id)
             client_hostname = available_clients_map[client_id_str]["client_hostname"]
             client_num_cpus = available_clients_map[client_id_str]["client_num_cpus"]
+            client_cpu_cores_list = available_clients_map[client_id_str]["client_cpu_cores_list"]
             client_metrics.update({"client_hostname": client_hostname,
-                                   "client_num_cpus": client_num_cpus})
+                                   "client_num_cpus": client_num_cpus,
+                                   "client_cpu_cores_list": client_cpu_cores_list})
         # Set the phase value.
         phase = "train"
         # Calculate the energy timestamp metrics.
@@ -417,7 +427,7 @@ class FlowerGOFFLSServer(Strategy):
         # Update the individual training metrics history.
         self._update_individual_fit_metrics_history(comm_round, fit_metrics)
         # Remove the undesired metrics, if any.
-        undesired_metrics = ["client_id", "client_hostname", "client_num_cpus",
+        undesired_metrics = ["client_id", "client_hostname", "client_num_cpus", "client_cpu_cores_list",
                              "training_start_timestamp", "training_end_timestamp"]
         fit_metrics = self._remove_undesired_metrics(fit_metrics, undesired_metrics)
         # Initialize the aggregated training metrics dictionary (aggregated_fit_metrics).
@@ -624,8 +634,12 @@ class FlowerGOFFLSServer(Strategy):
                 client_metrics = metric_tuple[1]
                 client_id = client_metrics["client_id"]
                 client_id_str = "client_{0}".format(client_id)
-                del client_metrics["client_id"]
-                evaluate_clients_metrics.append({client_id_str: client_metrics})
+                client_metrics_copy = client_metrics.copy()
+                client_metrics_copy.pop("client_id")
+                client_metrics_copy["hostname"] = client_metrics_copy.pop("client_hostname")
+                client_metrics_copy["num_cpus"] = client_metrics_copy.pop("client_num_cpus")
+                client_metrics_copy["cpu_cores_list"] = client_metrics_copy.pop("client_cpu_cores_list")
+                evaluate_clients_metrics.append({client_id_str: client_metrics_copy})
             comm_round_values = {"client_selector": client_selector,
                                  "num_tasks": num_tasks,
                                  "num_available_clients": num_available_clients,
@@ -673,8 +687,10 @@ class FlowerGOFFLSServer(Strategy):
             client_id_str = "client_{0}".format(client_id)
             client_hostname = available_clients_map[client_id_str]["client_hostname"]
             client_num_cpus = available_clients_map[client_id_str]["client_num_cpus"]
+            client_cpu_cores_list = available_clients_map[client_id_str]["client_cpu_cores_list"]
             client_metrics.update({"client_hostname": client_hostname,
-                                   "client_num_cpus": client_num_cpus})
+                                   "client_num_cpus": client_num_cpus,
+                                   "client_cpu_cores_list": client_cpu_cores_list})
         # Set the phase value.
         phase = "test"
         # Calculate the energy timestamp metrics.
@@ -682,7 +698,7 @@ class FlowerGOFFLSServer(Strategy):
         # Update the individual testing metrics history.
         self._update_individual_evaluate_metrics_history(comm_round, evaluate_metrics)
         # Remove the undesired metrics, if any.
-        undesired_metrics = ["client_id", "client_hostname", "client_num_cpus",
+        undesired_metrics = ["client_id", "client_hostname", "client_num_cpus", "client_cpu_cores_list",
                              "testing_start_timestamp", "testing_end_timestamp"]
         evaluate_metrics = self._remove_undesired_metrics(evaluate_metrics, undesired_metrics)
         # Initialize the aggregated testing metrics dictionary (aggregated_evaluate_metrics).

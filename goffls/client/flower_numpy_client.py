@@ -1,5 +1,6 @@
 from datetime import datetime
 from keras.callbacks import Callback
+from keras.models import Model
 from keras.saving import load_model, save_model
 from logging import Logger
 from multiprocessing import Process, Queue, set_start_method
@@ -222,7 +223,7 @@ class FlowerNumpyClient(NumPyClient):
 
     def __init__(self,
                  id_: int,
-                 model: any,
+                 model: Model,
                  x_train: NDArray,
                  y_train: NDArray,
                  x_test: NDArray,
@@ -243,10 +244,12 @@ class FlowerNumpyClient(NumPyClient):
         self._affinity_settings = affinity_settings
         self._logger = logger
         self._model_file = None
+        self._model_metrics_names = None
         self._training_measurements_callback = TrainingMeasurementsCallback(energy_monitor)
         self._testing_measurements_callback = TestingMeasurementsCallback(energy_monitor)
         self._hostname = gethostname()
         self._num_cpus = cpu_count(logical=True)
+        self._cpu_cores_list = list(range(0, cpu_count(logical=True)))
         # Set the starting method of daemon processes.
         self._set_starting_method_of_daemon_processes()
         # Set the list of CPU cores to be used by the client (Linux only).
@@ -262,7 +265,7 @@ class FlowerNumpyClient(NumPyClient):
         return getattr(self, attribute_name)
 
     def _save_model(self,
-                    model: any) -> None:
+                    model: Model) -> None:
         # Get the necessary attributes.
         client_id = self.get_attribute("_client_id")
         daemon_settings = self.get_attribute("_daemon_settings")
@@ -325,6 +328,7 @@ class FlowerNumpyClient(NumPyClient):
             # Set the client process affinity (the list of CPU cores IDs to be used).
             affinity_list = self._get_affinity_list()
             sched_setaffinity(0, affinity_list)
+            self._set_attribute("_cpu_cores_list", affinity_list)
             # Set the number of CPU cores to be used by the client.
             num_cpus = len(affinity_list)
             self._set_attribute("_num_cpus", num_cpus)
@@ -335,7 +339,7 @@ class FlowerNumpyClient(NumPyClient):
                               ",".join([str(cpu_core_id) for cpu_core_id in affinity_list]))
             log_message(logger, message, "INFO")
 
-    def _load_model(self) -> any:
+    def _load_model(self) -> Model:
         # Get the necessary attributes.
         model = self.get_attribute("_model")
         model_file = self.get_attribute("_model_file")
@@ -356,6 +360,10 @@ class FlowerNumpyClient(NumPyClient):
         if "client_num_cpus" in config:
             client_num_cpus = self.get_attribute("_num_cpus")
             config.update({"client_num_cpus": client_num_cpus})
+        if "client_cpu_cores_list" in config:
+            client_cpu_cores_list = self.get_attribute("_cpu_cores_list")
+            client_cpu_cores_list_str = "|".join([str(cpu_core_id) for cpu_core_id in client_cpu_cores_list])
+            config.update({"client_cpu_cores_list": client_cpu_cores_list_str})
         if "client_num_training_examples_available" in config:
             client_num_training_examples_available = len(self.get_attribute("_x_train"))
             config.update({"client_num_training_examples_available": client_num_training_examples_available})
@@ -502,6 +510,10 @@ class FlowerNumpyClient(NumPyClient):
         # Store the training metrics of the last epoch.
         for training_metric_name in training_metrics_names:
             training_metrics.update({training_metric_name: history[training_metric_name][-1]})
+        # Set the model's list of metrics names (excluding loss).
+        model_metrics_names = list(history.keys())
+        model_metrics_names.remove("loss")
+        self._set_attribute("_model_metrics_names", model_metrics_names)
         # Add the number of training examples used to the training metrics.
         training_metrics.update({"num_training_examples_used": num_training_examples_to_use})
         # Set the logger.
@@ -616,12 +628,13 @@ class FlowerNumpyClient(NumPyClient):
                                 "testing_cpu_time": testing_cpu_time})
         # Add the model testing energy consumptions to the testing metrics.
         testing_metrics = testing_metrics | testing_energy_consumptions
-        # Get the testing metrics names.
-        model = self._load_model()
-        testing_metrics_names = model.metrics_names
+        # Get the model's list of metrics names.
+        model_metrics_names = self.get_attribute("_model_metrics_names")
+        # Add the loss metric name at index 0 (from index 1 onward the values are disposed by ordered metrics names).
+        model_metrics_names.insert(0, "loss")
         # Store the testing metrics.
-        for index, testing_metric_name in enumerate(testing_metrics_names):
-            testing_metrics.update({testing_metric_name: history[index]})
+        for index, metric_name in enumerate(model_metrics_names):
+            testing_metrics.update({metric_name: history[index]})
         # Add the number of testing examples used to the testing metrics.
         testing_metrics.update({"num_testing_examples_used": num_testing_examples_to_use})
         # Get the loss value.
