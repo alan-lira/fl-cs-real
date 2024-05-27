@@ -1,10 +1,10 @@
 from keras.applications import MobileNetV2
-from keras.losses import SparseCategoricalCrossentropy
-from keras.optimizers import SGD
+from keras.losses import Loss, SparseCategoricalCrossentropy
+from keras.metrics import Metric, SparseCategoricalAccuracy
+from keras.models import Model
+from keras.optimizers import Optimizer, SGD
 from logging import Logger
-from numpy import empty
 from pathlib import Path
-from PIL import Image
 from time import perf_counter
 from typing import Optional
 
@@ -16,6 +16,7 @@ from goffls.energy_monitor.powerjoular_energy_monitor import PowerJoularEnergyMo
 from goffls.energy_monitor.pyjoules_energy_monitor import PyJoulesEnergyMonitor
 from goffls.utils.config_parser_util import parse_config_section
 from goffls.utils.logger_util import load_logger, log_message
+from goffls.utils.multiclass_image_dataset_loader_util import load_x_y_for_multiclass_image_dataset
 
 
 class FlowerClientLauncher:
@@ -152,47 +153,6 @@ class FlowerClientLauncher:
         # Return the maximum message length in bytes.
         return max_message_length_in_bytes
 
-    @staticmethod
-    def _derive_num_images(y_phase_labels_file: Path) -> int:
-        return sum(1 for _ in open(file=y_phase_labels_file, mode="r"))
-
-    @staticmethod
-    def _derive_images_attributes(x_phase_folder: Path,
-                                  y_phase_labels_file: Path) -> tuple:
-        first_line = next(open(file=y_phase_labels_file, mode="r"))
-        split_line = first_line.rstrip().split(", ")
-        image_file = x_phase_folder.joinpath(split_line[0])
-        im = Image.open(fp=image_file)
-        width, height = im.size
-        depth = len(im.getbands())
-        return width, height, depth
-
-    def _load_x_y_for_multi_class_image_classification(self,
-                                                       phase: str) -> tuple:
-        # Get the necessary attributes.
-        dataset_settings = self.get_attribute("_dataset_settings")
-        root_folder = Path(dataset_settings["root_folder"]).absolute()
-        x_phase_folder = root_folder.joinpath("x_{0}".format(phase))
-        y_phase_folder = root_folder.joinpath("y_{0}".format(phase))
-        y_phase_labels_file = y_phase_folder.joinpath("labels.txt")
-        number_of_examples = self._derive_num_images(y_phase_labels_file)
-        width, height, depth = self._derive_images_attributes(x_phase_folder, y_phase_labels_file)
-        derived_x_shape = (number_of_examples, height, width, depth)
-        derived_y_shape = (number_of_examples, 1)
-        x_phase = empty(shape=derived_x_shape, dtype="uint8")
-        y_phase = empty(shape=derived_y_shape, dtype="uint8")
-        with open(file=y_phase_labels_file, mode="r") as labels_file:
-            index = 0
-            lines = [next(labels_file) for _ in range(number_of_examples)]
-            for line in lines:
-                split_line = line.rstrip().split(", ")
-                image_file = x_phase_folder.joinpath(split_line[0])
-                x_phase[index] = Image.open(fp=image_file)
-                label = split_line[1]
-                y_phase[index] = label
-                index += 1
-        return x_phase, y_phase
-
     def _load_dataset(self) -> tuple:
         # Start the dataset loading duration timer.
         dataset_loading_duration_start = perf_counter()
@@ -205,19 +165,19 @@ class FlowerClientLauncher:
         # Update the dataset root folder with the partition number that is associated to the client id.
         dataset_settings["root_folder"] = dataset_settings["root_folder"] + "partition_{0}".format(client_id)
         self._set_attribute("_dataset_settings", dataset_settings)
-        root_folder = dataset_settings["root_folder"]
+        dataset_root_folder = Path(dataset_settings["root_folder"])
         # Log a 'loading the dataset' message.
         message = "[Client {0}] Loading the '{1}' dataset ({2} storage)..." \
-                  .format(client_id, root_folder, storage_location)
+                  .format(client_id, dataset_root_folder, storage_location)
         log_message(logger, message, "INFO")
         # Initialize x_train, y_train, x_test, and y_test.
         x_train = y_train = x_test = y_test = None
         if category == "multi_class_image_classification":
             if storage_location == "Local":
                 # Load x_train and y_train.
-                x_train, y_train = self._load_x_y_for_multi_class_image_classification("train")
+                x_train, y_train = load_x_y_for_multiclass_image_dataset(dataset_root_folder, "train")
                 # Load x_test and y_test.
-                x_test, y_test = self._load_x_y_for_multi_class_image_classification("test")
+                x_test, y_test = load_x_y_for_multiclass_image_dataset(dataset_root_folder, "test")
         # Get the dataset load duration.
         dataset_loading_duration = perf_counter() - dataset_loading_duration_start
         # Log the dataset loading duration.
@@ -258,7 +218,7 @@ class FlowerClientLauncher:
         # Return the energy monitor.
         return energy_monitor
 
-    def _instantiate_optimizer(self) -> any:
+    def _instantiate_optimizer(self) -> Optimizer:
         # Get the necessary attributes.
         model_settings = self.get_attribute("_model_settings")
         model_provider = model_settings["provider"]
@@ -277,7 +237,7 @@ class FlowerClientLauncher:
         # Return the optimizer.
         return optimizer
 
-    def _instantiate_loss_function(self) -> any:
+    def _instantiate_loss_function(self) -> Loss:
         # Get the necessary attributes.
         model_settings = self.get_attribute("_model_settings")
         model_provider = model_settings["provider"]
@@ -296,9 +256,24 @@ class FlowerClientLauncher:
         # Return the loss function.
         return loss
 
+    def _instantiate_metrics(self) -> list[Metric]:
+        # Get the necessary attributes.
+        model_settings = self.get_attribute("_model_settings")
+        model_provider = model_settings["provider"]
+        model_provider_settings = model_settings[model_provider]
+        metrics = model_provider_settings["metrics"]
+        for index, metric in enumerate(metrics):
+            if model_provider == "Keras":
+                if metric == "sparse_categorical_accuracy":
+                    # Instantiate the Kera's SparseCategoricalAccuracy metric.
+                    metrics[index] = SparseCategoricalAccuracy()
+        # Return the list of metrics.
+        return metrics
+
     def _instantiate_and_compile_model(self,
-                                       optimizer: any,
-                                       loss_function: any) -> any:
+                                       optimizer: Optimizer,
+                                       loss_function: Loss,
+                                       metrics: list[Metric]) -> Model:
         # Get the necessary attributes.
         model_settings = self.get_attribute("_model_settings")
         model_provider = model_settings["provider"]
@@ -320,7 +295,6 @@ class FlowerClientLauncher:
                                     classifier_activation=model_provider_specific_settings["classifier_activation"])
             # Compile the Kera's model.
             loss_weights = model_provider_settings["loss_weights"]
-            metrics = model_provider_settings["metrics"]
             weighted_metrics = model_provider_settings["weighted_metrics"]
             run_eagerly = model_provider_settings["run_eagerly"]
             steps_per_execution = model_provider_settings["steps_per_execution"]
@@ -340,7 +314,7 @@ class FlowerClientLauncher:
 
     @staticmethod
     def _instantiate_flower_client(id_: int,
-                                   model: any,
+                                   model: Model,
                                    x_train: NDArray,
                                    y_train: NDArray,
                                    x_test: NDArray,
@@ -395,8 +369,10 @@ class FlowerClientLauncher:
         optimizer = self._instantiate_optimizer()
         # Instantiate the loss function.
         loss_function = self._instantiate_loss_function()
+        # Instantiate the list of metrics.
+        metrics = self._instantiate_metrics()
         # Instantiate and compile the model.
-        model = self._instantiate_and_compile_model(optimizer, loss_function)
+        model = self._instantiate_and_compile_model(optimizer, loss_function, metrics)
         # Verify if the energy consumptions monitor to be used is PowerJoular
         # and if only one monitoring process is allowed to run in the system.
         if isinstance(energy_monitor, PowerJoularEnergyMonitor) and energy_monitor.get_attribute("_unique_monitor"):
