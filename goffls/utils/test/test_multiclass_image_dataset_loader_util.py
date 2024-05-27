@@ -1,5 +1,5 @@
 from unittest import TestCase
 
 
-class TestMulticlassImageDatasetLoader(TestCase):
+class TestMulticlassImageDatasetLoaderUtil(TestCase):
     pass
