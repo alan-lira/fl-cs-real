@@ -870,6 +870,22 @@ class ResultAnalyzer:
                                                           "client_selector": client_selector,
                                                           "mean_sparse_categorical_accuracy":
                                                           mean_sparse_categorical_accuracy})
+                            # If the current metric name equals to 'weighted_mean_sparse_categorical_accuracy'...
+                            elif metric_name == "weighted_mean_sparse_categorical_accuracy":
+                                if "sparse_categorical_accuracy" in filtered_df.columns:
+                                    # Calculate the weighted mean sparse categorical accuracy.
+                                    num_training_examples_used = filtered_df["num_training_examples_used"]
+                                    sparse_categorical_accuracy = filtered_df["sparse_categorical_accuracy"]
+                                    sum_sparse_categorical_accuracy_product \
+                                        = (num_training_examples_used * sparse_categorical_accuracy).sum()
+                                    sum_num_training_examples_used = filtered_df["num_training_examples_used"].sum()
+                                    weighted_mean_sparse_categorical_accuracy \
+                                        = sum_sparse_categorical_accuracy_product / sum_num_training_examples_used
+                                    # Append the weighted mean sparse categorical accuracy to the plotting data.
+                                    plotting_data.append({"comm_round": comm_round,
+                                                          "client_selector": client_selector,
+                                                          "weighted_mean_sparse_categorical_accuracy":
+                                                          weighted_mean_sparse_categorical_accuracy})
                     # If there is data to plot...
                     if plotting_data:
                         # If the current metric name equals to 'max_training_elapsed_time'...
@@ -919,6 +935,18 @@ class ResultAnalyzer:
                                 y_scale_new = None
                                 plotting_settings["y_scale"] = y_scale_new
                                 y_label_new = "{0}".format("Mean accuracy")
+                                plotting_settings["y_label"] = y_label_new
+                        # If the current metric name equals to 'weighted_mean_sparse_categorical_accuracy'...
+                        elif metric_name == "weighted_mean_sparse_categorical_accuracy":
+                            # Set the 'y_data' value, if equals to 'Auto'.
+                            if y_data == "Auto":
+                                y_data_new = "weighted_mean_sparse_categorical_accuracy"
+                                plotting_settings["y_data"] = y_data_new
+                            # Set the 'y_label' value, if equals to 'Auto'.
+                            if y_label == "Auto":
+                                y_scale_new = None
+                                plotting_settings["y_scale"] = y_scale_new
+                                y_label_new = "{0}".format("Weighted mean accuracy")
                                 plotting_settings["y_label"] = y_label_new
                         # Set the 'x_data' value, if equals to 'Auto'.
                         if x_data == "Auto":
@@ -1128,6 +1156,22 @@ class ResultAnalyzer:
                                                           "client_selector": client_selector,
                                                           "mean_sparse_categorical_accuracy":
                                                           mean_sparse_categorical_accuracy})
+                            # If the current metric name equals to 'weighted_mean_sparse_categorical_accuracy'...
+                            elif metric_name == "weighted_mean_sparse_categorical_accuracy":
+                                if "sparse_categorical_accuracy" in filtered_df.columns:
+                                    # Calculate the weighted mean sparse categorical accuracy.
+                                    num_testing_examples_used = filtered_df["num_testing_examples_used"]
+                                    sparse_categorical_accuracy = filtered_df["sparse_categorical_accuracy"]
+                                    sum_sparse_categorical_accuracy_product \
+                                        = (num_testing_examples_used * sparse_categorical_accuracy).sum()
+                                    sum_num_testing_examples_used = filtered_df["num_testing_examples_used"].sum()
+                                    weighted_mean_sparse_categorical_accuracy \
+                                        = sum_sparse_categorical_accuracy_product / sum_num_testing_examples_used
+                                    # Append the weighted mean sparse categorical accuracy to the plotting data.
+                                    plotting_data.append({"comm_round": comm_round,
+                                                          "client_selector": client_selector,
+                                                          "weighted_mean_sparse_categorical_accuracy":
+                                                          weighted_mean_sparse_categorical_accuracy})
                     # If there is data to plot...
                     if plotting_data:
                         # If the current metric name equals to 'max_testing_elapsed_time'...
@@ -1177,6 +1221,18 @@ class ResultAnalyzer:
                                 y_scale_new = None
                                 plotting_settings["y_scale"] = y_scale_new
                                 y_label_new = "{0}".format("Mean accuracy")
+                                plotting_settings["y_label"] = y_label_new
+                        # If the current metric name equals to 'weighted_mean_sparse_categorical_accuracy'...
+                        elif metric_name == "weighted_mean_sparse_categorical_accuracy":
+                            # Set the 'y_data' value, if equals to 'Auto'.
+                            if y_data == "Auto":
+                                y_data_new = "weighted_mean_sparse_categorical_accuracy"
+                                plotting_settings["y_data"] = y_data_new
+                            # Set the 'y_label' value, if equals to 'Auto'.
+                            if y_label == "Auto":
+                                y_scale_new = None
+                                plotting_settings["y_scale"] = y_scale_new
+                                y_label_new = "{0}".format("Weighted mean accuracy")
                                 plotting_settings["y_label"] = y_label_new
                         # Set the 'x_data' value, if equals to 'Auto'.
                         if x_data == "Auto":

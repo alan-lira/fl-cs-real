@@ -4,9 +4,7 @@ from keras.metrics import Metric, SparseCategoricalAccuracy
 from keras.models import Model
 from keras.optimizers import Optimizer, SGD
 from logging import Logger
-from numpy import empty
 from pathlib import Path
-from PIL import Image
 from time import perf_counter
 from typing import Optional
 
@@ -18,6 +16,7 @@ from goffls.energy_monitor.powerjoular_energy_monitor import PowerJoularEnergyMo
 from goffls.energy_monitor.pyjoules_energy_monitor import PyJoulesEnergyMonitor
 from goffls.utils.config_parser_util import parse_config_section
 from goffls.utils.logger_util import load_logger, log_message
+from goffls.utils.multiclass_image_dataset_loader_util import load_x_y_for_multiclass_image_dataset
 
 
 class FlowerClientLauncher:
@@ -154,47 +153,6 @@ class FlowerClientLauncher:
         # Return the maximum message length in bytes.
         return max_message_length_in_bytes
 
-    @staticmethod
-    def _derive_num_images(y_phase_labels_file: Path) -> int:
-        return sum(1 for _ in open(file=y_phase_labels_file, mode="r"))
-
-    @staticmethod
-    def _derive_images_attributes(x_phase_folder: Path,
-                                  y_phase_labels_file: Path) -> tuple:
-        first_line = next(open(file=y_phase_labels_file, mode="r"))
-        split_line = first_line.rstrip().split(", ")
-        image_file = x_phase_folder.joinpath(split_line[0])
-        im = Image.open(fp=image_file)
-        width, height = im.size
-        depth = len(im.getbands())
-        return width, height, depth
-
-    def _load_x_y_for_multi_class_image_classification(self,
-                                                       phase: str) -> tuple:
-        # Get the necessary attributes.
-        dataset_settings = self.get_attribute("_dataset_settings")
-        root_folder = Path(dataset_settings["root_folder"]).absolute()
-        x_phase_folder = root_folder.joinpath("x_{0}".format(phase))
-        y_phase_folder = root_folder.joinpath("y_{0}".format(phase))
-        y_phase_labels_file = y_phase_folder.joinpath("labels.txt")
-        number_of_examples = self._derive_num_images(y_phase_labels_file)
-        width, height, depth = self._derive_images_attributes(x_phase_folder, y_phase_labels_file)
-        derived_x_shape = (number_of_examples, height, width, depth)
-        derived_y_shape = (number_of_examples, 1)
-        x_phase = empty(shape=derived_x_shape, dtype="uint8")
-        y_phase = empty(shape=derived_y_shape, dtype="uint8")
-        with open(file=y_phase_labels_file, mode="r") as labels_file:
-            index = 0
-            lines = [next(labels_file) for _ in range(number_of_examples)]
-            for line in lines:
-                split_line = line.rstrip().split(", ")
-                image_file = x_phase_folder.joinpath(split_line[0])
-                x_phase[index] = Image.open(fp=image_file)
-                label = split_line[1]
-                y_phase[index] = label
-                index += 1
-        return x_phase, y_phase
-
     def _load_dataset(self) -> tuple:
         # Start the dataset loading duration timer.
         dataset_loading_duration_start = perf_counter()
@@ -207,19 +165,19 @@ class FlowerClientLauncher:
         # Update the dataset root folder with the partition number that is associated to the client id.
         dataset_settings["root_folder"] = dataset_settings["root_folder"] + "partition_{0}".format(client_id)
         self._set_attribute("_dataset_settings", dataset_settings)
-        root_folder = dataset_settings["root_folder"]
+        dataset_root_folder = Path(dataset_settings["root_folder"])
         # Log a 'loading the dataset' message.
         message = "[Client {0}] Loading the '{1}' dataset ({2} storage)..." \
-                  .format(client_id, root_folder, storage_location)
+                  .format(client_id, dataset_root_folder, storage_location)
         log_message(logger, message, "INFO")
         # Initialize x_train, y_train, x_test, and y_test.
         x_train = y_train = x_test = y_test = None
         if category == "multi_class_image_classification":
             if storage_location == "Local":
                 # Load x_train and y_train.
-                x_train, y_train = self._load_x_y_for_multi_class_image_classification("train")
+                x_train, y_train = load_x_y_for_multiclass_image_dataset(dataset_root_folder, "train")
                 # Load x_test and y_test.
-                x_test, y_test = self._load_x_y_for_multi_class_image_classification("test")
+                x_test, y_test = load_x_y_for_multiclass_image_dataset(dataset_root_folder, "test")
         # Get the dataset load duration.
         dataset_loading_duration = perf_counter() - dataset_loading_duration_start
         # Log the dataset loading duration.
