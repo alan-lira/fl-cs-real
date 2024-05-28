@@ -273,15 +273,16 @@ class FlowerClientLauncher:
     def _instantiate_and_compile_model(self,
                                        optimizer: Optimizer,
                                        loss_function: Loss,
-                                       metrics: list[Metric]) -> Model:
+                                       metrics: list[Metric]) -> tuple:
         # Get the necessary attributes.
         model_settings = self.get_attribute("_model_settings")
         model_provider = model_settings["provider"]
         model_provider_settings = model_settings[model_provider]
         model_name = model_provider_settings["name"]
         model_provider_specific_settings = model_settings[model_name]
-        # Initialize the model.
+        # Initialize the model and its metrics names.
         model = None
+        metrics_names = None
         if model_provider == "Keras":
             if model_name == "MobileNetV2":
                 # Instantiate the Kera's MobileNetV2 model (Image Classification Architecture).
@@ -309,12 +310,15 @@ class FlowerClientLauncher:
                           steps_per_execution=steps_per_execution,
                           jit_compile=jit_compile,
                           auto_scale_loss=auto_scale_loss)
-        # Return the model.
-        return model
+            # Get the model's metrics names.
+            metrics_names = [metric.name for metric in vars(model)["_compile_metrics"]._user_metrics]
+        # Return the model and its list of metrics names.
+        return model, metrics_names
 
     @staticmethod
     def _instantiate_flower_client(id_: int,
                                    model: Model,
+                                   metrics_names: list,
                                    x_train: NDArray,
                                    y_train: NDArray,
                                    x_test: NDArray,
@@ -326,6 +330,7 @@ class FlowerClientLauncher:
         # Instantiate the flower client.
         flower_client = FlowerNumpyClient(id_=id_,
                                           model=model,
+                                          metrics_names=metrics_names,
                                           x_train=x_train,
                                           y_train=y_train,
                                           x_test=x_test,
@@ -372,7 +377,7 @@ class FlowerClientLauncher:
         # Instantiate the list of metrics.
         metrics = self._instantiate_metrics()
         # Instantiate and compile the model.
-        model = self._instantiate_and_compile_model(optimizer, loss_function, metrics)
+        model, metrics_names = self._instantiate_and_compile_model(optimizer, loss_function, metrics)
         # Verify if the energy consumptions monitor to be used is PowerJoular
         # and if only one monitoring process is allowed to run in the system.
         if isinstance(energy_monitor, PowerJoularEnergyMonitor) and energy_monitor.get_attribute("_unique_monitor"):
@@ -383,9 +388,9 @@ class FlowerClientLauncher:
             # If so, start the unique PowerJoular monitoring process.
             energy_monitor.start()
             # Instantiate the flower client.
-            flower_client = self._instantiate_flower_client(client_id, model, x_train, y_train, x_test, y_test,
-                                                            powerjoular_unique_attributes, daemon_settings,
-                                                            affinity_settings, logger)
+            flower_client = self._instantiate_flower_client(client_id, model, metrics_names, x_train, y_train,
+                                                            x_test, y_test, powerjoular_unique_attributes,
+                                                            daemon_settings, affinity_settings, logger)
             # Start the flower client.
             self._start_flower_client(flower_server_address,
                                       flower_client,
@@ -396,8 +401,9 @@ class FlowerClientLauncher:
             energy_monitor.remove_energy_consumption_files()
         else:
             # Instantiate the flower client.
-            flower_client = self._instantiate_flower_client(client_id, model, x_train, y_train, x_test, y_test,
-                                                            energy_monitor, daemon_settings, affinity_settings, logger)
+            flower_client = self._instantiate_flower_client(client_id, model, metrics_names, x_train, y_train,
+                                                            x_test, y_test, energy_monitor, daemon_settings,
+                                                            affinity_settings, logger)
             # Start the flower client.
             self._start_flower_client(flower_server_address,
                                       flower_client,
