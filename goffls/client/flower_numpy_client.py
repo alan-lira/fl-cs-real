@@ -224,6 +224,7 @@ class FlowerNumpyClient(NumPyClient):
     def __init__(self,
                  id_: int,
                  model: Model,
+                 metrics_names: list,
                  x_train: NDArray,
                  y_train: NDArray,
                  x_test: NDArray,
@@ -235,6 +236,7 @@ class FlowerNumpyClient(NumPyClient):
         # Initialize the attributes.
         self._client_id = id_
         self._model = model
+        self._metrics_names = metrics_names
         self._x_train = x_train
         self._y_train = y_train
         self._x_test = x_test
@@ -244,7 +246,6 @@ class FlowerNumpyClient(NumPyClient):
         self._affinity_settings = affinity_settings
         self._logger = logger
         self._model_file = None
-        self._model_metrics_names = None
         self._training_measurements_callback = TrainingMeasurementsCallback(energy_monitor)
         self._testing_measurements_callback = TestingMeasurementsCallback(energy_monitor)
         self._hostname = gethostname()
@@ -510,10 +511,6 @@ class FlowerNumpyClient(NumPyClient):
         # Store the training metrics of the last epoch.
         for training_metric_name in training_metrics_names:
             training_metrics.update({training_metric_name: history[training_metric_name][-1]})
-        # Set the model's list of metrics names (excluding loss).
-        model_metrics_names = list(history.keys())
-        model_metrics_names.remove("loss")
-        self._set_attribute("_model_metrics_names", model_metrics_names)
         # Add the number of training examples used to the training metrics.
         training_metrics.update({"num_training_examples_used": num_training_examples_to_use})
         # Set the logger.
@@ -629,11 +626,11 @@ class FlowerNumpyClient(NumPyClient):
         # Add the model testing energy consumptions to the testing metrics.
         testing_metrics = testing_metrics | testing_energy_consumptions
         # Get the model's list of metrics names.
-        model_metrics_names = self.get_attribute("_model_metrics_names")
+        metrics_names = self.get_attribute("_metrics_names")
         # Add the loss metric name at index 0 (from index 1 onward the values are disposed by ordered metrics names).
-        model_metrics_names.insert(0, "loss")
+        metrics_names.insert(0, "loss")
         # Store the testing metrics.
-        for index, metric_name in enumerate(model_metrics_names):
+        for index, metric_name in enumerate(metrics_names):
             testing_metrics.update({metric_name: history[index]})
         # Add the number of testing examples used to the testing metrics.
         testing_metrics.update({"num_testing_examples_used": num_testing_examples_to_use})
