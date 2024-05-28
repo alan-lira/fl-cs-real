@@ -625,12 +625,12 @@ class FlowerNumpyClient(NumPyClient):
                                 "testing_cpu_time": testing_cpu_time})
         # Add the model testing energy consumptions to the testing metrics.
         testing_metrics = testing_metrics | testing_energy_consumptions
-        # Get the model's list of metrics names.
-        metrics_names = self.get_attribute("_metrics_names")
+        # Get a copy of the model's list of metrics names.
+        metrics_names_copy = self.get_attribute("_metrics_names").copy()
         # Add the loss metric name at index 0 (from index 1 onward the values are disposed by ordered metrics names).
-        metrics_names.insert(0, "loss")
+        metrics_names_copy.insert(0, "loss")
         # Store the testing metrics.
-        for index, metric_name in enumerate(metrics_names):
+        for index, metric_name in enumerate(metrics_names_copy):
             testing_metrics.update({metric_name: history[index]})
         # Add the number of testing examples used to the testing metrics.
         testing_metrics.update({"num_testing_examples_used": num_testing_examples_to_use})
