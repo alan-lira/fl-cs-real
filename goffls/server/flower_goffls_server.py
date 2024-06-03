@@ -11,6 +11,7 @@ from flwr.server.client_proxy import ClientProxy
 from flwr.server.strategy.strategy import Strategy
 
 from goffls.client_selector.flower_ecmtc import select_clients_using_ecmtc
+from goffls.client_selector.flower_elastic_adapted import select_clients_using_elastic_adapted
 from goffls.client_selector.flower_mec import select_clients_using_mec
 from goffls.client_selector.flower_random import select_clients_using_random
 from goffls.metrics_aggregator.flower_weighted_average import aggregate_loss_by_weighted_average, \
@@ -173,7 +174,6 @@ class FlowerGOFFLSServer(Strategy):
         fl_settings = self.get_attribute("_fl_settings")
         enable_training = fl_settings["enable_training"]
         num_fit_tasks = fl_settings["num_fit_tasks"]
-        fit_deadline_in_seconds = fl_settings["fit_deadline_in_seconds"]
         client_selection_settings = self.get_attribute("_client_selection_settings")
         client_selector = client_selection_settings["client_selector"]
         individual_fit_metrics_history = self.get_attribute("_individual_fit_metrics_history")
@@ -225,6 +225,7 @@ class FlowerGOFFLSServer(Strategy):
             # Select clients using the ECMTC algorithm.
             history_checker = client_selection_settings["history_checker"]
             assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
+            fit_deadline_in_seconds = client_selection_settings["fit_deadline_in_seconds"]
             selected_fit_clients = select_clients_using_ecmtc(server_round,
                                                               phase,
                                                               num_fit_tasks,
@@ -234,6 +235,22 @@ class FlowerGOFFLSServer(Strategy):
                                                               history_checker,
                                                               assignment_capacities_init_settings,
                                                               logger)
+        elif client_selector == "ELASTIC":
+            # Select clients using the ELASTIC adapted algorithm.
+            history_checker = client_selection_settings["history_checker"]
+            assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
+            fit_deadline_in_seconds = client_selection_settings["fit_deadline_in_seconds"]
+            alpha = client_selection_settings["alpha"]
+            selected_fit_clients = select_clients_using_elastic_adapted(server_round,
+                                                                        phase,
+                                                                        num_fit_tasks,
+                                                                        fit_deadline_in_seconds,
+                                                                        alpha,
+                                                                        available_fit_clients_map,
+                                                                        individual_fit_metrics_history,
+                                                                        history_checker,
+                                                                        assignment_capacities_init_settings,
+                                                                        logger)
         # Get the clients selection duration.
         selection_duration = perf_counter() - selection_duration_start
         # Update the history of selected clients for training (selected_fit_clients).
@@ -542,7 +559,6 @@ class FlowerGOFFLSServer(Strategy):
         fl_settings = self.get_attribute("_fl_settings")
         enable_testing = fl_settings["enable_testing"]
         num_evaluate_tasks = fl_settings["num_evaluate_tasks"]
-        evaluate_deadline_in_seconds = fl_settings["evaluate_deadline_in_seconds"]
         client_selection_settings = self.get_attribute("_client_selection_settings")
         client_selector = client_selection_settings["client_selector"]
         individual_evaluate_metrics_history = self.get_attribute("_individual_evaluate_metrics_history")
@@ -588,6 +604,7 @@ class FlowerGOFFLSServer(Strategy):
             # Select clients using the ECMTC algorithm.
             history_checker = client_selection_settings["history_checker"]
             assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
+            evaluate_deadline_in_seconds = client_selection_settings["evaluate_deadline_in_seconds"]
             selected_evaluate_clients = select_clients_using_ecmtc(server_round,
                                                                    phase,
                                                                    num_evaluate_tasks,
@@ -597,6 +614,22 @@ class FlowerGOFFLSServer(Strategy):
                                                                    history_checker,
                                                                    assignment_capacities_init_settings,
                                                                    logger)
+        elif client_selector == "ELASTIC":
+            # Select clients using the ELASTIC adapted algorithm.
+            history_checker = client_selection_settings["history_checker"]
+            assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
+            evaluate_deadline_in_seconds = client_selection_settings["evaluate_deadline_in_seconds"]
+            alpha = client_selection_settings["alpha"]
+            selected_evaluate_clients = select_clients_using_elastic_adapted(server_round,
+                                                                             phase,
+                                                                             num_evaluate_tasks,
+                                                                             evaluate_deadline_in_seconds,
+                                                                             alpha,
+                                                                             available_evaluate_clients_map,
+                                                                             individual_evaluate_metrics_history,
+                                                                             history_checker,
+                                                                             assignment_capacities_init_settings,
+                                                                             logger)
         # Get the clients selection duration.
         selection_duration = perf_counter() - selection_duration_start
         # Update the history of selected clients for testing (selected_evaluate_clients).
