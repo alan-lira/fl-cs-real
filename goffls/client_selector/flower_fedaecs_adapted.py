@@ -1,25 +1,26 @@
 from logging import Logger
-from numpy import array, inf
+from numpy import array, expand_dims, inf, zeros
 
-from goffls.task_scheduler.elastic_adapted import elastic_adapted_client_selection_algorithm
+from goffls.task_scheduler.fedaecs_adapted import fedaecs_adapted
 from goffls.utils.client_selector_util import calculate_linear_interpolation_or_extrapolation, get_metric_mean_value, \
     map_available_participating_clients, schedule_tasks_to_selected_clients, select_all_available_clients, \
     sum_clients_capacities
 from goffls.utils.logger_util import log_message
 
 
-def select_clients_using_elastic_adapted(comm_round: int,
+def select_clients_using_fedaecs_adapted(comm_round: int,
                                          phase: str,
                                          num_tasks_to_schedule: int,
                                          deadline_in_seconds: float,
-                                         objectives_weights_parameter: float,
+                                         accuracy_lower_bound: float,
+                                         total_bandwidth_in_hertz: float,
                                          available_clients_map: dict,
                                          individual_metrics_history: dict,
                                          history_checker: str,
                                          assignment_capacities_init_settings: dict,
                                          logger: Logger) -> list:
     # Log a 'selecting clients' message.
-    message = "Selecting {0}ing clients using ELASTIC (adapted)...".format(phase)
+    message = "Selecting {0}ing clients using FedAECS (adapted)...".format(phase)
     log_message(logger, message, "INFO")
     # Initialize the list of selected clients.
     selected_clients = []
@@ -56,21 +57,18 @@ def select_clients_using_elastic_adapted(comm_round: int,
                                                                                 phase)
         # Redefine the number of tasks to schedule, if the available participating clients capacities sum is lower.
         num_tasks_to_schedule = min(num_tasks_to_schedule, available_participating_clients_capacities_sum)
-        # Set the list of assignment capacities per client (with tasks scheduled as equal as possible).
-        selected_all_available_participating_clients = select_all_available_clients(available_participating_clients_map,
-                                                                                    phase)
-        schedule_tasks_to_selected_clients(num_tasks_to_schedule, selected_all_available_participating_clients)
-        assignment_capacities = [available_participating_client["client_num_tasks_scheduled"]
-                                 for available_participating_client in selected_all_available_participating_clients]
         # Initialize the global lists that will be transformed to array.
         client_ids = []
+        assignment_capacities = []
         time_costs = []
         energy_costs = []
+        accuracy_gains = []
         # For each available client that has entries in the individual metrics history...
         for client_key, client_values in available_participating_clients_map.items():
             # Initialize his costs lists, based on the number of tasks (examples) to be scheduled.
-            time_costs_client = [inf for _ in range(0, num_tasks_to_schedule + 1)]
-            energy_costs_client = [inf for _ in range(0, num_tasks_to_schedule + 1)]
+            time_costs_client = [inf for _ in range(0, num_tasks_to_schedule+1)]
+            energy_costs_client = [inf for _ in range(0, num_tasks_to_schedule+1)]
+            accuracy_gains_client = [0.0 for _ in range(0, num_tasks_to_schedule+1)]
             # Get his individual metrics history entries...
             individual_metrics_history_entries = [list(comm_round_metrics)[0]
                                                   for key, comm_round_metrics in client_values.items()
@@ -119,6 +117,14 @@ def select_clients_using_elastic_adapted(comm_round: int,
                         energy_cost += energy_nvidia_gpu_cost_mean_value
                 # Update his energy costs list for this number of examples.
                 energy_costs_client[num_examples] = energy_cost
+                # Get the accuracy gain achieved by him.
+                accuracy_key = "_accuracy"
+                for metric_key, _ in individual_metrics_history_entry.items():
+                    if accuracy_key in metric_key:
+                        # Update his accuracy gains list for this number of examples.
+                        accuracy_gain = individual_metrics_history_entry[metric_key]
+                        accuracy_gains_client[num_examples] = accuracy_gain
+                        break
             # Initialize his assignment capacities list...
             assignment_capacities_client = None
             assignment_capacities_initializer = assignment_capacities_init_settings["assignment_capacities_initializer"]
@@ -138,7 +144,7 @@ def select_clients_using_elastic_adapted(comm_round: int,
                 if upper_bound == "client_capacity":
                     upper_bound = client_values["client_num_{0}ing_examples_available".format(phase)]
                 step = assignment_capacities_init_settings["step"]
-                custom_range = list(range(lower_bound, min(upper_bound + 1, num_tasks_to_schedule + 1), step))
+                custom_range = list(range(lower_bound, min(upper_bound+1, num_tasks_to_schedule+1), step))
                 previous_num_tasks_assigned = [list(comm_round_metrics)[0]["num_{0}ing_examples_used".format(phase)]
                                                for key, comm_round_metrics in client_values.items()
                                                if "comm_round_" in key]
@@ -151,6 +157,7 @@ def select_clients_using_elastic_adapted(comm_round: int,
                 # estimation of costs for the unknown values belonging to the custom range.
                 time_costs_client[0] = 0
                 energy_costs_client[0] = 0
+                accuracy_gains_client[0] = 0
                 previous_num_tasks_assigned.append(0)
                 # Estimates the costs for the unknown values via linear interpolation/extrapolation.
                 for assignment_capacity in assignment_capacities_client:
@@ -182,36 +189,66 @@ def select_clients_using_elastic_adapted(comm_round: int,
                                                                                                  y1_energy,
                                                                                                  y2_energy,
                                                                                                  assignment_capacity)
+                        # Calculate the linear interpolation/extrapolation for the accuracy gain.
+                        y1_accuracy = accuracy_gains_client[x1]
+                        y2_accuracy = accuracy_gains_client[x2]
+                        accuracy_gain_estimation = calculate_linear_interpolation_or_extrapolation(x1,
+                                                                                                   x2,
+                                                                                                   y1_accuracy,
+                                                                                                   y2_accuracy,
+                                                                                                   assignment_capacity)
                         # Update the cost lists with the estimated values.
                         time_costs_client[assignment_capacity] = time_cost_estimation
                         energy_costs_client[assignment_capacity] = energy_cost_estimation
+                        accuracy_gains_client[assignment_capacity] = accuracy_gain_estimation
             # Append his lists into the global lists.
             client_ids.append(client_key)
+            assignment_capacities.append(assignment_capacities_client)
             time_costs.append(time_costs_client)
             energy_costs.append(energy_costs_client)
+            accuracy_gains.append(accuracy_gains_client)
         # Convert the global lists into Numpy arrays.
         assignment_capacities = array(assignment_capacities, dtype=object)
         time_costs = array(time_costs, dtype=object)
         energy_costs = array(energy_costs, dtype=object)
-        # Execute the ELASTIC adapted algorithm.
-        _, tasks_assignment, selected_clients_indices, makespan, energy_consumption \
-            = elastic_adapted_client_selection_algorithm(num_resources,
-                                                         assignment_capacities,
-                                                         time_costs,
-                                                         energy_costs,
-                                                         deadline_in_seconds,
-                                                         objectives_weights_parameter)
-        # Log the ELASTIC adapted algorithm's result.
+        accuracy_gains = array(accuracy_gains, dtype=object)
+        # Set the number of rounds.
+        num_rounds = 1
+        # Expanded shape of cost functions (FedAECS considers communication rounds).
+        assignment_capacities_expanded_shape = expand_dims(assignment_capacities, axis=0)
+        time_costs_expanded_shape = expand_dims(time_costs, axis=0)
+        energy_costs_expanded_shape = expand_dims(energy_costs, axis=0)
+        accuracies_gains_expanded_shape = expand_dims(accuracy_gains, axis=0)
+        # Bandwidth information per resource per round.
+        b_shape = (num_rounds,
+                   num_resources,
+                   len(assignment_capacities_expanded_shape[num_rounds-1][num_resources-1]))
+        b = zeros(shape=b_shape)
+        # Execute the FedAECS adapted algorithm.
+        _, tasks_assignment, _, selected_clients_indices, makespan, energy_consumption, _ \
+            = fedaecs_adapted(num_rounds,
+                              num_resources,
+                              num_tasks_to_schedule,
+                              assignment_capacities_expanded_shape,
+                              time_costs_expanded_shape,
+                              energy_costs_expanded_shape,
+                              accuracies_gains_expanded_shape,
+                              b,
+                              accuracy_lower_bound,
+                              deadline_in_seconds,
+                              total_bandwidth_in_hertz)
+        # Log the FedAECS adapted algorithm's result.
         message = "X: {0}\nMakespan: {1}\nEnergy consumption: {2}" \
-                  .format(tasks_assignment, makespan, energy_consumption)
+                  .format(tasks_assignment[0], makespan[0], energy_consumption[0])
+        log_message(logger, message, "DEBUG")
         log_message(logger, message, "DEBUG")
         # Append the proxy objects and numbers of tasks scheduled into the selected clients list.
-        for sel_index in selected_clients_indices:
+        for sel_index in selected_clients_indices[0]:
             client_id_str = client_ids[sel_index]
             client_map = available_participating_clients_map[client_id_str]
             client_proxy = client_map["client_proxy"]
             client_capacity = client_map["client_num_{0}ing_examples_available".format(phase)]
-            client_num_tasks_scheduled = int(tasks_assignment[sel_index])
+            client_num_tasks_scheduled = int(tasks_assignment[0][sel_index])
             selected_clients.append({"client_proxy": client_proxy,
                                      "client_capacity": client_capacity,
                                      "client_num_tasks_scheduled": client_num_tasks_scheduled})

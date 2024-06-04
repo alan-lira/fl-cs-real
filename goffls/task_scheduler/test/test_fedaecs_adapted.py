@@ -1,5 +1,5 @@
 from unittest import TestCase
 
 
-class TestELASTICAdapted(TestCase):
+class TestFedAECSAdapted(TestCase):
     pass

@@ -1,6 +1,7 @@
 from copy import deepcopy
 from dateutil import parser
 from logging import Logger
+from numpy import inf
 from time import perf_counter
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -12,6 +13,7 @@ from flwr.server.strategy.strategy import Strategy
 
 from goffls.client_selector.flower_ecmtc import select_clients_using_ecmtc
 from goffls.client_selector.flower_elastic_adapted import select_clients_using_elastic_adapted
+from goffls.client_selector.flower_fedaecs_adapted import select_clients_using_fedaecs_adapted
 from goffls.client_selector.flower_mc2mkp_adapted import select_clients_using_mc2mkp_adapted
 from goffls.client_selector.flower_mec import select_clients_using_mec
 from goffls.client_selector.flower_olar_adapted import select_clients_using_olar_adapted
@@ -266,12 +268,32 @@ class FlowerGOFFLSServer(Strategy):
             history_checker = client_selection_settings["history_checker"]
             assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
             fit_deadline_in_seconds = client_selection_settings["fit_deadline_in_seconds"]
-            alpha = client_selection_settings["alpha"]
+            objectives_weights_parameter = client_selection_settings["objectives_weights_parameter"]
             selected_fit_clients = select_clients_using_elastic_adapted(server_round,
                                                                         phase,
                                                                         num_fit_tasks,
                                                                         fit_deadline_in_seconds,
-                                                                        alpha,
+                                                                        objectives_weights_parameter,
+                                                                        available_fit_clients_map,
+                                                                        individual_fit_metrics_history,
+                                                                        history_checker,
+                                                                        assignment_capacities_init_settings,
+                                                                        logger)
+        elif client_selector == "FedAECS":
+            # Select clients using the FedAECS adapted algorithm.
+            history_checker = client_selection_settings["history_checker"]
+            assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
+            fit_deadline_in_seconds = client_selection_settings["fit_deadline_in_seconds"]
+            accuracy_lower_bound = client_selection_settings["accuracy_lower_bound"]
+            total_bandwidth_in_hertz = client_selection_settings["total_bandwidth_in_hertz"]
+            if total_bandwidth_in_hertz == "inf":
+                total_bandwidth_in_hertz = inf
+            selected_fit_clients = select_clients_using_fedaecs_adapted(server_round,
+                                                                        phase,
+                                                                        num_fit_tasks,
+                                                                        fit_deadline_in_seconds,
+                                                                        accuracy_lower_bound,
+                                                                        total_bandwidth_in_hertz,
                                                                         available_fit_clients_map,
                                                                         individual_fit_metrics_history,
                                                                         history_checker,
@@ -669,12 +691,32 @@ class FlowerGOFFLSServer(Strategy):
             history_checker = client_selection_settings["history_checker"]
             assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
             evaluate_deadline_in_seconds = client_selection_settings["evaluate_deadline_in_seconds"]
-            alpha = client_selection_settings["alpha"]
+            objectives_weights_parameter = client_selection_settings["objectives_weights_parameter"]
             selected_evaluate_clients = select_clients_using_elastic_adapted(server_round,
                                                                              phase,
                                                                              num_evaluate_tasks,
                                                                              evaluate_deadline_in_seconds,
-                                                                             alpha,
+                                                                             objectives_weights_parameter,
+                                                                             available_evaluate_clients_map,
+                                                                             individual_evaluate_metrics_history,
+                                                                             history_checker,
+                                                                             assignment_capacities_init_settings,
+                                                                             logger)
+        elif client_selector == "FedAECS":
+            # Select clients using the FedAECS adapted algorithm.
+            history_checker = client_selection_settings["history_checker"]
+            assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
+            evaluate_deadline_in_seconds = client_selection_settings["evaluate_deadline_in_seconds"]
+            accuracy_lower_bound = client_selection_settings["accuracy_lower_bound"]
+            total_bandwidth_in_hertz = client_selection_settings["total_bandwidth_in_hertz"]
+            if total_bandwidth_in_hertz == "inf":
+                total_bandwidth_in_hertz = inf
+            selected_evaluate_clients = select_clients_using_fedaecs_adapted(server_round,
+                                                                             phase,
+                                                                             num_evaluate_tasks,
+                                                                             evaluate_deadline_in_seconds,
+                                                                             accuracy_lower_bound,
+                                                                             total_bandwidth_in_hertz,
                                                                              available_evaluate_clients_map,
                                                                              individual_evaluate_metrics_history,
                                                                              history_checker,

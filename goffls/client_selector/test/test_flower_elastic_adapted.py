@@ -1,5 +1,5 @@
 from unittest import TestCase
 
 
-class TestFlowerElasticAdapted(TestCase):
+class TestFlowerELASTICAdapted(TestCase):
     pass
