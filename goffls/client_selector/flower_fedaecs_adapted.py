@@ -18,11 +18,12 @@ def select_clients_using_fedaecs_adapted(comm_round: int,
                                          individual_metrics_history: dict,
                                          history_checker: str,
                                          assignment_capacities_init_settings: dict,
-                                         logger: Logger) -> list:
+                                         logger: Logger) -> dict:
     # Log a 'selecting clients' message.
     message = "Selecting {0}ing clients using FedAECS (adapted)...".format(phase)
     log_message(logger, message, "INFO")
-    # Initialize the list of selected clients.
+    # Initialize the selection dictionary and the list of selected clients.
+    selection = {}
     selected_clients = []
     # Verify if there are any entries in the individual metrics history.
     if not individual_metrics_history:
@@ -36,6 +37,8 @@ def select_clients_using_fedaecs_adapted(comm_round: int,
         schedule_tasks_to_selected_clients(num_tasks_to_schedule, selected_all_available_clients)
         # Append the selected clients into the selected clients list.
         selected_clients.extend(selected_all_available_clients)
+        # Update the selection dictionary with the selected clients for the schedule.
+        selection.update({"selected_clients": selected_clients})
     else:
         # Otherwise, the available clients will be selected considering their entries in the individual metrics history.
         comm_rounds = []
@@ -225,7 +228,7 @@ def select_clients_using_fedaecs_adapted(comm_round: int,
                    len(assignment_capacities_expanded_shape[num_rounds-1][num_resources-1]))
         b = zeros(shape=b_shape)
         # Execute the FedAECS adapted algorithm.
-        _, tasks_assignment, _, selected_clients_indices, makespan, energy_consumption, _ \
+        _, fedaecs_schedule, _, fedaecs_selected_clients_indices, fedaecs_makespan, fedaecs_energy_consumption, _ \
             = fedaecs_adapted(num_rounds,
                               num_resources,
                               num_tasks_to_schedule,
@@ -237,25 +240,31 @@ def select_clients_using_fedaecs_adapted(comm_round: int,
                               accuracy_lower_bound,
                               deadline_in_seconds,
                               total_bandwidth_in_hertz)
+        # Update the selection dictionary with the metrics obtained for the schedule.
+        selection.update({"makespan": fedaecs_makespan,
+                          "energy_consumption": fedaecs_energy_consumption})
         # Log the FedAECS adapted algorithm's result.
         message = "X: {0}\nMakespan: {1}\nEnergy consumption: {2}" \
-                  .format(tasks_assignment[0], makespan[0], energy_consumption[0])
+                  .format(fedaecs_schedule[0], fedaecs_makespan[0], fedaecs_energy_consumption[0])
         log_message(logger, message, "DEBUG")
         log_message(logger, message, "DEBUG")
         # Append the proxy objects and numbers of tasks scheduled into the selected clients list.
-        for sel_index in selected_clients_indices[0]:
+        for sel_index in fedaecs_selected_clients_indices[0]:
             client_id_str = client_ids[sel_index]
             client_map = available_participating_clients_map[client_id_str]
             client_proxy = client_map["client_proxy"]
             client_capacity = client_map["client_num_{0}ing_examples_available".format(phase)]
-            client_num_tasks_scheduled = int(tasks_assignment[0][sel_index])
+            client_num_tasks_scheduled = int(fedaecs_schedule[0][sel_index])
             selected_clients.append({"client_proxy": client_proxy,
                                      "client_capacity": client_capacity,
                                      "client_num_tasks_scheduled": client_num_tasks_scheduled})
+        # Update the selection dictionary with the selected clients for the schedule.
+        selection.update({"selected_clients": selected_clients})
     # Log a 'number of clients selected' message.
     message = "{0} {1} (out of {2}) {3} selected!".format(len(selected_clients),
                                                           "clients" if len(selected_clients) != 1 else "client",
                                                           len(available_clients_map),
                                                           "were" if len(selected_clients) != 1 else "was")
     log_message(logger, message, "INFO")
-    return selected_clients
+    # Return the selection dictionary.
+    return selection

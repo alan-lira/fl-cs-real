@@ -6,6 +6,7 @@ from goffls.utils.client_selector_util import calculate_linear_interpolation_or_
     map_available_participating_clients, schedule_tasks_to_selected_clients, select_all_available_clients, \
     sum_clients_capacities
 from goffls.utils.logger_util import log_message
+from goffls.utils.task_scheduler_util import get_total_cost
 
 
 def select_clients_using_mc2mkp_adapted(comm_round: int,
@@ -15,11 +16,12 @@ def select_clients_using_mc2mkp_adapted(comm_round: int,
                                         individual_metrics_history: dict,
                                         history_checker: str,
                                         assignment_capacities_init_settings: dict,
-                                        logger: Logger) -> list:
+                                        logger: Logger) -> dict:
     # Log a 'selecting clients' message.
     message = "Selecting {0}ing clients using (MC)²MKP (adapted)...".format(phase)
     log_message(logger, message, "INFO")
-    # Initialize the list of selected clients.
+    # Initialize the selection dictionary and the list of selected clients.
+    selection = {}
     selected_clients = []
     # Verify if there are any entries in the individual metrics history.
     if not individual_metrics_history:
@@ -33,6 +35,8 @@ def select_clients_using_mc2mkp_adapted(comm_round: int,
         schedule_tasks_to_selected_clients(num_tasks_to_schedule, selected_all_available_clients)
         # Append the selected clients into the selected clients list.
         selected_clients.extend(selected_all_available_clients)
+        # Update the selection dictionary with the selected clients for the schedule.
+        selection.update({"selected_clients": selected_clients})
     else:
         # Otherwise, the available clients will be selected considering their entries in the individual metrics history.
         comm_rounds = []
@@ -168,30 +172,36 @@ def select_clients_using_mc2mkp_adapted(comm_round: int,
         assignment_capacities = array(assignment_capacities, dtype=object)
         energy_costs = array(energy_costs, dtype=object)
         # Execute the (MC)²MKP adapted algorithm.
-        optimal_schedule = mc2mkp_adapted(num_tasks_to_schedule,
-                                          num_resources,
-                                          energy_costs,
-                                          assignment_capacities)
+        mc2mkp_schedule = mc2mkp_adapted(num_tasks_to_schedule,
+                                         num_resources,
+                                         energy_costs,
+                                         assignment_capacities)
+        # Update the selection dictionary with the metrics obtained for the schedule.
+        mc2mkp_energy_consumption = get_total_cost(energy_costs, mc2mkp_schedule)
+        selection.update({"energy_consumption": mc2mkp_energy_consumption})
         # Log the (MC)²MKP adapted algorithm's result.
-        message = "X*: {0}".format(optimal_schedule)
+        message = "X*: {0}".format(mc2mkp_schedule)
         log_message(logger, message, "DEBUG")
         # Get the list of indices from the selected clients.
         selected_clients_indices = [sel_index for sel_index, client_num_tasks_scheduled
-                                    in enumerate(list(optimal_schedule)) if client_num_tasks_scheduled > 0]
+                                    in enumerate(list(mc2mkp_schedule)) if client_num_tasks_scheduled > 0]
         # Append their corresponding proxies objects and numbers of tasks scheduled into the selected clients list.
         for sel_index in selected_clients_indices:
             client_id_str = client_ids[sel_index]
             client_map = available_participating_clients_map[client_id_str]
             client_proxy = client_map["client_proxy"]
             client_capacity = client_map["client_num_{0}ing_examples_available".format(phase)]
-            client_num_tasks_scheduled = int(optimal_schedule[sel_index])
+            client_num_tasks_scheduled = int(mc2mkp_schedule[sel_index])
             selected_clients.append({"client_proxy": client_proxy,
                                      "client_capacity": client_capacity,
                                      "client_num_tasks_scheduled": client_num_tasks_scheduled})
+        # Update the selection dictionary with the selected clients for the schedule.
+        selection.update({"selected_clients": selected_clients})
     # Log a 'number of clients selected' message.
     message = "{0} {1} (out of {2}) {3} selected!".format(len(selected_clients),
                                                           "clients" if len(selected_clients) != 1 else "client",
                                                           len(available_clients_map),
                                                           "were" if len(selected_clients) != 1 else "was")
     log_message(logger, message, "INFO")
-    return selected_clients
+    # Return the selection dictionary.
+    return selection

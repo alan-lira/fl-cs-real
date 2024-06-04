@@ -1,7 +1,7 @@
 from logging import Logger
 from numpy import array, inf
 
-from goffls.task_scheduler.elastic_adapted import elastic_adapted_client_selection_algorithm
+from goffls.task_scheduler.elastic_adapted import elastic_adapted
 from goffls.utils.client_selector_util import calculate_linear_interpolation_or_extrapolation, get_metric_mean_value, \
     map_available_participating_clients, schedule_tasks_to_selected_clients, select_all_available_clients, \
     sum_clients_capacities
@@ -17,11 +17,12 @@ def select_clients_using_elastic_adapted(comm_round: int,
                                          individual_metrics_history: dict,
                                          history_checker: str,
                                          assignment_capacities_init_settings: dict,
-                                         logger: Logger) -> list:
+                                         logger: Logger) -> dict:
     # Log a 'selecting clients' message.
     message = "Selecting {0}ing clients using ELASTIC (adapted)...".format(phase)
     log_message(logger, message, "INFO")
-    # Initialize the list of selected clients.
+    # Initialize the selection dictionary and the list of selected clients.
+    selection = {}
     selected_clients = []
     # Verify if there are any entries in the individual metrics history.
     if not individual_metrics_history:
@@ -35,6 +36,8 @@ def select_clients_using_elastic_adapted(comm_round: int,
         schedule_tasks_to_selected_clients(num_tasks_to_schedule, selected_all_available_clients)
         # Append the selected clients into the selected clients list.
         selected_clients.extend(selected_all_available_clients)
+        # Update the selection dictionary with the selected clients for the schedule.
+        selection.update({"selected_clients": selected_clients})
     else:
         # Otherwise, the available clients will be selected considering their entries in the individual metrics history.
         comm_rounds = []
@@ -194,31 +197,37 @@ def select_clients_using_elastic_adapted(comm_round: int,
         time_costs = array(time_costs, dtype=object)
         energy_costs = array(energy_costs, dtype=object)
         # Execute the ELASTIC adapted algorithm.
-        _, tasks_assignment, selected_clients_indices, makespan, energy_consumption \
-            = elastic_adapted_client_selection_algorithm(num_resources,
-                                                         assignment_capacities,
-                                                         time_costs,
-                                                         energy_costs,
-                                                         deadline_in_seconds,
-                                                         objectives_weights_parameter)
+        _, elastic_schedule, elastic_selected_clients_indices, elastic_makespan, elastic_energy_consumption \
+            = elastic_adapted(num_resources,
+                              assignment_capacities,
+                              time_costs,
+                              energy_costs,
+                              deadline_in_seconds,
+                              objectives_weights_parameter)
+        # Update the selection dictionary with the metrics obtained for the schedule.
+        selection.update({"makespan": elastic_makespan,
+                          "energy_consumption": elastic_energy_consumption})
         # Log the ELASTIC adapted algorithm's result.
         message = "X: {0}\nMakespan: {1}\nEnergy consumption: {2}" \
-                  .format(tasks_assignment, makespan, energy_consumption)
+                  .format(elastic_schedule, elastic_makespan, elastic_energy_consumption)
         log_message(logger, message, "DEBUG")
         # Append the proxy objects and numbers of tasks scheduled into the selected clients list.
-        for sel_index in selected_clients_indices:
+        for sel_index in elastic_selected_clients_indices:
             client_id_str = client_ids[sel_index]
             client_map = available_participating_clients_map[client_id_str]
             client_proxy = client_map["client_proxy"]
             client_capacity = client_map["client_num_{0}ing_examples_available".format(phase)]
-            client_num_tasks_scheduled = int(tasks_assignment[sel_index])
+            client_num_tasks_scheduled = int(elastic_schedule[sel_index])
             selected_clients.append({"client_proxy": client_proxy,
                                      "client_capacity": client_capacity,
                                      "client_num_tasks_scheduled": client_num_tasks_scheduled})
+        # Update the selection dictionary with the selected clients for the schedule.
+        selection.update({"selected_clients": selected_clients})
     # Log a 'number of clients selected' message.
     message = "{0} {1} (out of {2}) {3} selected!".format(len(selected_clients),
                                                           "clients" if len(selected_clients) != 1 else "client",
                                                           len(available_clients_map),
                                                           "were" if len(selected_clients) != 1 else "was")
     log_message(logger, message, "INFO")
-    return selected_clients
+    # Return the selection dictionary.
+    return selection

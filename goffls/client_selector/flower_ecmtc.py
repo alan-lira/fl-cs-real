@@ -16,11 +16,12 @@ def select_clients_using_ecmtc(comm_round: int,
                                individual_metrics_history: dict,
                                history_checker: str,
                                assignment_capacities_init_settings: dict,
-                               logger: Logger) -> list:
+                               logger: Logger) -> dict:
     # Log a 'selecting clients' message.
     message = "Selecting {0}ing clients using ECMTC...".format(phase)
     log_message(logger, message, "INFO")
-    # Initialize the list of selected clients.
+    # Initialize the selection dictionary and the list of selected clients.
+    selection = {}
     selected_clients = []
     # Verify if there are any entries in the individual metrics history.
     if not individual_metrics_history:
@@ -34,6 +35,8 @@ def select_clients_using_ecmtc(comm_round: int,
         schedule_tasks_to_selected_clients(num_tasks_to_schedule, selected_all_available_clients)
         # Append the selected clients into the selected clients list.
         selected_clients.extend(selected_all_available_clients)
+        # Update the selection dictionary with the selected clients for the schedule.
+        selection.update({"selected_clients": selected_clients})
     else:
         # Otherwise, the available clients will be selected considering their entries in the individual metrics history.
         comm_rounds = []
@@ -189,33 +192,39 @@ def select_clients_using_ecmtc(comm_round: int,
         time_costs = array(time_costs, dtype=object)
         energy_costs = array(energy_costs, dtype=object)
         # Execute the ECMTC algorithm.
-        optimal_schedule, minimal_energy_consumption, minimal_makespan = ecmtc(num_resources,
-                                                                               num_tasks_to_schedule,
-                                                                               assignment_capacities,
-                                                                               time_costs,
-                                                                               energy_costs,
-                                                                               deadline_in_seconds)
+        ecmtc_schedule, ecmtc_energy_consumption, ecmtc_makespan = ecmtc(num_resources,
+                                                                         num_tasks_to_schedule,
+                                                                         assignment_capacities,
+                                                                         time_costs,
+                                                                         energy_costs,
+                                                                         deadline_in_seconds)
+        # Update the selection dictionary with the metrics obtained for the schedule.
+        selection.update({"makespan": ecmtc_makespan,
+                          "energy_consumption": ecmtc_energy_consumption})
         # Log the ECMTC algorithm's result.
         message = "X*: {0}\nMinimal makespan (Cₘₐₓ): {1}\nMinimal energy consumption (ΣE): {2}" \
-                  .format(optimal_schedule, minimal_makespan, minimal_energy_consumption)
+                  .format(ecmtc_schedule, ecmtc_makespan, ecmtc_energy_consumption)
         log_message(logger, message, "DEBUG")
         # Get the list of indices from the selected clients.
         selected_clients_indices = [sel_index for sel_index, client_num_tasks_scheduled
-                                    in enumerate(optimal_schedule) if client_num_tasks_scheduled > 0]
+                                    in enumerate(ecmtc_schedule) if client_num_tasks_scheduled > 0]
         # Append their corresponding proxies objects and numbers of tasks scheduled into the selected clients list.
         for sel_index in selected_clients_indices:
             client_id_str = client_ids[sel_index]
             client_map = available_participating_clients_map[client_id_str]
             client_proxy = client_map["client_proxy"]
             client_capacity = client_map["client_num_{0}ing_examples_available".format(phase)]
-            client_num_tasks_scheduled = int(optimal_schedule[sel_index])
+            client_num_tasks_scheduled = int(ecmtc_schedule[sel_index])
             selected_clients.append({"client_proxy": client_proxy,
                                      "client_capacity": client_capacity,
                                      "client_num_tasks_scheduled": client_num_tasks_scheduled})
+        # Update the selection dictionary with the selected clients for the schedule.
+        selection.update({"selected_clients": selected_clients})
     # Log a 'number of clients selected' message.
     message = "{0} {1} (out of {2}) {3} selected!".format(len(selected_clients),
                                                           "clients" if len(selected_clients) != 1 else "client",
                                                           len(available_clients_map),
                                                           "were" if len(selected_clients) != 1 else "was")
     log_message(logger, message, "INFO")
-    return selected_clients
+    # Return the selection dictionary.
+    return selection

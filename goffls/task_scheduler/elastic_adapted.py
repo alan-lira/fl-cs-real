@@ -7,12 +7,12 @@ def calculate_ni_adapted(α: float,
     return α * (Ei + 1) - 1
 
 
-def elastic_adapted_client_selection_algorithm(I: int,
-                                               A: ndarray,
-                                               t: ndarray,
-                                               E: ndarray,
-                                               τ: float,
-                                               α: float) -> tuple:
+def elastic_adapted(I: int,
+                    A: ndarray,
+                    t: ndarray,
+                    E: ndarray,
+                    τ: float,
+                    α: float) -> tuple:
     # Some remarks about this adapted version of ELASTIC algorithm:
     # 1. We considered that clients do not share a wireless channel, so they can upload their model
     #    without having to wait for the channel availability. In other words, ∀i ∈ I, t_wait_i = 0.
