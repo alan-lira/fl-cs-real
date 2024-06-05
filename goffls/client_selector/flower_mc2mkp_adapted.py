@@ -176,9 +176,9 @@ def select_clients_using_mc2mkp_adapted(comm_round: int,
                                          num_resources,
                                          energy_costs,
                                          assignment_capacities)
-        # Update the selection dictionary with the metrics obtained for the schedule.
+        # Update the selection dictionary with the expected metrics for the schedule.
         mc2mkp_energy_consumption = get_total_cost(energy_costs, mc2mkp_schedule)
-        selection.update({"energy_consumption": mc2mkp_energy_consumption})
+        selection.update({"expected_energy_consumption": mc2mkp_energy_consumption})
         # Log the (MC)²MKP adapted algorithm's result.
         message = "X*: {0}".format(mc2mkp_schedule)
         log_message(logger, message, "DEBUG")

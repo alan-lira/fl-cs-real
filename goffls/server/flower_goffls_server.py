@@ -50,9 +50,11 @@ class FlowerGOFFLSServer(Strategy):
         self._logger = logger
         self._available_clients_map = {}
         self._selected_fit_clients_history = {}
-        self._selected_evaluate_clients_history = {}
+        self._fit_selection_performance_history = {}
         self._individual_fit_metrics_history = {}
         self._aggregated_fit_metrics_history = {}
+        self._selected_evaluate_clients_history = {}
+        self._evaluate_selection_performance_history = {}
         self._individual_evaluate_metrics_history = {}
         self._aggregated_evaluate_metrics_history = {}
 
@@ -167,6 +169,86 @@ class FlowerGOFFLSServer(Strategy):
             comm_round_selected_fit_clients = {comm_round_key: comm_round_values}
             selected_fit_clients_history.update(comm_round_selected_fit_clients)
             self._set_attribute("_selected_fit_clients_history", selected_fit_clients_history)
+
+    def _update_selection_performance_history(self,
+                                              comm_round: int,
+                                              phase: str,
+                                              num_tasks: Optional[int] = 0,
+                                              selection: Optional[dict] = None) -> None:
+        selection_performance_history_attribute = None
+        if phase == "train":
+            selection_performance_history_attribute = "_fit_selection_performance_history"
+        elif phase == "test":
+            selection_performance_history_attribute = "_evaluate_selection_performance_history"
+        selection_performance_history = self.get_attribute(selection_performance_history_attribute)
+        comm_round_key = "comm_round_{0}".format(comm_round)
+        if comm_round_key not in selection_performance_history:
+            expected_makespan = None
+            expected_energy_consumption = None
+            expected_accuracy = None
+            if "expected_makespan" in selection:
+                expected_makespan = selection["expected_makespan"]
+            if "expected_energy_consumption" in selection:
+                expected_energy_consumption = selection["expected_energy_consumption"]
+            if "expected_accuracy" in selection:
+                expected_accuracy = selection["expected_accuracy"]
+            client_selection_settings = self.get_attribute("_client_selection_settings")
+            client_selector = client_selection_settings["client_selector"]
+            comm_round_values = {"client_selector": client_selector,
+                                 "num_tasks": num_tasks,
+                                 "expected_makespan": expected_makespan,
+                                 "actual_makespan": 0.0,
+                                 "expected_energy_consumption": expected_energy_consumption,
+                                 "actual_energy_consumption": 0.0,
+                                 "expected_accuracy": expected_accuracy,
+                                 "actual_accuracy": 0.0}
+            comm_round_expected_performance = {comm_round_key: comm_round_values}
+            selection_performance_history.update(comm_round_expected_performance)
+            self._set_attribute(selection_performance_history_attribute, selection_performance_history)
+        else:
+            actual_makespan = 0.0
+            actual_energy_consumption = 0.0
+            sum_accuracy_product = 0.0
+            sum_num_examples_used = 0
+            individual_metrics_history_attribute = None
+            if phase == "train":
+                individual_metrics_history_attribute = "_individual_fit_metrics_history"
+            elif phase == "test":
+                individual_metrics_history_attribute = "_individual_evaluate_metrics_history"
+            individual_metrics_history = self.get_attribute(individual_metrics_history_attribute)
+            comm_round_individual_metrics = individual_metrics_history[comm_round_key]
+            clients_metrics_dicts = comm_round_individual_metrics["clients_metrics_dicts"]
+            time_key = "{0}ing_elapsed_time".format(phase)
+            energy_cpu_key = "{0}ing_energy_cpu".format(phase)
+            energy_nvidia_gpu_key = "{0}ing_energy_nvidia_gpu".format(phase)
+            accuracy_key = "_accuracy"
+            num_examples_key = "num_{0}ing_examples_used".format(phase)
+            for client_metrics_dict in clients_metrics_dicts:
+                for client_id_str, client_metrics in client_metrics_dict.items():
+                    for metric_key, _ in client_metrics.items():
+                        if time_key in metric_key:
+                            training_elapsed_time = client_metrics[metric_key]
+                            if training_elapsed_time > actual_makespan:
+                                actual_makespan = training_elapsed_time
+                        if energy_cpu_key in metric_key:
+                            training_energy_cpu = client_metrics[metric_key]
+                            actual_energy_consumption += training_energy_cpu
+                        if energy_nvidia_gpu_key in metric_key:
+                            training_energy_nvidia_gpu = client_metrics[metric_key]
+                            actual_energy_consumption += training_energy_nvidia_gpu
+                        if accuracy_key in metric_key:
+                            accuracy = client_metrics[metric_key]
+                            num_examples_used = 0
+                            if num_examples_key in client_metrics:
+                                num_examples_used = client_metrics[num_examples_key]
+                            sum_accuracy_product += num_examples_used * accuracy
+                            sum_num_examples_used += num_examples_used
+            actual_accuracy = sum_accuracy_product / sum_num_examples_used
+            comm_round_actual_performance = {"actual_makespan": actual_makespan,
+                                             "actual_energy_consumption": actual_energy_consumption,
+                                             "actual_accuracy": actual_accuracy}
+            selection_performance_history[comm_round_key].update(comm_round_actual_performance)
+            self._set_attribute(selection_performance_history_attribute, selection_performance_history)
 
     def configure_fit(self,
                       server_round: int,
@@ -309,6 +391,11 @@ class FlowerGOFFLSServer(Strategy):
                                                   available_fit_clients_map,
                                                   selection_duration,
                                                   selected_fit_clients)
+        # Update the history of training selection's performance (expected metrics values).
+        self._update_selection_performance_history(server_round,
+                                                   phase,
+                                                   num_fit_tasks,
+                                                   fit_selection)
         # Set the list of (fit_client_proxy, fit_client_instructions) pairs.
         fit_pairs = []
         for selected_fit_client in selected_fit_clients:
@@ -493,6 +580,8 @@ class FlowerGOFFLSServer(Strategy):
         self._calculate_energy_timestamp_metrics(fit_metrics, phase)
         # Update the individual training metrics history.
         self._update_individual_fit_metrics_history(comm_round, fit_metrics)
+        # Update the history of training selection's performance (actual metrics values).
+        self._update_selection_performance_history(comm_round, phase)
         # Remove the undesired metrics, if any.
         undesired_metrics = ["client_id", "client_hostname", "client_num_cpus", "client_cpu_cores_list",
                              "training_start_timestamp", "training_end_timestamp"]
@@ -734,6 +823,11 @@ class FlowerGOFFLSServer(Strategy):
                                                        available_evaluate_clients_map,
                                                        selection_duration,
                                                        selected_evaluate_clients)
+        # Update the history of testing selection's performance (expected metrics values).
+        self._update_selection_performance_history(server_round,
+                                                   phase,
+                                                   num_evaluate_tasks,
+                                                   evaluate_selection)
         # Set the list of (evaluate_client_proxy, evaluate_client_instructions) pairs.
         evaluate_pairs = []
         for selected_evaluate_client in selected_evaluate_clients:
@@ -826,6 +920,8 @@ class FlowerGOFFLSServer(Strategy):
         self._calculate_energy_timestamp_metrics(evaluate_metrics, phase)
         # Update the individual testing metrics history.
         self._update_individual_evaluate_metrics_history(comm_round, evaluate_metrics)
+        # Update the history of testing selection's performance (actual metrics values).
+        self._update_selection_performance_history(comm_round, phase)
         # Remove the undesired metrics, if any.
         undesired_metrics = ["client_id", "client_hostname", "client_num_cpus", "client_cpu_cores_list",
                              "testing_start_timestamp", "testing_end_timestamp"]

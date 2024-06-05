@@ -585,6 +585,107 @@ class FlowerServerLauncher:
                                     ",".join(evaluate_metrics_values))
                 file.write(data_line)
 
+    def _generate_fit_selection_performance_history_output_file(self) -> None:
+        # Get the necessary attributes.
+        server_strategy = self.get_attribute("_server_strategy")
+        fit_selection_performance_history = server_strategy.get_attribute("_fit_selection_performance_history")
+        output_settings = self.get_attribute("_output_settings")
+        remove_output_files = output_settings["remove_output_files"]
+        fit_selection_performance_history_file \
+            = Path(output_settings["fit_selection_performance_history_file"]).absolute()
+        # Remove the history output file (if it exists and if removing is enabled).
+        if remove_output_files:
+            fit_selection_performance_history_file.unlink(missing_ok=True)
+        # Create the parents directories of the output file (if not exist yet).
+        fit_selection_performance_history_file.parent.mkdir(exist_ok=True, parents=True)
+        # Write the header line to the output file (if not exist yet).
+        if not fit_selection_performance_history_file.exists():
+            with open(file=fit_selection_performance_history_file, mode="a", encoding="utf-8") as file:
+                header_line = "{0},{1},{2},{3},{4},{5},{6},{7},{8}\n" \
+                              .format("comm_round",
+                                      "client_selector",
+                                      "num_tasks",
+                                      "expected_makespan",
+                                      "actual_makespan",
+                                      "expected_energy_consumption",
+                                      "actual_energy_consumption",
+                                      "expected_accuracy",
+                                      "actual_accuracy")
+                file.write(header_line)
+        # Write the history data lines to the output file.
+        with open(file=fit_selection_performance_history_file, mode="a", encoding="utf-8") as file:
+            for comm_round_key, comm_round_values in fit_selection_performance_history.items():
+                client_selector = comm_round_values["client_selector"]
+                num_tasks = comm_round_values["num_tasks"]
+                expected_makespan = comm_round_values["expected_makespan"]
+                actual_makespan = comm_round_values["actual_makespan"]
+                expected_energy_consumption = comm_round_values["expected_energy_consumption"]
+                actual_energy_consumption = comm_round_values["actual_energy_consumption"]
+                expected_accuracy = comm_round_values["expected_accuracy"]
+                actual_accuracy = comm_round_values["actual_accuracy"]
+                data_line = "{0},{1},{2},{3},{4},{5},{6},{7},{8}\n" \
+                            .format(comm_round_key,
+                                    client_selector,
+                                    num_tasks,
+                                    expected_makespan,
+                                    actual_makespan,
+                                    expected_energy_consumption,
+                                    actual_energy_consumption,
+                                    expected_accuracy,
+                                    actual_accuracy)
+                file.write(data_line)
+
+    def _generate_evaluate_selection_performance_history_output_file(self) -> None:
+        # Get the necessary attributes.
+        server_strategy = self.get_attribute("_server_strategy")
+        evaluate_selection_performance_history \
+            = server_strategy.get_attribute("_evaluate_selection_performance_history")
+        output_settings = self.get_attribute("_output_settings")
+        remove_output_files = output_settings["remove_output_files"]
+        evaluate_selection_performance_history_file \
+            = Path(output_settings["evaluate_selection_performance_history_file"]).absolute()
+        # Remove the history output file (if it exists and if removing is enabled).
+        if remove_output_files:
+            evaluate_selection_performance_history_file.unlink(missing_ok=True)
+        # Create the parents directories of the output file (if not exist yet).
+        evaluate_selection_performance_history_file.parent.mkdir(exist_ok=True, parents=True)
+        # Write the header line to the output file (if not exist yet).
+        if not evaluate_selection_performance_history_file.exists():
+            with open(file=evaluate_selection_performance_history_file, mode="a", encoding="utf-8") as file:
+                header_line = "{0},{1},{2},{3},{4},{5},{6},{7},{8}\n" \
+                              .format("comm_round",
+                                      "client_selector",
+                                      "num_tasks",
+                                      "expected_makespan",
+                                      "actual_makespan",
+                                      "expected_energy_consumption",
+                                      "actual_energy_consumption",
+                                      "expected_accuracy",
+                                      "actual_accuracy")
+                file.write(header_line)
+        # Write the history data lines to the output file.
+        with open(file=evaluate_selection_performance_history_file, mode="a", encoding="utf-8") as file:
+            for comm_round_key, comm_round_values in evaluate_selection_performance_history.items():
+                client_selector = comm_round_values["client_selector"]
+                num_tasks = comm_round_values["num_tasks"]
+                expected_makespan = comm_round_values["expected_makespan"]
+                actual_makespan = comm_round_values["actual_makespan"]
+                expected_energy_consumption = comm_round_values["expected_energy_consumption"]
+                actual_energy_consumption = comm_round_values["actual_energy_consumption"]
+                expected_accuracy = comm_round_values["expected_accuracy"]
+                actual_accuracy = comm_round_values["actual_accuracy"]
+                data_line = "{0},{1},{2},{3},{4},{5},{6},{7},{8}\n" \
+                            .format(comm_round_key,
+                                    client_selector,
+                                    num_tasks,
+                                    expected_makespan,
+                                    actual_makespan,
+                                    expected_energy_consumption,
+                                    actual_energy_consumption,
+                                    expected_accuracy,
+                                    actual_accuracy)
+                file.write(data_line)
+
     def launch_server(self) -> None:
         # Get the necessary attributes.
         fl_settings = self.get_attribute("_fl_settings")
@@ -618,15 +719,19 @@ class FlowerServerLauncher:
                                   ssl_certificates)
         # Generate the output file for the selected fit clients' history.
         self._generate_selected_fit_clients_history_output_file()
-        # Generate the output file for the selected evaluate clients' history.
-        self._generate_selected_evaluate_clients_history_output_file()
         # Generate the output file for the individual fit metrics history.
         self._generate_individual_fit_metrics_history_output_file()
         # Generate the output file for the aggregated fit metrics history.
         self._generate_aggregated_fit_metrics_history_output_file()
+        # Generate the output file for the fit selection performance history.
+        self._generate_fit_selection_performance_history_output_file()
+        # Generate the output file for the selected evaluate clients' history.
+        self._generate_selected_evaluate_clients_history_output_file()
         # Generate the output file for the individual evaluate metrics history.
         self._generate_individual_evaluate_metrics_history_output_file()
         # Generate the output file for the aggregated evaluate metrics history.
         self._generate_aggregated_evaluate_metrics_history_output_file()
+        # Generate the output file for the evaluate selection performance history.
+        self._generate_evaluate_selection_performance_history_output_file()
         # End.
         exit(0)

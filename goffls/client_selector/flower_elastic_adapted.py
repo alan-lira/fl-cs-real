@@ -204,9 +204,9 @@ def select_clients_using_elastic_adapted(comm_round: int,
                               energy_costs,
                               deadline_in_seconds,
                               objectives_weights_parameter)
-        # Update the selection dictionary with the metrics obtained for the schedule.
-        selection.update({"makespan": elastic_makespan,
-                          "energy_consumption": elastic_energy_consumption})
+        # Update the selection dictionary with the expected metrics for the schedule.
+        selection.update({"expected_makespan": elastic_makespan,
+                          "expected_energy_consumption": elastic_energy_consumption})
         # Log the ELASTIC adapted algorithm's result.
         message = "X: {0}\nMakespan: {1}\nEnergy consumption: {2}" \
                   .format(elastic_schedule, elastic_makespan, elastic_energy_consumption)

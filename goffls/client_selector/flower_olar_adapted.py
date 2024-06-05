@@ -148,9 +148,9 @@ def select_clients_using_olar_adapted(comm_round: int,
                                      num_resources,
                                      time_costs,
                                      assignment_capacities)
-        # Update the selection dictionary with the metrics obtained for the schedule.
+        # Update the selection dictionary with the expected metrics for the schedule.
         olar_makespan = get_makespan(time_costs, olar_schedule)
-        selection.update({"makespan": olar_makespan})
+        selection.update({"expected_makespan": olar_makespan})
         # Log the OLAR adapted algorithm's result.
         message = "X*: {0}".format(olar_schedule)
         log_message(logger, message, "DEBUG")

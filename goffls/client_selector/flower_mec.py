@@ -196,9 +196,9 @@ def select_clients_using_mec(comm_round: int,
                                                                  assignment_capacities,
                                                                  time_costs,
                                                                  energy_costs)
-        # Update the selection dictionary with the metrics obtained for the schedule.
-        selection.update({"makespan": mec_makespan,
-                          "energy_consumption": mec_energy_consumption})
+        # Update the selection dictionary with the expected metrics for the schedule.
+        selection.update({"expected_makespan": mec_makespan,
+                          "expected_energy_consumption": mec_energy_consumption})
         # Log the MEC algorithm's result.
         message = "X*: {0}\nMinimal makespan (Cₘₐₓ): {1}\nMinimal energy consumption (ΣE): {2}" \
                   .format(mec_schedule, mec_makespan, mec_energy_consumption)

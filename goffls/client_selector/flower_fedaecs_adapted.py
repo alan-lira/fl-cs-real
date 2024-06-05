@@ -215,7 +215,7 @@ def select_clients_using_fedaecs_adapted(comm_round: int,
         time_costs = array(time_costs, dtype=object)
         energy_costs = array(energy_costs, dtype=object)
         accuracy_gains = array(accuracy_gains, dtype=object)
-        # Set the number of rounds.
+        # Set the number of rounds to one (FedAECS considers communication rounds).
         num_rounds = 1
         # Expanded shape of cost functions (FedAECS considers communication rounds).
         assignment_capacities_expanded_shape = expand_dims(assignment_capacities, axis=0)
@@ -228,21 +228,22 @@ def select_clients_using_fedaecs_adapted(comm_round: int,
                    len(assignment_capacities_expanded_shape[num_rounds-1][num_resources-1]))
         b = zeros(shape=b_shape)
         # Execute the FedAECS adapted algorithm.
-        _, fedaecs_schedule, _, fedaecs_selected_clients_indices, fedaecs_makespan, fedaecs_energy_consumption, _ \
-            = fedaecs_adapted(num_rounds,
-                              num_resources,
-                              num_tasks_to_schedule,
-                              assignment_capacities_expanded_shape,
-                              time_costs_expanded_shape,
-                              energy_costs_expanded_shape,
-                              accuracies_gains_expanded_shape,
-                              b,
-                              accuracy_lower_bound,
-                              deadline_in_seconds,
-                              total_bandwidth_in_hertz)
-        # Update the selection dictionary with the metrics obtained for the schedule.
-        selection.update({"makespan": fedaecs_makespan,
-                          "energy_consumption": fedaecs_energy_consumption})
+        _, fedaecs_schedule, _, fedaecs_selected_clients_indices, fedaecs_makespan, fedaecs_energy_consumption, \
+            fedaecs_accuracy = fedaecs_adapted(num_rounds,
+                                               num_resources,
+                                               num_tasks_to_schedule,
+                                               assignment_capacities_expanded_shape,
+                                               time_costs_expanded_shape,
+                                               energy_costs_expanded_shape,
+                                               accuracies_gains_expanded_shape,
+                                               b,
+                                               accuracy_lower_bound,
+                                               deadline_in_seconds,
+                                               total_bandwidth_in_hertz)
+        # Update the selection dictionary with the expected metrics for the schedule.
+        selection.update({"expected_makespan": fedaecs_makespan[0],
+                          "expected_energy_consumption": fedaecs_energy_consumption[0],
+                          "expected_accuracy": fedaecs_accuracy[0]})
         # Log the FedAECS adapted algorithm's result.
         message = "X: {0}\nMakespan: {1}\nEnergy consumption: {2}" \
                   .format(fedaecs_schedule[0], fedaecs_makespan[0], fedaecs_energy_consumption[0])

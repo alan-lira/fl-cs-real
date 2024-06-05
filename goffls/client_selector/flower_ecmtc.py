@@ -198,9 +198,9 @@ def select_clients_using_ecmtc(comm_round: int,
                                                                          time_costs,
                                                                          energy_costs,
                                                                          deadline_in_seconds)
-        # Update the selection dictionary with the metrics obtained for the schedule.
-        selection.update({"makespan": ecmtc_makespan,
-                          "energy_consumption": ecmtc_energy_consumption})
+        # Update the selection dictionary with the expected metrics for the schedule.
+        selection.update({"expected_makespan": ecmtc_makespan,
+                          "expected_energy_consumption": ecmtc_energy_consumption})
         # Log the ECMTC algorithm's result.
         message = "X*: {0}\nMinimal makespan (Cₘₐₓ): {1}\nMinimal energy consumption (ΣE): {2}" \
                   .format(ecmtc_schedule, ecmtc_makespan, ecmtc_energy_consumption)
