@@ -1,24 +1,25 @@
 from logging import Logger
 from numpy import array, inf
 
-from goffls.task_scheduler.ecmtc import ecmtc
+from goffls.task_scheduler.elastic_adapted import elastic_adapted
 from goffls.utils.client_selector_util import calculate_linear_interpolation_or_extrapolation, get_metric_mean_value, \
     map_available_participating_clients, schedule_tasks_to_selected_clients, select_all_available_clients, \
     sum_clients_capacities
 from goffls.utils.logger_util import log_message
 
 
-def select_clients_using_ecmtc(comm_round: int,
-                               phase: str,
-                               num_tasks_to_schedule: int,
-                               deadline_in_seconds: float,
-                               available_clients_map: dict,
-                               individual_metrics_history: dict,
-                               history_checker: str,
-                               assignment_capacities_init_settings: dict,
-                               logger: Logger) -> dict:
+def select_clients_using_elastic_adapted(comm_round: int,
+                                         phase: str,
+                                         num_tasks_to_schedule: int,
+                                         deadline_in_seconds: float,
+                                         objectives_weights_parameter: float,
+                                         available_clients_map: dict,
+                                         individual_metrics_history: dict,
+                                         history_checker: str,
+                                         assignment_capacities_init_settings: dict,
+                                         logger: Logger) -> dict:
     # Log a 'selecting clients' message.
-    message = "Selecting {0}ing clients using ECMTC...".format(phase)
+    message = "Selecting {0}ing clients using ELASTIC (adapted)...".format(phase)
     log_message(logger, message, "INFO")
     # Initialize the selection dictionary and the list of selected clients.
     selection = {}
@@ -58,16 +59,21 @@ def select_clients_using_ecmtc(comm_round: int,
                                                                                 phase)
         # Redefine the number of tasks to schedule, if the available participating clients capacities sum is lower.
         num_tasks_to_schedule = min(num_tasks_to_schedule, available_participating_clients_capacities_sum)
+        # Set the list of assignment capacities per client (with tasks scheduled as equal as possible).
+        selected_all_available_participating_clients = select_all_available_clients(available_participating_clients_map,
+                                                                                    phase)
+        schedule_tasks_to_selected_clients(num_tasks_to_schedule, selected_all_available_participating_clients)
+        assignment_capacities = [available_participating_client["client_num_tasks_scheduled"]
+                                 for available_participating_client in selected_all_available_participating_clients]
         # Initialize the global lists that will be transformed to array.
         client_ids = []
-        assignment_capacities = []
         time_costs = []
         energy_costs = []
         # For each available client that has entries in the individual metrics history...
         for client_key, client_values in available_participating_clients_map.items():
             # Initialize his costs lists, based on the number of tasks (examples) to be scheduled.
-            time_costs_client = [inf for _ in range(0, num_tasks_to_schedule+1)]
-            energy_costs_client = [inf for _ in range(0, num_tasks_to_schedule+1)]
+            time_costs_client = [inf for _ in range(0, num_tasks_to_schedule + 1)]
+            energy_costs_client = [inf for _ in range(0, num_tasks_to_schedule + 1)]
             # Get his individual metrics history entries...
             individual_metrics_history_entries = [list(comm_round_metrics)[0]
                                                   for key, comm_round_metrics in client_values.items()
@@ -135,7 +141,7 @@ def select_clients_using_ecmtc(comm_round: int,
                 if upper_bound == "client_capacity":
                     upper_bound = client_values["client_num_{0}ing_examples_available".format(phase)]
                 step = assignment_capacities_init_settings["step"]
-                custom_range = list(range(lower_bound, min(upper_bound+1, num_tasks_to_schedule+1), step))
+                custom_range = list(range(lower_bound, min(upper_bound + 1, num_tasks_to_schedule + 1), step))
                 previous_num_tasks_assigned = [list(comm_round_metrics)[0]["num_{0}ing_examples_used".format(phase)]
                                                for key, comm_round_metrics in client_values.items()
                                                if "comm_round_" in key]
@@ -184,37 +190,34 @@ def select_clients_using_ecmtc(comm_round: int,
                         energy_costs_client[assignment_capacity] = energy_cost_estimation
             # Append his lists into the global lists.
             client_ids.append(client_key)
-            assignment_capacities.append(assignment_capacities_client)
             time_costs.append(time_costs_client)
             energy_costs.append(energy_costs_client)
         # Convert the global lists into Numpy arrays.
         assignment_capacities = array(assignment_capacities, dtype=object)
         time_costs = array(time_costs, dtype=object)
         energy_costs = array(energy_costs, dtype=object)
-        # Execute the ECMTC algorithm.
-        ecmtc_schedule, ecmtc_energy_consumption, ecmtc_makespan = ecmtc(num_resources,
-                                                                         num_tasks_to_schedule,
-                                                                         assignment_capacities,
-                                                                         time_costs,
-                                                                         energy_costs,
-                                                                         deadline_in_seconds)
+        # Execute the ELASTIC adapted algorithm.
+        _, elastic_schedule, elastic_selected_clients_indices, elastic_makespan, elastic_energy_consumption \
+            = elastic_adapted(num_resources,
+                              assignment_capacities,
+                              time_costs,
+                              energy_costs,
+                              deadline_in_seconds,
+                              objectives_weights_parameter)
         # Update the selection dictionary with the expected metrics for the schedule.
-        selection.update({"expected_makespan": ecmtc_makespan,
-                          "expected_energy_consumption": ecmtc_energy_consumption})
-        # Log the ECMTC algorithm's result.
-        message = "X*: {0}\nMinimal makespan (Cₘₐₓ): {1}\nMinimal energy consumption (ΣE): {2}" \
-                  .format(ecmtc_schedule, ecmtc_makespan, ecmtc_energy_consumption)
+        selection.update({"expected_makespan": elastic_makespan,
+                          "expected_energy_consumption": elastic_energy_consumption})
+        # Log the ELASTIC adapted algorithm's result.
+        message = "X: {0}\nMakespan: {1}\nEnergy consumption: {2}" \
+                  .format(elastic_schedule, elastic_makespan, elastic_energy_consumption)
         log_message(logger, message, "DEBUG")
-        # Get the list of indices from the selected clients.
-        selected_clients_indices = [sel_index for sel_index, client_num_tasks_scheduled
-                                    in enumerate(ecmtc_schedule) if client_num_tasks_scheduled > 0]
-        # Append their corresponding proxies objects and numbers of tasks scheduled into the selected clients list.
-        for sel_index in selected_clients_indices:
+        # Append the proxy objects and numbers of tasks scheduled into the selected clients list.
+        for sel_index in elastic_selected_clients_indices:
             client_id_str = client_ids[sel_index]
             client_map = available_participating_clients_map[client_id_str]
             client_proxy = client_map["client_proxy"]
             client_capacity = client_map["client_num_{0}ing_examples_available".format(phase)]
-            client_num_tasks_scheduled = int(ecmtc_schedule[sel_index])
+            client_num_tasks_scheduled = int(elastic_schedule[sel_index])
             selected_clients.append({"client_proxy": client_proxy,
                                      "client_capacity": client_capacity,
                                      "client_num_tasks_scheduled": client_num_tasks_scheduled})

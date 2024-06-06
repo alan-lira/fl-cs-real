@@ -1,24 +1,24 @@
 from logging import Logger
 from numpy import array, inf
 
-from goffls.task_scheduler.ecmtc import ecmtc
-from goffls.utils.client_selector_util import calculate_linear_interpolation_or_extrapolation, get_metric_mean_value, \
+from goffls.task_scheduler.olar_adapted import olar_adapted
+from goffls.utils.client_selector_util import calculate_linear_interpolation_or_extrapolation, \
     map_available_participating_clients, schedule_tasks_to_selected_clients, select_all_available_clients, \
     sum_clients_capacities
 from goffls.utils.logger_util import log_message
+from goffls.utils.task_scheduler_util import get_makespan
 
 
-def select_clients_using_ecmtc(comm_round: int,
-                               phase: str,
-                               num_tasks_to_schedule: int,
-                               deadline_in_seconds: float,
-                               available_clients_map: dict,
-                               individual_metrics_history: dict,
-                               history_checker: str,
-                               assignment_capacities_init_settings: dict,
-                               logger: Logger) -> dict:
+def select_clients_using_olar_adapted(comm_round: int,
+                                      phase: str,
+                                      num_tasks_to_schedule: int,
+                                      available_clients_map: dict,
+                                      individual_metrics_history: dict,
+                                      history_checker: str,
+                                      assignment_capacities_init_settings: dict,
+                                      logger: Logger) -> dict:
     # Log a 'selecting clients' message.
-    message = "Selecting {0}ing clients using ECMTC...".format(phase)
+    message = "Selecting {0}ing clients using OLAR (adapted)...".format(phase)
     log_message(logger, message, "INFO")
     # Initialize the selection dictionary and the list of selected clients.
     selection = {}
@@ -62,12 +62,10 @@ def select_clients_using_ecmtc(comm_round: int,
         client_ids = []
         assignment_capacities = []
         time_costs = []
-        energy_costs = []
         # For each available client that has entries in the individual metrics history...
         for client_key, client_values in available_participating_clients_map.items():
             # Initialize his costs lists, based on the number of tasks (examples) to be scheduled.
             time_costs_client = [inf for _ in range(0, num_tasks_to_schedule+1)]
-            energy_costs_client = [inf for _ in range(0, num_tasks_to_schedule+1)]
             # Get his individual metrics history entries...
             individual_metrics_history_entries = [list(comm_round_metrics)[0]
                                                   for key, comm_round_metrics in client_values.items()
@@ -82,40 +80,6 @@ def select_clients_using_ecmtc(comm_round: int,
                     # Update his time costs list for this number of examples.
                     time_cost = individual_metrics_history_entry[time_key]
                     time_costs_client[num_examples] = time_cost
-                # Initialize the energy cost with the zero value, so different energy costs can be summed up.
-                energy_cost = 0
-                # Get the energy consumed by his CPU (if available).
-                energy_cpu_key = "{0}ing_energy_cpu".format(phase)
-                if energy_cpu_key in individual_metrics_history_entry:
-                    energy_cpu_cost = individual_metrics_history_entry[energy_cpu_key]
-                    # If the CPU energy cost is a valid value (higher than 0), take it.
-                    if energy_cpu_cost > 0:
-                        energy_cost += energy_cpu_cost
-                    # Otherwise, take the mean of the CPU energy costs for this number of examples, if available.
-                    else:
-                        energy_cpu_cost_mean_value = get_metric_mean_value(individual_metrics_history,
-                                                                           client_key,
-                                                                           num_examples_key,
-                                                                           num_examples,
-                                                                           energy_cpu_key)
-                        energy_cost += energy_cpu_cost_mean_value
-                # Get the energy consumed by his NVIDIA GPU (if available).
-                energy_nvidia_gpu_key = "{0}ing_energy_nvidia_gpu".format(phase)
-                if energy_nvidia_gpu_key in individual_metrics_history_entry:
-                    energy_nvidia_gpu_cost = individual_metrics_history_entry[energy_nvidia_gpu_key]
-                    # If the NVIDIA GPU energy cost is a valid value (higher than 0), take it.
-                    if energy_nvidia_gpu_cost > 0:
-                        energy_cost += energy_nvidia_gpu_cost
-                    # Otherwise, take the mean of the NVIDIA GPU energy costs for this number of examples, if available.
-                    else:
-                        energy_nvidia_gpu_cost_mean_value = get_metric_mean_value(individual_metrics_history,
-                                                                                  client_key,
-                                                                                  num_examples_key,
-                                                                                  num_examples,
-                                                                                  energy_nvidia_gpu_key)
-                        energy_cost += energy_nvidia_gpu_cost_mean_value
-                # Update his energy costs list for this number of examples.
-                energy_costs_client[num_examples] = energy_cost
             # Initialize his assignment capacities list...
             assignment_capacities_client = None
             assignment_capacities_initializer = assignment_capacities_init_settings["assignment_capacities_initializer"]
@@ -147,7 +111,6 @@ def select_clients_using_ecmtc(comm_round: int,
                 # Set the costs of zero tasks scheduled, allowing the data point (x=0, y=0) to be used during the
                 # estimation of costs for the unknown values belonging to the custom range.
                 time_costs_client[0] = 0
-                energy_costs_client[0] = 0
                 previous_num_tasks_assigned.append(0)
                 # Estimates the costs for the unknown values via linear interpolation/extrapolation.
                 for assignment_capacity in assignment_capacities_client:
@@ -171,50 +134,36 @@ def select_clients_using_ecmtc(comm_round: int,
                                                                                                y1_time,
                                                                                                y2_time,
                                                                                                assignment_capacity)
-                        # Calculate the linear interpolation/extrapolation for the energy cost.
-                        y1_energy = energy_costs_client[x1]
-                        y2_energy = energy_costs_client[x2]
-                        energy_cost_estimation = calculate_linear_interpolation_or_extrapolation(x1,
-                                                                                                 x2,
-                                                                                                 y1_energy,
-                                                                                                 y2_energy,
-                                                                                                 assignment_capacity)
                         # Update the cost lists with the estimated values.
                         time_costs_client[assignment_capacity] = time_cost_estimation
-                        energy_costs_client[assignment_capacity] = energy_cost_estimation
             # Append his lists into the global lists.
             client_ids.append(client_key)
             assignment_capacities.append(assignment_capacities_client)
             time_costs.append(time_costs_client)
-            energy_costs.append(energy_costs_client)
         # Convert the global lists into Numpy arrays.
         assignment_capacities = array(assignment_capacities, dtype=object)
         time_costs = array(time_costs, dtype=object)
-        energy_costs = array(energy_costs, dtype=object)
-        # Execute the ECMTC algorithm.
-        ecmtc_schedule, ecmtc_energy_consumption, ecmtc_makespan = ecmtc(num_resources,
-                                                                         num_tasks_to_schedule,
-                                                                         assignment_capacities,
-                                                                         time_costs,
-                                                                         energy_costs,
-                                                                         deadline_in_seconds)
+        # Execute the OLAR adapted algorithm.
+        olar_schedule = olar_adapted(num_tasks_to_schedule,
+                                     num_resources,
+                                     time_costs,
+                                     assignment_capacities)
         # Update the selection dictionary with the expected metrics for the schedule.
-        selection.update({"expected_makespan": ecmtc_makespan,
-                          "expected_energy_consumption": ecmtc_energy_consumption})
-        # Log the ECMTC algorithm's result.
-        message = "X*: {0}\nMinimal makespan (Cₘₐₓ): {1}\nMinimal energy consumption (ΣE): {2}" \
-                  .format(ecmtc_schedule, ecmtc_makespan, ecmtc_energy_consumption)
+        olar_makespan = get_makespan(time_costs, olar_schedule)
+        selection.update({"expected_makespan": olar_makespan})
+        # Log the OLAR adapted algorithm's result.
+        message = "X*: {0}".format(olar_schedule)
         log_message(logger, message, "DEBUG")
         # Get the list of indices from the selected clients.
         selected_clients_indices = [sel_index for sel_index, client_num_tasks_scheduled
-                                    in enumerate(ecmtc_schedule) if client_num_tasks_scheduled > 0]
+                                    in enumerate(list(olar_schedule)) if client_num_tasks_scheduled > 0]
         # Append their corresponding proxies objects and numbers of tasks scheduled into the selected clients list.
         for sel_index in selected_clients_indices:
             client_id_str = client_ids[sel_index]
             client_map = available_participating_clients_map[client_id_str]
             client_proxy = client_map["client_proxy"]
             client_capacity = client_map["client_num_{0}ing_examples_available".format(phase)]
-            client_num_tasks_scheduled = int(ecmtc_schedule[sel_index])
+            client_num_tasks_scheduled = int(olar_schedule[sel_index])
             selected_clients.append({"client_proxy": client_proxy,
                                      "client_capacity": client_capacity,
                                      "client_num_tasks_scheduled": client_num_tasks_scheduled})

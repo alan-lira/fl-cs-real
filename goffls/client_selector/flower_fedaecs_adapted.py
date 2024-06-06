@@ -1,24 +1,26 @@
 from logging import Logger
-from numpy import array, inf
+from numpy import array, expand_dims, inf, zeros
 
-from goffls.task_scheduler.ecmtc import ecmtc
+from goffls.task_scheduler.fedaecs_adapted import fedaecs_adapted
 from goffls.utils.client_selector_util import calculate_linear_interpolation_or_extrapolation, get_metric_mean_value, \
     map_available_participating_clients, schedule_tasks_to_selected_clients, select_all_available_clients, \
     sum_clients_capacities
 from goffls.utils.logger_util import log_message
 
 
-def select_clients_using_ecmtc(comm_round: int,
-                               phase: str,
-                               num_tasks_to_schedule: int,
-                               deadline_in_seconds: float,
-                               available_clients_map: dict,
-                               individual_metrics_history: dict,
-                               history_checker: str,
-                               assignment_capacities_init_settings: dict,
-                               logger: Logger) -> dict:
+def select_clients_using_fedaecs_adapted(comm_round: int,
+                                         phase: str,
+                                         num_tasks_to_schedule: int,
+                                         deadline_in_seconds: float,
+                                         accuracy_lower_bound: float,
+                                         total_bandwidth_in_hertz: float,
+                                         available_clients_map: dict,
+                                         individual_metrics_history: dict,
+                                         history_checker: str,
+                                         assignment_capacities_init_settings: dict,
+                                         logger: Logger) -> dict:
     # Log a 'selecting clients' message.
-    message = "Selecting {0}ing clients using ECMTC...".format(phase)
+    message = "Selecting {0}ing clients using FedAECS (adapted)...".format(phase)
     log_message(logger, message, "INFO")
     # Initialize the selection dictionary and the list of selected clients.
     selection = {}
@@ -63,11 +65,13 @@ def select_clients_using_ecmtc(comm_round: int,
         assignment_capacities = []
         time_costs = []
         energy_costs = []
+        accuracy_gains = []
         # For each available client that has entries in the individual metrics history...
         for client_key, client_values in available_participating_clients_map.items():
             # Initialize his costs lists, based on the number of tasks (examples) to be scheduled.
             time_costs_client = [inf for _ in range(0, num_tasks_to_schedule+1)]
             energy_costs_client = [inf for _ in range(0, num_tasks_to_schedule+1)]
+            accuracy_gains_client = [0.0 for _ in range(0, num_tasks_to_schedule+1)]
             # Get his individual metrics history entries...
             individual_metrics_history_entries = [list(comm_round_metrics)[0]
                                                   for key, comm_round_metrics in client_values.items()
@@ -116,6 +120,14 @@ def select_clients_using_ecmtc(comm_round: int,
                         energy_cost += energy_nvidia_gpu_cost_mean_value
                 # Update his energy costs list for this number of examples.
                 energy_costs_client[num_examples] = energy_cost
+                # Get the accuracy gain achieved by him.
+                accuracy_key = "_accuracy"
+                for metric_key, _ in individual_metrics_history_entry.items():
+                    if accuracy_key in metric_key:
+                        # Update his accuracy gains list for this number of examples.
+                        accuracy_gain = individual_metrics_history_entry[metric_key]
+                        accuracy_gains_client[num_examples] = accuracy_gain
+                        break
             # Initialize his assignment capacities list...
             assignment_capacities_client = None
             assignment_capacities_initializer = assignment_capacities_init_settings["assignment_capacities_initializer"]
@@ -148,6 +160,7 @@ def select_clients_using_ecmtc(comm_round: int,
                 # estimation of costs for the unknown values belonging to the custom range.
                 time_costs_client[0] = 0
                 energy_costs_client[0] = 0
+                accuracy_gains_client[0] = 0
                 previous_num_tasks_assigned.append(0)
                 # Estimates the costs for the unknown values via linear interpolation/extrapolation.
                 for assignment_capacity in assignment_capacities_client:
@@ -179,42 +192,70 @@ def select_clients_using_ecmtc(comm_round: int,
                                                                                                  y1_energy,
                                                                                                  y2_energy,
                                                                                                  assignment_capacity)
+                        # Calculate the linear interpolation/extrapolation for the accuracy gain.
+                        y1_accuracy = accuracy_gains_client[x1]
+                        y2_accuracy = accuracy_gains_client[x2]
+                        accuracy_gain_estimation = calculate_linear_interpolation_or_extrapolation(x1,
+                                                                                                   x2,
+                                                                                                   y1_accuracy,
+                                                                                                   y2_accuracy,
+                                                                                                   assignment_capacity)
                         # Update the cost lists with the estimated values.
                         time_costs_client[assignment_capacity] = time_cost_estimation
                         energy_costs_client[assignment_capacity] = energy_cost_estimation
+                        accuracy_gains_client[assignment_capacity] = accuracy_gain_estimation
             # Append his lists into the global lists.
             client_ids.append(client_key)
             assignment_capacities.append(assignment_capacities_client)
             time_costs.append(time_costs_client)
             energy_costs.append(energy_costs_client)
+            accuracy_gains.append(accuracy_gains_client)
         # Convert the global lists into Numpy arrays.
         assignment_capacities = array(assignment_capacities, dtype=object)
         time_costs = array(time_costs, dtype=object)
         energy_costs = array(energy_costs, dtype=object)
-        # Execute the ECMTC algorithm.
-        ecmtc_schedule, ecmtc_energy_consumption, ecmtc_makespan = ecmtc(num_resources,
-                                                                         num_tasks_to_schedule,
-                                                                         assignment_capacities,
-                                                                         time_costs,
-                                                                         energy_costs,
-                                                                         deadline_in_seconds)
+        accuracy_gains = array(accuracy_gains, dtype=object)
+        # Set the number of rounds to one (FedAECS considers communication rounds).
+        num_rounds = 1
+        # Expanded shape of cost functions (FedAECS considers communication rounds).
+        assignment_capacities_expanded_shape = expand_dims(assignment_capacities, axis=0)
+        time_costs_expanded_shape = expand_dims(time_costs, axis=0)
+        energy_costs_expanded_shape = expand_dims(energy_costs, axis=0)
+        accuracies_gains_expanded_shape = expand_dims(accuracy_gains, axis=0)
+        # Bandwidth information per resource per round.
+        b_shape = (num_rounds,
+                   num_resources,
+                   len(assignment_capacities_expanded_shape[num_rounds-1][num_resources-1]))
+        b = zeros(shape=b_shape)
+        # Execute the FedAECS adapted algorithm.
+        _, fedaecs_schedule, _, fedaecs_selected_clients_indices, fedaecs_makespan, fedaecs_energy_consumption, \
+            fedaecs_accuracy = fedaecs_adapted(num_rounds,
+                                               num_resources,
+                                               num_tasks_to_schedule,
+                                               assignment_capacities_expanded_shape,
+                                               time_costs_expanded_shape,
+                                               energy_costs_expanded_shape,
+                                               accuracies_gains_expanded_shape,
+                                               b,
+                                               accuracy_lower_bound,
+                                               deadline_in_seconds,
+                                               total_bandwidth_in_hertz)
         # Update the selection dictionary with the expected metrics for the schedule.
-        selection.update({"expected_makespan": ecmtc_makespan,
-                          "expected_energy_consumption": ecmtc_energy_consumption})
-        # Log the ECMTC algorithm's result.
-        message = "X*: {0}\nMinimal makespan (Cₘₐₓ): {1}\nMinimal energy consumption (ΣE): {2}" \
-                  .format(ecmtc_schedule, ecmtc_makespan, ecmtc_energy_consumption)
+        selection.update({"expected_makespan": fedaecs_makespan[0],
+                          "expected_energy_consumption": fedaecs_energy_consumption[0],
+                          "expected_accuracy": fedaecs_accuracy[0]})
+        # Log the FedAECS adapted algorithm's result.
+        message = "X: {0}\nMakespan: {1}\nEnergy consumption: {2}" \
+                  .format(fedaecs_schedule[0], fedaecs_makespan[0], fedaecs_energy_consumption[0])
         log_message(logger, message, "DEBUG")
-        # Get the list of indices from the selected clients.
-        selected_clients_indices = [sel_index for sel_index, client_num_tasks_scheduled
-                                    in enumerate(ecmtc_schedule) if client_num_tasks_scheduled > 0]
-        # Append their corresponding proxies objects and numbers of tasks scheduled into the selected clients list.
-        for sel_index in selected_clients_indices:
+        log_message(logger, message, "DEBUG")
+        # Append the proxy objects and numbers of tasks scheduled into the selected clients list.
+        for sel_index in fedaecs_selected_clients_indices[0]:
             client_id_str = client_ids[sel_index]
             client_map = available_participating_clients_map[client_id_str]
             client_proxy = client_map["client_proxy"]
             client_capacity = client_map["client_num_{0}ing_examples_available".format(phase)]
-            client_num_tasks_scheduled = int(ecmtc_schedule[sel_index])
+            client_num_tasks_scheduled = int(fedaecs_schedule[0][sel_index])
             selected_clients.append({"client_proxy": client_proxy,
                                      "client_capacity": client_capacity,
                                      "client_num_tasks_scheduled": client_num_tasks_scheduled})

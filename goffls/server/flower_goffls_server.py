@@ -1,6 +1,7 @@
 from copy import deepcopy
 from dateutil import parser
 from logging import Logger
+from numpy import inf
 from time import perf_counter
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -11,7 +12,11 @@ from flwr.server.client_proxy import ClientProxy
 from flwr.server.strategy.strategy import Strategy
 
 from goffls.client_selector.flower_ecmtc import select_clients_using_ecmtc
+from goffls.client_selector.flower_elastic_adapted import select_clients_using_elastic_adapted
+from goffls.client_selector.flower_fedaecs_adapted import select_clients_using_fedaecs_adapted
+from goffls.client_selector.flower_mc2mkp_adapted import select_clients_using_mc2mkp_adapted
 from goffls.client_selector.flower_mec import select_clients_using_mec
+from goffls.client_selector.flower_olar_adapted import select_clients_using_olar_adapted
 from goffls.client_selector.flower_random import select_clients_using_random
 from goffls.metrics_aggregator.flower_weighted_average import aggregate_loss_by_weighted_average, \
     aggregate_metrics_by_weighted_average
@@ -45,9 +50,11 @@ class FlowerGOFFLSServer(Strategy):
         self._logger = logger
         self._available_clients_map = {}
         self._selected_fit_clients_history = {}
-        self._selected_evaluate_clients_history = {}
+        self._fit_selection_performance_history = {}
         self._individual_fit_metrics_history = {}
         self._aggregated_fit_metrics_history = {}
+        self._selected_evaluate_clients_history = {}
+        self._evaluate_selection_performance_history = {}
         self._individual_evaluate_metrics_history = {}
         self._aggregated_evaluate_metrics_history = {}
 
@@ -163,6 +170,86 @@ class FlowerGOFFLSServer(Strategy):
             selected_fit_clients_history.update(comm_round_selected_fit_clients)
             self._set_attribute("_selected_fit_clients_history", selected_fit_clients_history)
 
+    def _update_selection_performance_history(self,
+                                              comm_round: int,
+                                              phase: str,
+                                              num_tasks: Optional[int] = 0,
+                                              selection: Optional[dict] = None) -> None:
+        selection_performance_history_attribute = None
+        if phase == "train":
+            selection_performance_history_attribute = "_fit_selection_performance_history"
+        elif phase == "test":
+            selection_performance_history_attribute = "_evaluate_selection_performance_history"
+        selection_performance_history = self.get_attribute(selection_performance_history_attribute)
+        comm_round_key = "comm_round_{0}".format(comm_round)
+        if comm_round_key not in selection_performance_history:
+            expected_makespan = None
+            expected_energy_consumption = None
+            expected_accuracy = None
+            if "expected_makespan" in selection:
+                expected_makespan = selection["expected_makespan"]
+            if "expected_energy_consumption" in selection:
+                expected_energy_consumption = selection["expected_energy_consumption"]
+            if "expected_accuracy" in selection:
+                expected_accuracy = selection["expected_accuracy"]
+            client_selection_settings = self.get_attribute("_client_selection_settings")
+            client_selector = client_selection_settings["client_selector"]
+            comm_round_values = {"client_selector": client_selector,
+                                 "num_tasks": num_tasks,
+                                 "expected_makespan": expected_makespan,
+                                 "actual_makespan": 0.0,
+                                 "expected_energy_consumption": expected_energy_consumption,
+                                 "actual_energy_consumption": 0.0,
+                                 "expected_accuracy": expected_accuracy,
+                                 "actual_accuracy": 0.0}
+            comm_round_expected_performance = {comm_round_key: comm_round_values}
+            selection_performance_history.update(comm_round_expected_performance)
+            self._set_attribute(selection_performance_history_attribute, selection_performance_history)
+        else:
+            actual_makespan = 0.0
+            actual_energy_consumption = 0.0
+            sum_accuracy_product = 0.0
+            sum_num_examples_used = 0
+            individual_metrics_history_attribute = None
+            if phase == "train":
+                individual_metrics_history_attribute = "_individual_fit_metrics_history"
+            elif phase == "test":
+                individual_metrics_history_attribute = "_individual_evaluate_metrics_history"
+            individual_metrics_history = self.get_attribute(individual_metrics_history_attribute)
+            comm_round_individual_metrics = individual_metrics_history[comm_round_key]
+            clients_metrics_dicts = comm_round_individual_metrics["clients_metrics_dicts"]
+            time_key = "{0}ing_elapsed_time".format(phase)
+            energy_cpu_key = "{0}ing_energy_cpu".format(phase)
+            energy_nvidia_gpu_key = "{0}ing_energy_nvidia_gpu".format(phase)
+            accuracy_key = "_accuracy"
+            num_examples_key = "num_{0}ing_examples_used".format(phase)
+            for client_metrics_dict in clients_metrics_dicts:
+                for client_id_str, client_metrics in client_metrics_dict.items():
+                    for metric_key, _ in client_metrics.items():
+                        if time_key in metric_key:
+                            training_elapsed_time = client_metrics[metric_key]
+                            if training_elapsed_time > actual_makespan:
+                                actual_makespan = training_elapsed_time
+                        if energy_cpu_key in metric_key:
+                            training_energy_cpu = client_metrics[metric_key]
+                            actual_energy_consumption += training_energy_cpu
+                        if energy_nvidia_gpu_key in metric_key:
+                            training_energy_nvidia_gpu = client_metrics[metric_key]
+                            actual_energy_consumption += training_energy_nvidia_gpu
+                        if accuracy_key in metric_key:
+                            accuracy = client_metrics[metric_key]
+                            num_examples_used = 0
+                            if num_examples_key in client_metrics:
+                                num_examples_used = client_metrics[num_examples_key]
+                            sum_accuracy_product += num_examples_used * accuracy
+                            sum_num_examples_used += num_examples_used
+            actual_accuracy = sum_accuracy_product / sum_num_examples_used
+            comm_round_actual_performance = {"actual_makespan": actual_makespan,
+                                             "actual_energy_consumption": actual_energy_consumption,
+                                             "actual_accuracy": actual_accuracy}
+            selection_performance_history[comm_round_key].update(comm_round_actual_performance)
+            self._set_attribute(selection_performance_history_attribute, selection_performance_history)
+
     def configure_fit(self,
                       server_round: int,
                       parameters: Parameters,
@@ -173,7 +260,6 @@ class FlowerGOFFLSServer(Strategy):
         fl_settings = self.get_attribute("_fl_settings")
         enable_training = fl_settings["enable_training"]
         num_fit_tasks = fl_settings["num_fit_tasks"]
-        fit_deadline_in_seconds = fl_settings["fit_deadline_in_seconds"]
         client_selection_settings = self.get_attribute("_client_selection_settings")
         client_selector = client_selection_settings["client_selector"]
         individual_fit_metrics_history = self.get_attribute("_individual_fit_metrics_history")
@@ -189,8 +275,8 @@ class FlowerGOFFLSServer(Strategy):
             return []
         # Set the base training configuration (fit_config).
         fit_config = self._update_fit_config(server_round)
-        # Initialize the list of the selected clients for training (selected_fit_clients).
-        selected_fit_clients = []
+        # Initialize the training selection dictionary (fit_selection).
+        fit_selection = None
         # Map the available fit clients.
         available_fit_clients_map = self._map_available_clients(client_manager)
         # Set the available clients map.
@@ -204,36 +290,99 @@ class FlowerGOFFLSServer(Strategy):
         if client_selector == "Random":
             # Select clients using the Random algorithm.
             fit_clients_fraction = client_selection_settings["fit_clients_fraction"]
-            selected_fit_clients = select_clients_using_random(client_manager,
-                                                               phase,
-                                                               num_available_fit_clients,
-                                                               fit_clients_fraction,
-                                                               logger)
+            fit_selection = select_clients_using_random(client_manager,
+                                                        phase,
+                                                        num_available_fit_clients,
+                                                        fit_clients_fraction,
+                                                        logger)
         elif client_selector == "MEC":
             # Select clients using the MEC algorithm.
             history_checker = client_selection_settings["history_checker"]
             assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
-            selected_fit_clients = select_clients_using_mec(server_round,
-                                                            phase,
-                                                            num_fit_tasks,
-                                                            available_fit_clients_map,
-                                                            individual_fit_metrics_history,
-                                                            history_checker,
-                                                            assignment_capacities_init_settings,
-                                                            logger)
+            fit_selection = select_clients_using_mec(server_round,
+                                                     phase,
+                                                     num_fit_tasks,
+                                                     available_fit_clients_map,
+                                                     individual_fit_metrics_history,
+                                                     history_checker,
+                                                     assignment_capacities_init_settings,
+                                                     logger)
         elif client_selector == "ECMTC":
             # Select clients using the ECMTC algorithm.
             history_checker = client_selection_settings["history_checker"]
             assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
-            selected_fit_clients = select_clients_using_ecmtc(server_round,
+            fit_deadline_in_seconds = client_selection_settings["fit_deadline_in_seconds"]
+            fit_selection = select_clients_using_ecmtc(server_round,
+                                                       phase,
+                                                       num_fit_tasks,
+                                                       fit_deadline_in_seconds,
+                                                       available_fit_clients_map,
+                                                       individual_fit_metrics_history,
+                                                       history_checker,
+                                                       assignment_capacities_init_settings,
+                                                       logger)
+        elif client_selector == "OLAR":
+            # Select clients using the OLAR adapted algorithm.
+            history_checker = client_selection_settings["history_checker"]
+            assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
+            fit_selection = select_clients_using_olar_adapted(server_round,
                                                               phase,
                                                               num_fit_tasks,
-                                                              fit_deadline_in_seconds,
                                                               available_fit_clients_map,
                                                               individual_fit_metrics_history,
                                                               history_checker,
                                                               assignment_capacities_init_settings,
                                                               logger)
+        elif client_selector == "MC2MKP":
+            # Select clients using the (MC)²MKP adapted algorithm.
+            history_checker = client_selection_settings["history_checker"]
+            assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
+            fit_selection = select_clients_using_mc2mkp_adapted(server_round,
+                                                                phase,
+                                                                num_fit_tasks,
+                                                                available_fit_clients_map,
+                                                                individual_fit_metrics_history,
+                                                                history_checker,
+                                                                assignment_capacities_init_settings,
+                                                                logger)
+        elif client_selector == "ELASTIC":
+            # Select clients using the ELASTIC adapted algorithm.
+            history_checker = client_selection_settings["history_checker"]
+            assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
+            fit_deadline_in_seconds = client_selection_settings["fit_deadline_in_seconds"]
+            objectives_weights_parameter = client_selection_settings["objectives_weights_parameter"]
+            fit_selection = select_clients_using_elastic_adapted(server_round,
+                                                                 phase,
+                                                                 num_fit_tasks,
+                                                                 fit_deadline_in_seconds,
+                                                                 objectives_weights_parameter,
+                                                                 available_fit_clients_map,
+                                                                 individual_fit_metrics_history,
+                                                                 history_checker,
+                                                                 assignment_capacities_init_settings,
+                                                                 logger)
+        elif client_selector == "FedAECS":
+            # Select clients using the FedAECS adapted algorithm.
+            history_checker = client_selection_settings["history_checker"]
+            assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
+            fit_deadline_in_seconds = client_selection_settings["fit_deadline_in_seconds"]
+            accuracy_lower_bound = client_selection_settings["accuracy_lower_bound"]
+            total_bandwidth_in_hertz = client_selection_settings["total_bandwidth_in_hertz"]
+            if total_bandwidth_in_hertz == "inf":
+                total_bandwidth_in_hertz = inf
+            fit_selection = select_clients_using_fedaecs_adapted(server_round,
+                                                                 phase,
+                                                                 num_fit_tasks,
+                                                                 fit_deadline_in_seconds,
+                                                                 accuracy_lower_bound,
+                                                                 total_bandwidth_in_hertz,
+                                                                 available_fit_clients_map,
+                                                                 individual_fit_metrics_history,
+                                                                 history_checker,
+                                                                 assignment_capacities_init_settings,
+                                                                 logger)
+        # Get the selected clients.
+        selected_fit_clients = fit_selection["selected_clients"]
         # Get the clients selection duration.
         selection_duration = perf_counter() - selection_duration_start
         # Update the history of selected clients for training (selected_fit_clients).
@@ -242,6 +391,11 @@ class FlowerGOFFLSServer(Strategy):
                                                   available_fit_clients_map,
                                                   selection_duration,
                                                   selected_fit_clients)
+        # Update the history of training selection's performance (expected metrics values).
+        self._update_selection_performance_history(server_round,
+                                                   phase,
+                                                   num_fit_tasks,
+                                                   fit_selection)
         # Set the list of (fit_client_proxy, fit_client_instructions) pairs.
         fit_pairs = []
         for selected_fit_client in selected_fit_clients:
@@ -426,6 +580,8 @@ class FlowerGOFFLSServer(Strategy):
         self._calculate_energy_timestamp_metrics(fit_metrics, phase)
         # Update the individual training metrics history.
         self._update_individual_fit_metrics_history(comm_round, fit_metrics)
+        # Update the history of training selection's performance (actual metrics values).
+        self._update_selection_performance_history(comm_round, phase)
         # Remove the undesired metrics, if any.
         undesired_metrics = ["client_id", "client_hostname", "client_num_cpus", "client_cpu_cores_list",
                              "training_start_timestamp", "training_end_timestamp"]
@@ -542,7 +698,6 @@ class FlowerGOFFLSServer(Strategy):
         fl_settings = self.get_attribute("_fl_settings")
         enable_testing = fl_settings["enable_testing"]
         num_evaluate_tasks = fl_settings["num_evaluate_tasks"]
-        evaluate_deadline_in_seconds = fl_settings["evaluate_deadline_in_seconds"]
         client_selection_settings = self.get_attribute("_client_selection_settings")
         client_selector = client_selection_settings["client_selector"]
         individual_evaluate_metrics_history = self.get_attribute("_individual_evaluate_metrics_history")
@@ -552,8 +707,8 @@ class FlowerGOFFLSServer(Strategy):
             return []
         # Set the base testing configuration (evaluate_config).
         evaluate_config = self._update_evaluate_config(server_round)
-        # Initialize the list of the selected clients for testing (selected_evaluate_clients).
-        selected_evaluate_clients = []
+        # Initialize the testing selection dictionary (evaluate_selection).
+        evaluate_selection = None
         # Map the available evaluate clients.
         available_evaluate_clients_map = self._map_available_clients(client_manager)
         # Set the available clients map.
@@ -567,36 +722,99 @@ class FlowerGOFFLSServer(Strategy):
         if client_selector == "Random":
             # Select clients for testing randomly.
             evaluate_clients_fraction = client_selection_settings["evaluate_clients_fraction"]
-            selected_evaluate_clients = select_clients_using_random(client_manager,
-                                                                    phase,
-                                                                    num_available_evaluate_clients,
-                                                                    evaluate_clients_fraction,
-                                                                    logger)
+            evaluate_selection = select_clients_using_random(client_manager,
+                                                             phase,
+                                                             num_available_evaluate_clients,
+                                                             evaluate_clients_fraction,
+                                                             logger)
         elif client_selector == "MEC":
             # Select clients using the MEC algorithm.
             history_checker = client_selection_settings["history_checker"]
             assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
-            selected_evaluate_clients = select_clients_using_mec(server_round,
-                                                                 phase,
-                                                                 num_evaluate_tasks,
-                                                                 available_evaluate_clients_map,
-                                                                 individual_evaluate_metrics_history,
-                                                                 history_checker,
-                                                                 assignment_capacities_init_settings,
-                                                                 logger)
+            evaluate_selection = select_clients_using_mec(server_round,
+                                                          phase,
+                                                          num_evaluate_tasks,
+                                                          available_evaluate_clients_map,
+                                                          individual_evaluate_metrics_history,
+                                                          history_checker,
+                                                          assignment_capacities_init_settings,
+                                                          logger)
         elif client_selector == "ECMTC":
             # Select clients using the ECMTC algorithm.
             history_checker = client_selection_settings["history_checker"]
             assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
-            selected_evaluate_clients = select_clients_using_ecmtc(server_round,
+            evaluate_deadline_in_seconds = client_selection_settings["evaluate_deadline_in_seconds"]
+            evaluate_selection = select_clients_using_ecmtc(server_round,
+                                                            phase,
+                                                            num_evaluate_tasks,
+                                                            evaluate_deadline_in_seconds,
+                                                            available_evaluate_clients_map,
+                                                            individual_evaluate_metrics_history,
+                                                            history_checker,
+                                                            assignment_capacities_init_settings,
+                                                            logger)
+        elif client_selector == "OLAR":
+            # Select clients using the OLAR adapted algorithm.
+            history_checker = client_selection_settings["history_checker"]
+            assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
+            evaluate_selection = select_clients_using_olar_adapted(server_round,
                                                                    phase,
                                                                    num_evaluate_tasks,
-                                                                   evaluate_deadline_in_seconds,
                                                                    available_evaluate_clients_map,
                                                                    individual_evaluate_metrics_history,
                                                                    history_checker,
                                                                    assignment_capacities_init_settings,
                                                                    logger)
+        elif client_selector == "MC2MKP":
+            # Select clients using the (MC)²MKP adapted algorithm.
+            history_checker = client_selection_settings["history_checker"]
+            assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
+            evaluate_selection = select_clients_using_mc2mkp_adapted(server_round,
+                                                                     phase,
+                                                                     num_evaluate_tasks,
+                                                                     available_evaluate_clients_map,
+                                                                     individual_evaluate_metrics_history,
+                                                                     history_checker,
+                                                                     assignment_capacities_init_settings,
+                                                                     logger)
+        elif client_selector == "ELASTIC":
+            # Select clients using the ELASTIC adapted algorithm.
+            history_checker = client_selection_settings["history_checker"]
+            assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
+            evaluate_deadline_in_seconds = client_selection_settings["evaluate_deadline_in_seconds"]
+            objectives_weights_parameter = client_selection_settings["objectives_weights_parameter"]
+            evaluate_selection = select_clients_using_elastic_adapted(server_round,
+                                                                      phase,
+                                                                      num_evaluate_tasks,
+                                                                      evaluate_deadline_in_seconds,
+                                                                      objectives_weights_parameter,
+                                                                      available_evaluate_clients_map,
+                                                                      individual_evaluate_metrics_history,
+                                                                      history_checker,
+                                                                      assignment_capacities_init_settings,
+                                                                      logger)
+        elif client_selector == "FedAECS":
+            # Select clients using the FedAECS adapted algorithm.
+            history_checker = client_selection_settings["history_checker"]
+            assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
+            evaluate_deadline_in_seconds = client_selection_settings["evaluate_deadline_in_seconds"]
+            accuracy_lower_bound = client_selection_settings["accuracy_lower_bound"]
+            total_bandwidth_in_hertz = client_selection_settings["total_bandwidth_in_hertz"]
+            if total_bandwidth_in_hertz == "inf":
+                total_bandwidth_in_hertz = inf
+            evaluate_selection = select_clients_using_fedaecs_adapted(server_round,
+                                                                      phase,
+                                                                      num_evaluate_tasks,
+                                                                      evaluate_deadline_in_seconds,
+                                                                      accuracy_lower_bound,
+                                                                      total_bandwidth_in_hertz,
+                                                                      available_evaluate_clients_map,
+                                                                      individual_evaluate_metrics_history,
+                                                                      history_checker,
+                                                                      assignment_capacities_init_settings,
+                                                                      logger)
+        # Get the selected clients.
+        selected_evaluate_clients = evaluate_selection["selected_clients"]
         # Get the clients selection duration.
         selection_duration = perf_counter() - selection_duration_start
         # Update the history of selected clients for testing (selected_evaluate_clients).
@@ -605,6 +823,11 @@ class FlowerGOFFLSServer(Strategy):
                                                        available_evaluate_clients_map,
                                                        selection_duration,
                                                        selected_evaluate_clients)
+        # Update the history of testing selection's performance (expected metrics values).
+        self._update_selection_performance_history(server_round,
+                                                   phase,
+                                                   num_evaluate_tasks,
+                                                   evaluate_selection)
         # Set the list of (evaluate_client_proxy, evaluate_client_instructions) pairs.
         evaluate_pairs = []
         for selected_evaluate_client in selected_evaluate_clients:
@@ -697,6 +920,8 @@ class FlowerGOFFLSServer(Strategy):
         self._calculate_energy_timestamp_metrics(evaluate_metrics, phase)
         # Update the individual testing metrics history.
         self._update_individual_evaluate_metrics_history(comm_round, evaluate_metrics)
+        # Update the history of testing selection's performance (actual metrics values).
+        self._update_selection_performance_history(comm_round, phase)
         # Remove the undesired metrics, if any.
         undesired_metrics = ["client_id", "client_hostname", "client_num_cpus", "client_cpu_cores_list",
                              "testing_start_timestamp", "testing_end_timestamp"]
