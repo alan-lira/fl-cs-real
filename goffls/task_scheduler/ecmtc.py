@@ -56,8 +56,8 @@ def ecmtc(num_resources: int,
             j_index = list(assignment_capacities[i]).index(j)
             for t in range(j, num_tasks+1):
                 # (IV) Test new solution.
-                energy_cost_new_solution = minimal_energy_costs[i-1][t-j_index] + energy_costs[i][j_index]
-                time_cost_new_solution = max(float(minimal_time_costs[i-1][t-j_index]), float(time_costs[i][j_index]))
+                energy_cost_new_solution = minimal_energy_costs[i-1][t-j] + energy_costs[i][j_index]
+                time_cost_new_solution = max(float(minimal_time_costs[i-1][t-j]), float(time_costs[i][j_index]))
                 if ((energy_cost_new_solution < minimal_energy_costs[i][t]) or
                         (energy_cost_new_solution == minimal_energy_costs[i][t] and
                          time_cost_new_solution < minimal_time_costs[i][t])):

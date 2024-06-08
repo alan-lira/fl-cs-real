@@ -38,7 +38,7 @@ def min_max_time(num_resources: int,
             j_index = list(assignment_capacities[i]).index(j)
             for t in range(j, num_tasks+1):
                 # (IV) Test new solution.
-                time_cost_new_solution = max(float(minimal_time_costs[i-1][t-j_index]), float(time_costs[i][j_index]))
+                time_cost_new_solution = max(float(minimal_time_costs[i-1][t-j]), float(time_costs[i][j_index]))
                 if time_cost_new_solution < minimal_time_costs[i][t]:
                     # New best solution for Zᵢ(t).
                     minimal_time_costs[i][t] = time_cost_new_solution
@@ -101,7 +101,7 @@ def min_sum_energy(num_resources: int,
             j_index = list(assignment_capacities[i]).index(j)
             for t in range(j, num_tasks+1):
                 # (IV) Test new solution.
-                energy_cost_new_solution = minimal_energy_costs[i-1][t-j_index] + energy_costs[i][j_index]
+                energy_cost_new_solution = minimal_energy_costs[i-1][t-j] + energy_costs[i][j_index]
                 if energy_cost_new_solution < minimal_energy_costs[i][t]:
                     # New best solution for Zᵢ(t).
                     minimal_energy_costs[i][t] = energy_cost_new_solution

@@ -45,9 +45,9 @@ def mc2mkp_adapted(tasks: int,
             j_index = list(assignment_capacities[i]).index(j)
             c = cost[i][j_index]
             for t in range(j, tasks+1):
-                if K[i-1][t-j_index] + c < K[i][t]:
+                if K[i-1][t-j] + c < K[i][t]:
                     # New best solution for Z_i(t)
-                    K[i][t] = K[i-1][t-j_index] + c
+                    K[i][t] = K[i-1][t-j] + c
                     I[i][t] = j
     # Gets the final assignment from the support matrices
     assignment = zeros(resources, dtype=int)
