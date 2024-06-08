@@ -34,18 +34,20 @@ def mc2mkp_adapted(tasks: int,
     K = full(shape=(resources, tasks+1), fill_value=inf)
     I = zeros(shape=(resources, tasks+1), dtype=int)
     # Solutions for Z_1
-    for j in range(assignment_capacities[0][0], assignment_capacities[0][-1]+1):
-        K[0][j] = cost[0][j]
+    for j in assignment_capacities[0]:
+        j_index = list(assignment_capacities[0]).index(j)
+        K[0][j] = cost[0][j_index]
         I[0][j] = j
     # Solutions for Z_i
     for i in range(1, resources):
         # All possible values for x_i
-        for j in range(assignment_capacities[i][0], assignment_capacities[i][-1]+1):
-            c = cost[i][j]
+        for j in assignment_capacities[i]:
+            j_index = list(assignment_capacities[i]).index(j)
+            c = cost[i][j_index]
             for t in range(j, tasks+1):
-                if K[i-1][t-j] + c < K[i][t]:
+                if K[i-1][t-j_index] + c < K[i][t]:
                     # New best solution for Z_i(t)
-                    K[i][t] = K[i-1][t-j] + c
+                    K[i][t] = K[i-1][t-j_index] + c
                     I[i][t] = j
     # Gets the final assignment from the support matrices
     assignment = zeros(resources, dtype=int)

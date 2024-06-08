@@ -6,7 +6,6 @@ from goffls.utils.client_selector_util import calculate_linear_interpolation_or_
     map_available_participating_clients, schedule_tasks_to_selected_clients, select_all_available_clients, \
     sum_clients_capacities
 from goffls.utils.logger_util import log_message
-from goffls.utils.task_scheduler_util import get_total_cost
 
 
 def select_clients_using_mc2mkp_adapted(comm_round: int,
@@ -164,10 +163,15 @@ def select_clients_using_mc2mkp_adapted(comm_round: int,
                                                                                                  assignment_capacity)
                         # Update the cost lists with the estimated values.
                         energy_costs_client[assignment_capacity] = energy_cost_estimation
+            # Filter his costs lists.
+            filtered_energy_costs_client = []
+            for index in range(0, len(energy_costs_client)):
+                if energy_costs_client[index] != inf:
+                    filtered_energy_costs_client.append(energy_costs_client[index])
             # Append his lists into the global lists.
             client_ids.append(client_key)
             assignment_capacities.append(assignment_capacities_client)
-            energy_costs.append(energy_costs_client)
+            energy_costs.append(filtered_energy_costs_client)
         # Convert the global lists into Numpy arrays.
         assignment_capacities = array(assignment_capacities, dtype=object)
         energy_costs = array(energy_costs, dtype=object)
@@ -177,7 +181,13 @@ def select_clients_using_mc2mkp_adapted(comm_round: int,
                                          energy_costs,
                                          assignment_capacities)
         # Update the selection dictionary with the expected metrics for the schedule.
-        mc2mkp_energy_consumption = get_total_cost(energy_costs, mc2mkp_schedule)
+        mc2mkp_energy_consumption = 0
+        for sel_index, client_num_tasks_scheduled in enumerate(list(mc2mkp_schedule)):
+            if client_num_tasks_scheduled > 0:
+                i_index = list(assignment_capacities[sel_index]).index(client_num_tasks_scheduled)
+                energy_i = energy_costs[sel_index][i_index]
+                mc2mkp_energy_consumption += energy_i
+        mc2mkp_energy_consumption = 0
         selection.update({"expected_energy_consumption": mc2mkp_energy_consumption})
         # Log the (MC)²MKP adapted algorithm's result.
         message = "X*: {0}".format(mc2mkp_schedule)

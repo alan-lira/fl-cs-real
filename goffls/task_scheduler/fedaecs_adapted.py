@@ -66,17 +66,17 @@ def fedaecs_adapted(I: int,
             Ak = A[i][k]
             Ak_max = max(Ak)
             init_qualified_client_max_capacity.append(Ak_max)
-            for a in Ak:
-                if Ti[k][a-1] <= T_max and b[i][k][a-1] <= B:
-                    if εi[k][a-1] > 0:
-                        n.append(Ei[k][a-1] / εi[k][a-1])
+            for index, _ in enumerate(Ak):
+                if Ti[k][index] <= T_max and b[i][k][index] <= B:
+                    if εi[k][index] > 0:
+                        n.append(Ei[k][index] / εi[k][index])
                     else:
                         n.append(inf)
-                    init_qualified_client_capacity.append(a)
-                    init_qualified_client_energy.append(Ei[k][a-1])
-                    init_qualified_client_accuracy.append(εi[k][a-1])
-                    init_qualified_client_time.append(Ti[k][a-1])
-                    init_qualified_client_bandwidth.append(b[i][k][a-1])
+                    init_qualified_client_capacity.append(Ak[index])
+                    init_qualified_client_energy.append(Ei[k][index])
+                    init_qualified_client_accuracy.append(εi[k][index])
+                    init_qualified_client_time.append(Ti[k][index])
+                    init_qualified_client_bandwidth.append(b[i][k][index])
                     init_qualified_client_index.append(k)
                 else:
                     init_unqualified_client_index.append(k)
@@ -228,12 +228,13 @@ def fedaecs_adapted(I: int,
             if beta_star_i[client_index] == 1:
                 selected_clients_i.append(client_index)
                 selected_client_num_tasks = beta_star_tasks_i[client_index]
-                makespan_ik = Ti[client_index][selected_client_num_tasks-1]
+                selected_client_num_tasks_index = list(A[i][client_index]).index(selected_client_num_tasks)
+                makespan_ik = Ti[client_index][selected_client_num_tasks_index]
                 if makespan_ik > makespan_i:
                     makespan_i = makespan_ik
-                energy_consumption_ik = Ei[client_index][selected_client_num_tasks-1]
+                energy_consumption_ik = Ei[client_index][selected_client_num_tasks_index]
                 energy_consumption_i += energy_consumption_ik
-                accuracy_ik = εi[client_index][selected_client_num_tasks-1]
+                accuracy_ik = εi[client_index][selected_client_num_tasks_index]
                 sum_accuracy_i += accuracy_ik
         beta_star.append(beta_star_i)
         beta_star_tasks.append(beta_star_tasks_i)

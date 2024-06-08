@@ -28,15 +28,17 @@ def min_max_time(num_resources: int,
     minimal_time_costs = full(shape=(num_resources, num_tasks+1), fill_value=inf, dtype=float)
     # (III) Solutions for the first resource (Z₁).
     for j in assignment_capacities[0]:
+        j_index = list(assignment_capacities[0]).index(j)
         partial_solutions[0][j] = j
-        minimal_time_costs[0][j] = time_costs[0][j]
+        minimal_time_costs[0][j] = time_costs[0][j_index]
     # Solutions for other resources (Zᵢ).
     for i in range(1, num_resources):
         # Test all assignments to resource i.
         for j in assignment_capacities[i]:
+            j_index = list(assignment_capacities[i]).index(j)
             for t in range(j, num_tasks+1):
                 # (IV) Test new solution.
-                time_cost_new_solution = max(float(minimal_time_costs[i-1][t-j]), time_costs[i][j])
+                time_cost_new_solution = max(float(minimal_time_costs[i-1][t-j_index]), float(time_costs[i][j_index]))
                 if time_cost_new_solution < minimal_time_costs[i][t]:
                     # New best solution for Zᵢ(t).
                     minimal_time_costs[i][t] = time_cost_new_solution
@@ -80,7 +82,8 @@ def min_sum_energy(num_resources: int,
     for i in range(0, num_resources):
         assignment_capacities_i = []
         for j in assignment_capacities[i]:
-            if time_costs[i][j] <= time_limit:
+            j_index = list(assignment_capacities[i]).index(j)
+            if time_costs[i][j_index] <= time_limit:
                 assignment_capacities_i.append(j)
         assignment_capacities_filtered.append(assignment_capacities_i)
     # (II) Initialization: minimal costs and partial solutions matrices.
@@ -88,15 +91,17 @@ def min_sum_energy(num_resources: int,
     minimal_energy_costs = full(shape=(num_resources, num_tasks+1), fill_value=inf, dtype=float)
     # (III) Solutions for the first resource (Z₁).
     for j in assignment_capacities_filtered[0]:
+        j_index = list(assignment_capacities[0]).index(j)
         partial_solutions[0][j] = j
-        minimal_energy_costs[0][j] = energy_costs[0][j]
+        minimal_energy_costs[0][j] = energy_costs[0][j_index]
     # Solutions for other resources (Zᵢ).
     for i in range(1, num_resources):
         # Test all assignments to resource i.
         for j in assignment_capacities_filtered[i]:
+            j_index = list(assignment_capacities[i]).index(j)
             for t in range(j, num_tasks+1):
                 # (IV) Test new solution.
-                energy_cost_new_solution = minimal_energy_costs[i-1][t-j] + energy_costs[i][j]
+                energy_cost_new_solution = minimal_energy_costs[i-1][t-j_index] + energy_costs[i][j_index]
                 if energy_cost_new_solution < minimal_energy_costs[i][t]:
                     # New best solution for Zᵢ(t).
                     minimal_energy_costs[i][t] = energy_cost_new_solution

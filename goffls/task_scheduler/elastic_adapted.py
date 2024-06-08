@@ -29,7 +29,8 @@ def elastic_adapted(I: int,
         if A[i] == 0:
             ni = inf
         else:
-            ni = calculate_ni_adapted(α, float(E[i][A[i]]))
+            Ai_index = list(A).index(A[i])
+            ni = calculate_ni_adapted(α, float(E[i][Ai_index]))
         n.append(ni)
     # Sort all the clients in increasing order based on ηi.
     # Denote I′ as the set of sorted clients.
@@ -48,7 +49,8 @@ def elastic_adapted(I: int,
             if x[index] == 1:
                 idxj = idx[index]
                 idx_j.append(idxj)
-                tj = t[index][A[index]-1]
+                Ai_index = list(A).index(A[index])
+                tj = t[index][Ai_index]
                 t_j.append(tj)
         sorted_t_j, sorted_J = map(list, zip(*sorted(zip(t_j, idx_j), reverse=False)))
         for index, _ in enumerate(sorted_J):
@@ -69,9 +71,10 @@ def elastic_adapted(I: int,
             j_num_tasks_assigned = A[j]
             tasks_assignment[index] = j_num_tasks_assigned
             selected_clients.append(j)
-            makespan_j = t[j][j_num_tasks_assigned]
+            Ai_index = list(A).index(j_num_tasks_assigned)
+            makespan_j = t[j][Ai_index]
             if makespan_j > makespan:
                 makespan = makespan_j
-            energy_consumption_j = E[j][j_num_tasks_assigned]
+            energy_consumption_j = E[j][Ai_index]
             energy_consumption += energy_consumption_j
     return x, tasks_assignment, selected_clients, makespan, energy_consumption

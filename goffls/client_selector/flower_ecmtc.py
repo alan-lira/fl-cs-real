@@ -182,11 +182,19 @@ def select_clients_using_ecmtc(comm_round: int,
                         # Update the cost lists with the estimated values.
                         time_costs_client[assignment_capacity] = time_cost_estimation
                         energy_costs_client[assignment_capacity] = energy_cost_estimation
+            # Filter his costs lists.
+            filtered_time_costs_client = []
+            filtered_energy_costs_client = []
+            for index in range(0, len(time_costs_client)):
+                if time_costs_client[index] != inf:
+                    filtered_time_costs_client.append(time_costs_client[index])
+                if energy_costs_client[index] != inf:
+                    filtered_energy_costs_client.append(energy_costs_client[index])
             # Append his lists into the global lists.
             client_ids.append(client_key)
             assignment_capacities.append(assignment_capacities_client)
-            time_costs.append(time_costs_client)
-            energy_costs.append(energy_costs_client)
+            time_costs.append(filtered_time_costs_client)
+            energy_costs.append(filtered_energy_costs_client)
         # Convert the global lists into Numpy arrays.
         assignment_capacities = array(assignment_capacities, dtype=object)
         time_costs = array(time_costs, dtype=object)
