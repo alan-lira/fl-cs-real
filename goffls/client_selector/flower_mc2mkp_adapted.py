@@ -6,6 +6,7 @@ from goffls.utils.client_selector_util import calculate_linear_interpolation_or_
     map_available_participating_clients, schedule_tasks_to_selected_clients, select_all_available_clients, \
     sum_clients_capacities
 from goffls.utils.logger_util import log_message
+from goffls.utils.task_scheduler_util import get_total_cost
 
 
 def select_clients_using_mc2mkp_adapted(comm_round: int,
@@ -187,7 +188,8 @@ def select_clients_using_mc2mkp_adapted(comm_round: int,
                 i_index = list(assignment_capacities[sel_index]).index(client_num_tasks_scheduled)
                 energy_i = energy_costs[sel_index][i_index]
                 mc2mkp_energy_consumption += energy_i
-        mc2mkp_energy_consumption = 0
+        mc2mkp_energy_consumption2 = get_total_cost(energy_costs, mc2mkp_schedule)
+        print(mc2mkp_energy_consumption, mc2mkp_energy_consumption2)
         selection.update({"expected_energy_consumption": mc2mkp_energy_consumption})
         # Log the (MC)²MKP adapted algorithm's result.
         message = "X*: {0}".format(mc2mkp_schedule)
