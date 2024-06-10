@@ -6,7 +6,6 @@ from goffls.utils.client_selector_util import calculate_linear_interpolation_or_
     map_available_participating_clients, schedule_tasks_to_selected_clients, select_all_available_clients, \
     sum_clients_capacities
 from goffls.utils.logger_util import log_message
-from goffls.utils.task_scheduler_util import get_makespan
 
 
 def select_clients_using_olar_adapted(comm_round: int,
@@ -136,10 +135,15 @@ def select_clients_using_olar_adapted(comm_round: int,
                                                                                                assignment_capacity)
                         # Update the cost lists with the estimated values.
                         time_costs_client[assignment_capacity] = time_cost_estimation
+            # Filter his costs lists.
+            filtered_time_costs_client = []
+            for index in range(0, len(time_costs_client)):
+                if time_costs_client[index] != inf:
+                    filtered_time_costs_client.append(time_costs_client[index])
             # Append his lists into the global lists.
             client_ids.append(client_key)
             assignment_capacities.append(assignment_capacities_client)
-            time_costs.append(time_costs_client)
+            time_costs.append(filtered_time_costs_client)
         # Convert the global lists into Numpy arrays.
         assignment_capacities = array(assignment_capacities, dtype=object)
         time_costs = array(time_costs, dtype=object)
@@ -149,7 +153,13 @@ def select_clients_using_olar_adapted(comm_round: int,
                                      time_costs,
                                      assignment_capacities)
         # Update the selection dictionary with the expected metrics for the schedule.
-        olar_makespan = get_makespan(time_costs, olar_schedule)
+        olar_makespan = 0
+        for sel_index, client_num_tasks_scheduled in enumerate(list(olar_schedule)):
+            if client_num_tasks_scheduled > 0:
+                i_index = list(assignment_capacities[sel_index]).index(client_num_tasks_scheduled)
+                time_cost_i = time_costs[sel_index][i_index]
+                if time_cost_i > olar_makespan:
+                    olar_makespan = time_cost_i
         selection.update({"expected_makespan": olar_makespan})
         # Log the OLAR adapted algorithm's result.
         message = "X*: {0}".format(olar_schedule)

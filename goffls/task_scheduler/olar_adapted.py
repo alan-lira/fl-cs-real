@@ -37,7 +37,8 @@ def olar_adapted(tasks: int,
     for i in range(resources):
         # Initializes the heap
         if assignment[i] < upper_limits[i]:
-            heap.append((cost[i][assignment[i]+1], i))
+            i_index = list(assignment_capacities[i]).index(assignment[i])
+            heap.append((cost[i][i_index], i))
     heapify(heap)
     # Computes zeta (sum of lower limits)
     zeta = sum(lower_limits)
@@ -46,6 +47,10 @@ def olar_adapted(tasks: int,
         c, j = heappop(heap)  # Find minimum cost
         assignment[j] += 1  # Assigns task t
         # Checks if more tasks can be assigned to j
-        if assignment[j] < upper_limits[j]:
-            heappush(heap, (cost[j][assignment[j]+1], j))
+        if assignment[j] in assignment_capacities[j]:
+            if assignment[j] < upper_limits[j]:
+                j_index = list(assignment_capacities[j]).index(assignment[j])
+                heappush(heap, (cost[j][j_index], j))
+        else:
+            heappush(heap, (c, j))
     return assignment
