@@ -185,9 +185,8 @@ def select_clients_using_mc2mkp_adapted(comm_round: int,
         for sel_index, client_num_tasks_scheduled in enumerate(list(mc2mkp_schedule)):
             if client_num_tasks_scheduled > 0:
                 i_index = list(assignment_capacities[sel_index]).index(client_num_tasks_scheduled)
-                energy_i = energy_costs[sel_index][i_index]
-                mc2mkp_energy_consumption += energy_i
-        mc2mkp_energy_consumption = 0
+                energy_cost_i = energy_costs[sel_index][i_index]
+                mc2mkp_energy_consumption += energy_cost_i
         selection.update({"expected_energy_consumption": mc2mkp_energy_consumption})
         # Log the (MC)²MKP adapted algorithm's result.
         message = "X*: {0}".format(mc2mkp_schedule)
