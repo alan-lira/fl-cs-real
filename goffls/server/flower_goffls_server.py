@@ -281,8 +281,6 @@ class FlowerGOFFLSServer(Strategy):
         available_fit_clients_map = self._map_available_clients(client_manager)
         # Set the available clients map.
         self._set_attribute("_available_clients_map", available_fit_clients_map)
-        # Get the number of available fit clients.
-        num_available_fit_clients = len(available_fit_clients_map)
         # Set the phase value.
         phase = "train"
         # Start the clients selection duration timer.
@@ -290,10 +288,10 @@ class FlowerGOFFLSServer(Strategy):
         if client_selector == "Random":
             # Select clients using the Random algorithm.
             fit_clients_fraction = client_selection_settings["fit_clients_fraction"]
-            fit_selection = select_clients_using_random(client_manager,
-                                                        phase,
-                                                        num_available_fit_clients,
+            fit_selection = select_clients_using_random(phase,
+                                                        num_fit_tasks,
                                                         fit_clients_fraction,
+                                                        available_fit_clients_map,
                                                         logger)
         elif client_selector == "MEC":
             # Select clients using the MEC algorithm.
@@ -713,8 +711,6 @@ class FlowerGOFFLSServer(Strategy):
         available_evaluate_clients_map = self._map_available_clients(client_manager)
         # Set the available clients map.
         self._set_attribute("_available_clients_map", available_evaluate_clients_map)
-        # Get the number of available evaluate clients.
-        num_available_evaluate_clients = len(available_evaluate_clients_map)
         # Set the phase value.
         phase = "test"
         # Start the clients selection duration timer.
@@ -722,10 +718,10 @@ class FlowerGOFFLSServer(Strategy):
         if client_selector == "Random":
             # Select clients for testing randomly.
             evaluate_clients_fraction = client_selection_settings["evaluate_clients_fraction"]
-            evaluate_selection = select_clients_using_random(client_manager,
-                                                             phase,
-                                                             num_available_evaluate_clients,
+            evaluate_selection = select_clients_using_random(phase,
+                                                             num_evaluate_tasks,
                                                              evaluate_clients_fraction,
+                                                             available_evaluate_clients_map,
                                                              logger)
         elif client_selector == "MEC":
             # Select clients using the MEC algorithm.
