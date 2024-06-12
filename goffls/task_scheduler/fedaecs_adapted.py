@@ -1,6 +1,6 @@
 from itertools import combinations
 from math import inf, log
-from numpy import any, argmin, array, ndarray, zeros
+from numpy import argmin, array, ndarray, zeros
 
 
 def calculate_Γ(sum_εi: float) -> float:
@@ -24,7 +24,7 @@ def fedaecs_adapted(I: int,
     # 2. The algorithm receives the total number of tasks to be allocated among the selected clients (num_tasks),
     #    such that the algorithm won't stop until this constraint is also respected.
     # 3. The algorithm receives a previously generated array of task assignment capacities (A), ∀i ∈ I ∀k ∈ K,
-    #    such that at the round i the client k can process between Aik_min (inclusive) and Aik_max (inclusive) tasks.
+    #    such that at the ith round the client k can process between Aik_min (inclusive) and Aik_max (inclusive) tasks.
     #    Note that Aik specifies the number of tasks while Dik originally specified the size of tasks.
     # 4. The algorithm receives a previously generated array of time costs (T),
     #    such that Tika = t_train_ika + t_up_ika, ∀i ∈ I ∀k ∈ K ∀a ∈ A.
@@ -109,117 +109,124 @@ def fedaecs_adapted(I: int,
         # Initializing m.
         m = 0
         num_tasks_assigned = 0
+        found_solution = False
         while m <= len(sorted_client_n) - 1:
-            if sorted_client_accuracy[m] >= ε0 and (sorted_client_capacity[m] + num_tasks_assigned) >= num_tasks:
+            if sorted_client_accuracy[m] >= ε0:
                 client_index = sorted_client_index[m]
+                if (beta_star_tasks_i[client_index] + sorted_client_capacity[m]
+                        <= init_qualified_client_max_capacity[client_index]):
+                    tasks_to_assign = sorted_client_capacity[m]
+                else:
+                    tasks_to_assign = init_qualified_client_max_capacity[client_index] - beta_star_tasks_i[client_index]
+                if num_tasks_assigned + tasks_to_assign > num_tasks:
+                    tasks_to_assign = num_tasks - num_tasks_assigned
                 beta_star_i[client_index] = 1
-                tasks_to_assign = num_tasks - num_tasks_assigned
                 beta_star_tasks_i[client_index] += tasks_to_assign
                 num_tasks_assigned += tasks_to_assign
                 f_obj_beta_star_i = sorted_client_n[m]
-                break
+                if num_tasks_assigned == num_tasks:
+                    found_solution = True
             else:
-                if m <= len(sorted_client_n) - 1:
-                    m = m + 1
-                    while 1 <= m <= len(sorted_client_n) - 1:
-                        if sorted_client_accuracy[m] >= ε0:
-                            client_index = sorted_client_index[m]
-                            if beta_star_tasks_i[client_index] + sorted_client_capacity[m] \
-                                    <= init_qualified_client_max_capacity[client_index]:
-                                tasks_to_assign = sorted_client_capacity[m]
-                                if num_tasks_assigned + tasks_to_assign > num_tasks:
-                                    tasks_to_assign = num_tasks - num_tasks_assigned
-                                beta_star_i[client_index] = 1
-                                beta_star_tasks_i[client_index] += tasks_to_assign
-                                num_tasks_assigned += tasks_to_assign
-                            else:
-                                tasks_to_assign \
-                                    = init_qualified_client_max_capacity[client_index] - beta_star_tasks_i[client_index]
-                                if num_tasks_assigned + tasks_to_assign > num_tasks:
-                                    tasks_to_assign = num_tasks - num_tasks_assigned
-                                beta_star_i[client_index] = 1
-                                beta_star_tasks_i[client_index] += tasks_to_assign
-                                num_tasks_assigned += tasks_to_assign
-                            the_first_qualified_client_index = beta_star_i
-                            the_first_qualified_client_index_tasks = beta_star_tasks_i
-                            # Check the combination selection of the previous clients.
-                            selection_possibilities = []
-                            for t in range(0, m):
-                                s = array(list(combinations(range(0, m), t)))
-                                if not any(s):
-                                    continue
-                                for si in s:
-                                    selection_possibilities.append(list(si))
-                            selection_possibilities.append(list(range(0, m)))
-                            qualified_selection = []
-                            obj = []
-                            # Calculate the model accuracy and total bandwidth for each selection possibility.
-                            for selection_possibility in selection_possibilities:
-                                sum_accuracy_select_idx = 0
-                                sum_bandwidth_select_idx = 0
-                                sum_tasks_select_idx = 0
-                                for client_idx in selection_possibility:
-                                    sum_accuracy_select_idx += sorted_client_accuracy[client_idx]
-                                    sum_bandwidth_select_idx += sorted_client_bandwidth[client_idx]
-                                    sum_tasks_select_idx += sorted_client_capacity[client_idx]
-                                model_accuracy_select_idx = calculate_Γ(sum_accuracy_select_idx)
-                                # Check the constraints are whether satisfied.
-                                if (model_accuracy_select_idx >= ε0 and
-                                        sum_bandwidth_select_idx <= B and
-                                        sum_tasks_select_idx + num_tasks_assigned >= num_tasks):
-                                    # Calculate the total energy consumption of the qualified selection.
-                                    total_energy_qualified_select_idx = 0
-                                    for client_idx in selection_possibility:
-                                        total_energy_qualified_select_idx += sorted_client_energy[client_idx]
-                                    # Calculate the objective function.
-                                    if model_accuracy_select_idx > 0:
-                                        f_obj = (total_energy_qualified_select_idx /
-                                                 model_accuracy_select_idx)
-                                    else:
-                                        f_obj = inf
-                                    obj = list(obj)
-                                    # Store the objective function value.
-                                    obj.append(f_obj)
-                                    # Store the qualified selection.
-                                    qualified_selection.append(selection_possibility)
-                            obj = array(obj)
-                            # Check whether there is a client selection for combinatorial optimization
-                            # satisfying constraints.
-                            if qualified_selection:
-                                # y is the location (index) of objective function minimum value.
-                                y = argmin(obj)
-                                # Further compare the optimal values for the objective function.
-                                if (obj[y] <= sorted_client_n[m] or
-                                        sorted_client_capacity[m] + num_tasks_assigned < num_tasks):
-                                    f_obj_beta_star_i = obj[y]
-                                    for qs_idx in qualified_selection[y]:
-                                        client_index = sorted_client_index[qs_idx]
-                                        if num_tasks_assigned < num_tasks:
-                                            if beta_star_tasks_i[client_index] + sorted_client_capacity[qs_idx] \
-                                                    <= init_qualified_client_max_capacity[client_index]:
-                                                tasks_to_assign = sorted_client_capacity[qs_idx]
-                                                if num_tasks_assigned + tasks_to_assign > num_tasks:
-                                                    tasks_to_assign = num_tasks - num_tasks_assigned
-                                                beta_star_i[client_index] = 1
-                                                beta_star_tasks_i[client_index] += tasks_to_assign
-                                                num_tasks_assigned += tasks_to_assign
-                                            else:
-                                                tasks_to_assign = (init_qualified_client_max_capacity[client_index]
-                                                                   - beta_star_tasks_i[client_index])
-                                                if num_tasks_assigned + tasks_to_assign > num_tasks:
-                                                    tasks_to_assign = num_tasks - num_tasks_assigned
-                                                beta_star_tasks_i[client_index] += tasks_to_assign
-                                                num_tasks_assigned += tasks_to_assign
+                if sorted_client_accuracy[m] >= ε0:
+                    client_index = sorted_client_index[m]
+                    if beta_star_tasks_i[client_index] + sorted_client_capacity[m] \
+                            <= init_qualified_client_max_capacity[client_index]:
+                        tasks_to_assign = sorted_client_capacity[m]
+                    else:
+                        tasks_to_assign \
+                            = init_qualified_client_max_capacity[client_index] - beta_star_tasks_i[client_index]
+                    if num_tasks_assigned + tasks_to_assign > num_tasks:
+                        tasks_to_assign = num_tasks - num_tasks_assigned
+                    beta_star_i[client_index] = 1
+                    beta_star_tasks_i[client_index] += tasks_to_assign
+                    num_tasks_assigned += tasks_to_assign
+                    the_first_qualified_client_index = beta_star_i
+                    the_first_qualified_client_index_tasks = beta_star_tasks_i
+                    # Check the combination selection of the previous clients.
+                    selection_possibilities = []
+                    for mi in range(0, m):
+                        s = array(list(combinations(range(0, m), mi)))
+                        si_to_remove = []
+                        for si_idx, si in enumerate(s):
+                            client_indices = []
+                            for mi_idx in si:
+                                client_index = sorted_client_index[mi_idx]
+                                if client_index not in client_indices:
+                                    client_indices.append(client_index)
                                 else:
-                                    f_obj_beta_star_i = sorted_client_n[m]
-                                    beta_star_i = the_first_qualified_client_index
-                                    beta_star_tasks_i = the_first_qualified_client_index_tasks
+                                    si_to_remove.append(si_idx)
+                        si_to_remove = set(si_to_remove)
+                        s = [i for j, i in enumerate(s) if j not in si_to_remove]
+                        s_combinations = [list(si) for si in s]
+                        for s_combination in s_combinations:
+                            if s_combination and s_combination not in selection_possibilities:
+                                capacity_selected = sum([sorted_client_capacity[mi] for mi in s_combination])
+                                if capacity_selected + num_tasks_assigned >= num_tasks:
+                                    selection_possibilities.append(s_combination)
+                    qualified_selection = []
+                    obj = []
+                    # Calculate the model accuracy and total bandwidth for each selection possibility.
+                    for selection_possibility in selection_possibilities:
+                        sum_accuracy_select_idx = 0
+                        sum_bandwidth_select_idx = 0
+                        sum_tasks_select_idx = 0
+                        for idx in selection_possibility:
+                            sum_accuracy_select_idx += sorted_client_accuracy[idx]
+                            sum_bandwidth_select_idx += sorted_client_bandwidth[idx]
+                            sum_tasks_select_idx += sorted_client_capacity[idx]
+                        model_accuracy_select_idx = calculate_Γ(sum_accuracy_select_idx)
+                        # Check the constraints are whether satisfied.
+                        if (model_accuracy_select_idx >= ε0 and
+                                sum_bandwidth_select_idx <= B and
+                                sum_tasks_select_idx + num_tasks_assigned >= num_tasks):
+                            # Calculate the total energy consumption of the qualified selection.
+                            total_energy_qualified_select_idx = 0
+                            for idx in selection_possibility:
+                                total_energy_qualified_select_idx += sorted_client_energy[idx]
+                            # Calculate the objective function.
+                            if model_accuracy_select_idx > 0:
+                                f_obj = total_energy_qualified_select_idx / model_accuracy_select_idx
                             else:
-                                beta_star_i = the_first_qualified_client_index
-                                beta_star_tasks_i = the_first_qualified_client_index_tasks
-                            break
+                                f_obj = inf
+                            obj = list(obj)
+                            # Store the objective function value.
+                            obj.append(f_obj)
+                            # Store the qualified selection.
+                            qualified_selection.append(selection_possibility)
+                    obj = array(obj)
+                    # Check whether there is a client selection for combinatorial optimization
+                    # satisfying constraints.
+                    if qualified_selection:
+                        # y is the location (index) of objective function minimum value.
+                        y = argmin(obj)
+                        # Further compare the optimal values for the objective function.
+                        if obj[y] <= sorted_client_n[m]:
+                            f_obj_beta_star_i = obj[y]
+                            for qs_idx in qualified_selection[y]:
+                                client_index = sorted_client_index[qs_idx]
+                                if beta_star_tasks_i[client_index] + sorted_client_capacity[qs_idx] \
+                                        <= init_qualified_client_max_capacity[client_index]:
+                                    tasks_to_assign = sorted_client_capacity[qs_idx]
+                                else:
+                                    tasks_to_assign = (init_qualified_client_max_capacity[client_index]
+                                                       - beta_star_tasks_i[client_index])
+                                if num_tasks_assigned + tasks_to_assign > num_tasks:
+                                    tasks_to_assign = num_tasks - num_tasks_assigned
+                                beta_star_i[client_index] = 1
+                                beta_star_tasks_i[client_index] += tasks_to_assign
+                                num_tasks_assigned += tasks_to_assign
                         else:
-                            m = m + 1
+                            f_obj_beta_star_i = sorted_client_n[m]
+                            beta_star_i = the_first_qualified_client_index
+                            beta_star_tasks_i = the_first_qualified_client_index_tasks
+                        if num_tasks_assigned == num_tasks:
+                            found_solution = True
+                    else:
+                        beta_star_i = the_first_qualified_client_index
+                        beta_star_tasks_i = the_first_qualified_client_index_tasks
+            if found_solution:
+                break
+            m = m + 1
         # Organizing the solution for the round i.
         selected_clients_i = []
         makespan_i = 0
