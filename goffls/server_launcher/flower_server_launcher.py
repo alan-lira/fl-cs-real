@@ -691,6 +691,8 @@ class FlowerServerLauncher:
         fl_settings = self.get_attribute("_fl_settings")
         num_rounds = fl_settings["num_rounds"]
         round_timeout_in_seconds = fl_settings["round_timeout_in_seconds"]
+        enable_training = fl_settings["enable_training"]
+        enable_testing = fl_settings["enable_testing"]
         # Get the Secure Socket Layer (SSL) certificates (SSL-enabled secure connection).
         ssl_certificates = self._get_ssl_certificates()
         # Get the flower server address (to-listen IP address and port).
@@ -717,21 +719,25 @@ class FlowerServerLauncher:
                                   flower_server_config,
                                   max_message_length_in_bytes,
                                   ssl_certificates)
-        # Generate the output file for the selected fit clients' history.
-        self._generate_selected_fit_clients_history_output_file()
-        # Generate the output file for the individual fit metrics history.
-        self._generate_individual_fit_metrics_history_output_file()
-        # Generate the output file for the aggregated fit metrics history.
-        self._generate_aggregated_fit_metrics_history_output_file()
-        # Generate the output file for the fit selection performance history.
-        self._generate_fit_selection_performance_history_output_file()
-        # Generate the output file for the selected evaluate clients' history.
-        self._generate_selected_evaluate_clients_history_output_file()
-        # Generate the output file for the individual evaluate metrics history.
-        self._generate_individual_evaluate_metrics_history_output_file()
-        # Generate the output file for the aggregated evaluate metrics history.
-        self._generate_aggregated_evaluate_metrics_history_output_file()
-        # Generate the output file for the evaluate selection performance history.
-        self._generate_evaluate_selection_performance_history_output_file()
+        # Generate the output files for the training step if it was enabled.
+        if enable_training:
+            # Generate the output file for the selected fit clients' history.
+            self._generate_selected_fit_clients_history_output_file()
+            # Generate the output file for the individual fit metrics history.
+            self._generate_individual_fit_metrics_history_output_file()
+            # Generate the output file for the aggregated fit metrics history.
+            self._generate_aggregated_fit_metrics_history_output_file()
+            # Generate the output file for the fit selection performance history.
+            self._generate_fit_selection_performance_history_output_file()
+        # Generate the output files for the testing step if it was enabled.
+        if enable_testing:
+            # Generate the output file for the selected evaluate clients' history.
+            self._generate_selected_evaluate_clients_history_output_file()
+            # Generate the output file for the individual evaluate metrics history.
+            self._generate_individual_evaluate_metrics_history_output_file()
+            # Generate the output file for the aggregated evaluate metrics history.
+            self._generate_aggregated_evaluate_metrics_history_output_file()
+            # Generate the output file for the evaluate selection performance history.
+            self._generate_evaluate_selection_performance_history_output_file()
         # End.
         exit(0)
