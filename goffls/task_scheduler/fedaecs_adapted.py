@@ -236,7 +236,11 @@ def fedaecs_adapted(I: int,
             if beta_star_i[client_index] == 1:
                 selected_clients_i.append(client_index)
                 selected_client_num_tasks = beta_star_tasks_i[client_index]
-                selected_client_num_tasks_index = list(A[i][client_index]).index(selected_client_num_tasks)
+                selected_client_capacities = list(A[i][client_index])
+                if selected_client_num_tasks not in selected_client_capacities:
+                    selected_client_num_tasks = min(selected_client_capacities,
+                                                    key=lambda x: abs(x - selected_client_num_tasks))
+                selected_client_num_tasks_index = selected_client_capacities.index(selected_client_num_tasks)
                 makespan_ik = Ti[client_index][selected_client_num_tasks_index]
                 if makespan_ik > makespan_i:
                     makespan_i = makespan_ik
