@@ -67,17 +67,16 @@ def fedaecs_adapted(I: int,
             Ak_max = max(Ak)
             init_qualified_client_max_capacity.append(Ak_max)
             for index, _ in enumerate(Ak):
-                Ak_index = list(Ak).index(Ak[index])
-                if Ti[k][Ak_index] <= T_max and b[i][k][Ak_index] <= B:
-                    if εi[k][Ak_index] > 0:
-                        n.append(Ei[k][Ak_index] / εi[k][Ak_index])
+                if Ti[k][index] <= T_max and b[i][k][index] <= B:
+                    if εi[k][index] > 0:
+                        n.append(Ei[k][index] / εi[k][index])
                     else:
                         n.append(inf)
-                    init_qualified_client_capacity.append(Ak[Ak_index])
-                    init_qualified_client_energy.append(Ei[k][Ak_index])
-                    init_qualified_client_accuracy.append(εi[k][Ak_index])
-                    init_qualified_client_time.append(Ti[k][Ak_index])
-                    init_qualified_client_bandwidth.append(b[i][k][Ak_index])
+                    init_qualified_client_capacity.append(Ak[index])
+                    init_qualified_client_energy.append(Ei[k][index])
+                    init_qualified_client_accuracy.append(εi[k][index])
+                    init_qualified_client_time.append(Ti[k][index])
+                    init_qualified_client_bandwidth.append(b[i][k][index])
                     init_qualified_client_index.append(k)
                 else:
                     init_unqualified_client_index.append(k)
