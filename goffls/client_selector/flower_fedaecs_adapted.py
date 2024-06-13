@@ -236,10 +236,13 @@ def select_clients_using_fedaecs_adapted(comm_round: int,
         accuracies_gains_expanded_shape = expand_dims(accuracy_gains, axis=0)
         # Bandwidth information per resource per round.
         b = []
-        for resource in range(0, num_resources):
-            bi = zeros(shape=len(assignment_capacities_expanded_shape[0][resource]))
+        for i in range(0, num_rounds):
+            bi = []
+            for k in range(0, num_resources):
+                bik = zeros(shape=len(assignment_capacities_expanded_shape[i][k]))
+                bi.append(bik)
             b.append(bi)
-        b_expanded_shape = expand_dims(b, axis=0)
+        b = array(b, dtype=object)
         # Execute the FedAECS adapted algorithm.
         _, fedaecs_schedule, _, fedaecs_selected_clients_indices, fedaecs_makespan, fedaecs_energy_consumption, \
             fedaecs_accuracy = fedaecs_adapted(num_rounds,
@@ -249,7 +252,7 @@ def select_clients_using_fedaecs_adapted(comm_round: int,
                                                time_costs_expanded_shape,
                                                energy_costs_expanded_shape,
                                                accuracies_gains_expanded_shape,
-                                               b_expanded_shape,
+                                               b,
                                                accuracy_lower_bound,
                                                deadline_in_seconds,
                                                total_bandwidth_in_hertz)
