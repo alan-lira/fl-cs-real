@@ -148,7 +148,8 @@ class FlowerGOFFLSServer(Strategy):
         comm_round_key = "comm_round_{0}".format(comm_round)
         if comm_round_key not in selected_fit_clients_history:
             client_selection_settings = self.get_attribute("_client_selection_settings")
-            client_selector = client_selection_settings["client_selector"]
+            client_selection_for_training_settings = client_selection_settings["client_selection_for_training_settings"]
+            client_selector_for_training = client_selection_for_training_settings["client_selector_for_training"]
             available_fit_clients_ids = list(available_fit_clients_map.keys())
             num_available_fit_clients = len(available_fit_clients_ids)
             num_selected_fit_clients = len(selected_fit_clients)
@@ -160,7 +161,7 @@ class FlowerGOFFLSServer(Strategy):
                 client_index = available_fit_clients_proxies.index(client_proxy)
                 client_id_str = available_fit_clients_ids[client_index]
                 selected_fit_clients_ids.append(client_id_str)
-            comm_round_values = {"client_selector": client_selector,
+            comm_round_values = {"client_selector": client_selector_for_training,
                                  "selection_duration": selection_duration,
                                  "num_tasks": num_fit_tasks,
                                  "num_available_clients": num_available_fit_clients,
@@ -176,10 +177,16 @@ class FlowerGOFFLSServer(Strategy):
                                               num_tasks: Optional[int] = 0,
                                               selection: Optional[dict] = None) -> None:
         selection_performance_history_attribute = None
+        client_selection_for_phase_settings_key = None
+        client_selector_key = None
         if phase == "train":
             selection_performance_history_attribute = "_fit_selection_performance_history"
+            client_selection_for_phase_settings_key = "client_selection_for_training_settings"
+            client_selector_key = "client_selector_for_training"
         elif phase == "test":
             selection_performance_history_attribute = "_evaluate_selection_performance_history"
+            client_selection_for_phase_settings_key = "client_selection_for_testing_settings"
+            client_selector_key = "client_selector_for_testing"
         selection_performance_history = self.get_attribute(selection_performance_history_attribute)
         comm_round_key = "comm_round_{0}".format(comm_round)
         if comm_round_key not in selection_performance_history:
@@ -193,7 +200,8 @@ class FlowerGOFFLSServer(Strategy):
             if "expected_accuracy" in selection:
                 expected_accuracy = selection["expected_accuracy"]
             client_selection_settings = self.get_attribute("_client_selection_settings")
-            client_selector = client_selection_settings["client_selector"]
+            client_selection_for_phase_settings = client_selection_settings[client_selection_for_phase_settings_key]
+            client_selector = client_selection_for_phase_settings[client_selector_key]
             comm_round_values = {"client_selector": client_selector,
                                  "num_tasks": num_tasks,
                                  "expected_makespan": expected_makespan,
@@ -261,7 +269,8 @@ class FlowerGOFFLSServer(Strategy):
         enable_training = fl_settings["enable_training"]
         num_fit_tasks = fl_settings["num_fit_tasks"]
         client_selection_settings = self.get_attribute("_client_selection_settings")
-        client_selector = client_selection_settings["client_selector"]
+        client_selection_for_training_settings = client_selection_settings["client_selection_for_training_settings"]
+        client_selector_for_training = client_selection_for_training_settings["client_selector_for_training"]
         individual_fit_metrics_history = self.get_attribute("_individual_fit_metrics_history")
         logger = self.get_attribute("_logger")
         # Wait for the initial clients to connect before starting the first round.
@@ -285,18 +294,19 @@ class FlowerGOFFLSServer(Strategy):
         phase = "train"
         # Start the clients selection duration timer.
         selection_duration_start = perf_counter()
-        if client_selector == "Random":
+        if client_selector_for_training == "Random":
             # Select clients using the Random algorithm.
-            fit_clients_fraction = client_selection_settings["fit_clients_fraction"]
+            fit_clients_fraction = client_selection_for_training_settings["fit_clients_fraction"]
             fit_selection = select_clients_using_random(phase,
                                                         num_fit_tasks,
                                                         fit_clients_fraction,
                                                         available_fit_clients_map,
                                                         logger)
-        elif client_selector == "MEC":
+        elif client_selector_for_training == "MEC":
             # Select clients using the MEC algorithm.
-            history_checker = client_selection_settings["history_checker"]
-            assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
+            history_checker = client_selection_for_training_settings["history_checker"]
+            assignment_capacities_init_settings \
+                = client_selection_for_training_settings["assignment_capacities_init_settings"]
             fit_selection = select_clients_using_mec(server_round,
                                                      phase,
                                                      num_fit_tasks,
@@ -305,11 +315,14 @@ class FlowerGOFFLSServer(Strategy):
                                                      history_checker,
                                                      assignment_capacities_init_settings,
                                                      logger)
-        elif client_selector == "ECMTC":
+        elif client_selector_for_training == "ECMTC":
             # Select clients using the ECMTC algorithm.
-            history_checker = client_selection_settings["history_checker"]
-            assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
-            fit_deadline_in_seconds = client_selection_settings["fit_deadline_in_seconds"]
+            history_checker = client_selection_for_training_settings["history_checker"]
+            assignment_capacities_init_settings \
+                = client_selection_for_training_settings["assignment_capacities_init_settings"]
+            fit_deadline_in_seconds = client_selection_for_training_settings["fit_deadline_in_seconds"]
+            complementary_clients_fraction = client_selection_for_training_settings["complementary_clients_fraction"]
+            complementary_tasks_fraction = client_selection_for_training_settings["complementary_tasks_fraction"]
             fit_selection = select_clients_using_ecmtc(server_round,
                                                        phase,
                                                        num_fit_tasks,
@@ -318,11 +331,14 @@ class FlowerGOFFLSServer(Strategy):
                                                        individual_fit_metrics_history,
                                                        history_checker,
                                                        assignment_capacities_init_settings,
+                                                       complementary_clients_fraction,
+                                                       complementary_tasks_fraction,
                                                        logger)
-        elif client_selector == "OLAR":
+        elif client_selector_for_training == "OLAR":
             # Select clients using the OLAR adapted algorithm.
-            history_checker = client_selection_settings["history_checker"]
-            assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
+            history_checker = client_selection_for_training_settings["history_checker"]
+            assignment_capacities_init_settings \
+                = client_selection_for_training_settings["assignment_capacities_init_settings"]
             fit_selection = select_clients_using_olar_adapted(server_round,
                                                               phase,
                                                               num_fit_tasks,
@@ -331,10 +347,13 @@ class FlowerGOFFLSServer(Strategy):
                                                               history_checker,
                                                               assignment_capacities_init_settings,
                                                               logger)
-        elif client_selector == "MC2MKP":
+        elif client_selector_for_training == "MC2MKP":
             # Select clients using the (MC)²MKP adapted algorithm.
-            history_checker = client_selection_settings["history_checker"]
-            assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
+            history_checker = client_selection_for_training_settings["history_checker"]
+            assignment_capacities_init_settings \
+                = client_selection_for_training_settings["assignment_capacities_init_settings"]
+            complementary_clients_fraction = client_selection_for_training_settings["complementary_clients_fraction"]
+            complementary_tasks_fraction = client_selection_for_training_settings["complementary_tasks_fraction"]
             fit_selection = select_clients_using_mc2mkp_adapted(server_round,
                                                                 phase,
                                                                 num_fit_tasks,
@@ -342,13 +361,16 @@ class FlowerGOFFLSServer(Strategy):
                                                                 individual_fit_metrics_history,
                                                                 history_checker,
                                                                 assignment_capacities_init_settings,
+                                                                complementary_clients_fraction,
+                                                                complementary_tasks_fraction,
                                                                 logger)
-        elif client_selector == "ELASTIC":
+        elif client_selector_for_training == "ELASTIC":
             # Select clients using the ELASTIC adapted algorithm.
-            history_checker = client_selection_settings["history_checker"]
-            assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
-            fit_deadline_in_seconds = client_selection_settings["fit_deadline_in_seconds"]
-            objectives_weights_parameter = client_selection_settings["objectives_weights_parameter"]
+            history_checker = client_selection_for_training_settings["history_checker"]
+            assignment_capacities_init_settings \
+                = client_selection_for_training_settings["assignment_capacities_init_settings"]
+            fit_deadline_in_seconds = client_selection_for_training_settings["fit_deadline_in_seconds"]
+            objectives_weights_parameter = client_selection_for_training_settings["objectives_weights_parameter"]
             fit_selection = select_clients_using_elastic_adapted(server_round,
                                                                  phase,
                                                                  num_fit_tasks,
@@ -359,13 +381,14 @@ class FlowerGOFFLSServer(Strategy):
                                                                  history_checker,
                                                                  assignment_capacities_init_settings,
                                                                  logger)
-        elif client_selector == "FedAECS":
+        elif client_selector_for_training == "FedAECS":
             # Select clients using the FedAECS adapted algorithm.
-            history_checker = client_selection_settings["history_checker"]
-            assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
-            fit_deadline_in_seconds = client_selection_settings["fit_deadline_in_seconds"]
-            accuracy_lower_bound = client_selection_settings["accuracy_lower_bound"]
-            total_bandwidth_in_hertz = client_selection_settings["total_bandwidth_in_hertz"]
+            history_checker = client_selection_for_training_settings["history_checker"]
+            assignment_capacities_init_settings \
+                = client_selection_for_training_settings["assignment_capacities_init_settings"]
+            fit_deadline_in_seconds = client_selection_for_training_settings["fit_deadline_in_seconds"]
+            accuracy_lower_bound = client_selection_for_training_settings["accuracy_lower_bound"]
+            total_bandwidth_in_hertz = client_selection_for_training_settings["total_bandwidth_in_hertz"]
             if total_bandwidth_in_hertz == "inf":
                 total_bandwidth_in_hertz = inf
             fit_selection = select_clients_using_fedaecs_adapted(server_round,
@@ -496,7 +519,8 @@ class FlowerGOFFLSServer(Strategy):
         comm_round_key = "comm_round_{0}".format(comm_round)
         if comm_round_key not in individual_fit_metrics_history:
             client_selection_settings = self.get_attribute("_client_selection_settings")
-            client_selector = client_selection_settings["client_selector"]
+            client_selection_for_training_settings = client_selection_settings["client_selection_for_training_settings"]
+            client_selector_for_training = client_selection_for_training_settings["client_selector_for_training"]
             selected_fit_clients_history = self.get_attribute("_selected_fit_clients_history")
             num_tasks = selected_fit_clients_history[comm_round_key]["num_tasks"]
             num_available_clients = selected_fit_clients_history[comm_round_key]["num_available_clients"]
@@ -511,7 +535,7 @@ class FlowerGOFFLSServer(Strategy):
                 client_metrics_copy["num_cpus"] = client_metrics_copy.pop("client_num_cpus")
                 client_metrics_copy["cpu_cores_list"] = client_metrics_copy.pop("client_cpu_cores_list")
                 fit_clients_metrics.append({client_id_str: client_metrics_copy})
-            comm_round_values = {"client_selector": client_selector,
+            comm_round_values = {"client_selector": client_selector_for_training,
                                  "num_tasks": num_tasks,
                                  "num_available_clients": num_available_clients,
                                  "clients_metrics_dicts": fit_clients_metrics}
@@ -537,11 +561,12 @@ class FlowerGOFFLSServer(Strategy):
         comm_round_key = "comm_round_{0}".format(comm_round)
         if comm_round_key not in aggregated_fit_metrics_history:
             client_selection_settings = self.get_attribute("_client_selection_settings")
-            client_selector = client_selection_settings["client_selector"]
+            client_selection_for_training_settings = client_selection_settings["client_selection_for_training_settings"]
+            client_selector_for_training = client_selection_for_training_settings["client_selector_for_training"]
             selected_fit_clients_history = self.get_attribute("_selected_fit_clients_history")
             num_tasks = selected_fit_clients_history[comm_round_key]["num_tasks"]
             num_available_clients = selected_fit_clients_history[comm_round_key]["num_available_clients"]
-            comm_round_values = {"client_selector": client_selector,
+            comm_round_values = {"client_selector": client_selector_for_training,
                                  "metrics_aggregator": metrics_aggregator,
                                  "num_tasks": num_tasks,
                                  "num_available_clients": num_available_clients,
@@ -664,7 +689,8 @@ class FlowerGOFFLSServer(Strategy):
         comm_round_key = "comm_round_{0}".format(comm_round)
         if comm_round_key not in selected_evaluate_clients_history:
             client_selection_settings = self.get_attribute("_client_selection_settings")
-            client_selector = client_selection_settings["client_selector"]
+            client_selection_for_testing_settings = client_selection_settings["client_selection_for_testing_settings"]
+            client_selector_for_testing = client_selection_for_testing_settings["client_selector_for_testing"]
             available_evaluate_clients_ids = list(available_evaluate_clients_map.keys())
             num_available_evaluate_clients = len(available_evaluate_clients_ids)
             num_selected_evaluate_clients = len(selected_evaluate_clients)
@@ -676,7 +702,7 @@ class FlowerGOFFLSServer(Strategy):
                 client_index = available_evaluate_clients_proxies.index(client_proxy)
                 client_id_str = available_evaluate_clients_ids[client_index]
                 selected_evaluate_clients_ids.append(client_id_str)
-            comm_round_values = {"client_selector": client_selector,
+            comm_round_values = {"client_selector": client_selector_for_testing,
                                  "selection_duration": selection_duration,
                                  "num_tasks": num_evaluate_tasks,
                                  "num_available_clients": num_available_evaluate_clients,
@@ -697,7 +723,8 @@ class FlowerGOFFLSServer(Strategy):
         enable_testing = fl_settings["enable_testing"]
         num_evaluate_tasks = fl_settings["num_evaluate_tasks"]
         client_selection_settings = self.get_attribute("_client_selection_settings")
-        client_selector = client_selection_settings["client_selector"]
+        client_selection_for_testing_settings = client_selection_settings["client_selection_for_testing_settings"]
+        client_selector_for_testing = client_selection_for_testing_settings["client_selector_for_testing"]
         individual_evaluate_metrics_history = self.get_attribute("_individual_evaluate_metrics_history")
         logger = self.get_attribute("_logger")
         # Do not configure federated testing if it is not enabled.
@@ -715,18 +742,19 @@ class FlowerGOFFLSServer(Strategy):
         phase = "test"
         # Start the clients selection duration timer.
         selection_duration_start = perf_counter()
-        if client_selector == "Random":
+        if client_selector_for_testing == "Random":
             # Select clients for testing randomly.
-            evaluate_clients_fraction = client_selection_settings["evaluate_clients_fraction"]
+            evaluate_clients_fraction = client_selection_for_testing_settings["evaluate_clients_fraction"]
             evaluate_selection = select_clients_using_random(phase,
                                                              num_evaluate_tasks,
                                                              evaluate_clients_fraction,
                                                              available_evaluate_clients_map,
                                                              logger)
-        elif client_selector == "MEC":
+        elif client_selector_for_testing == "MEC":
             # Select clients using the MEC algorithm.
-            history_checker = client_selection_settings["history_checker"]
-            assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
+            history_checker = client_selection_for_testing_settings["history_checker"]
+            assignment_capacities_init_settings \
+                = client_selection_for_testing_settings["assignment_capacities_init_settings"]
             evaluate_selection = select_clients_using_mec(server_round,
                                                           phase,
                                                           num_evaluate_tasks,
@@ -735,11 +763,14 @@ class FlowerGOFFLSServer(Strategy):
                                                           history_checker,
                                                           assignment_capacities_init_settings,
                                                           logger)
-        elif client_selector == "ECMTC":
+        elif client_selector_for_testing == "ECMTC":
             # Select clients using the ECMTC algorithm.
-            history_checker = client_selection_settings["history_checker"]
-            assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
-            evaluate_deadline_in_seconds = client_selection_settings["evaluate_deadline_in_seconds"]
+            history_checker = client_selection_for_testing_settings["history_checker"]
+            assignment_capacities_init_settings \
+                = client_selection_for_testing_settings["assignment_capacities_init_settings"]
+            evaluate_deadline_in_seconds = client_selection_for_testing_settings["evaluate_deadline_in_seconds"]
+            complementary_clients_fraction = client_selection_for_testing_settings["complementary_clients_fraction"]
+            complementary_tasks_fraction = client_selection_for_testing_settings["complementary_tasks_fraction"]
             evaluate_selection = select_clients_using_ecmtc(server_round,
                                                             phase,
                                                             num_evaluate_tasks,
@@ -748,11 +779,14 @@ class FlowerGOFFLSServer(Strategy):
                                                             individual_evaluate_metrics_history,
                                                             history_checker,
                                                             assignment_capacities_init_settings,
+                                                            complementary_clients_fraction,
+                                                            complementary_tasks_fraction,
                                                             logger)
-        elif client_selector == "OLAR":
+        elif client_selector_for_testing == "OLAR":
             # Select clients using the OLAR adapted algorithm.
-            history_checker = client_selection_settings["history_checker"]
-            assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
+            history_checker = client_selection_for_testing_settings["history_checker"]
+            assignment_capacities_init_settings \
+                = client_selection_for_testing_settings["assignment_capacities_init_settings"]
             evaluate_selection = select_clients_using_olar_adapted(server_round,
                                                                    phase,
                                                                    num_evaluate_tasks,
@@ -761,10 +795,13 @@ class FlowerGOFFLSServer(Strategy):
                                                                    history_checker,
                                                                    assignment_capacities_init_settings,
                                                                    logger)
-        elif client_selector == "MC2MKP":
+        elif client_selector_for_testing == "MC2MKP":
             # Select clients using the (MC)²MKP adapted algorithm.
-            history_checker = client_selection_settings["history_checker"]
-            assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
+            history_checker = client_selection_for_testing_settings["history_checker"]
+            assignment_capacities_init_settings \
+                = client_selection_for_testing_settings["assignment_capacities_init_settings"]
+            complementary_clients_fraction = client_selection_for_testing_settings["complementary_clients_fraction"]
+            complementary_tasks_fraction = client_selection_for_testing_settings["complementary_tasks_fraction"]
             evaluate_selection = select_clients_using_mc2mkp_adapted(server_round,
                                                                      phase,
                                                                      num_evaluate_tasks,
@@ -772,13 +809,16 @@ class FlowerGOFFLSServer(Strategy):
                                                                      individual_evaluate_metrics_history,
                                                                      history_checker,
                                                                      assignment_capacities_init_settings,
+                                                                     complementary_clients_fraction,
+                                                                     complementary_tasks_fraction,
                                                                      logger)
-        elif client_selector == "ELASTIC":
+        elif client_selector_for_testing == "ELASTIC":
             # Select clients using the ELASTIC adapted algorithm.
-            history_checker = client_selection_settings["history_checker"]
-            assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
-            evaluate_deadline_in_seconds = client_selection_settings["evaluate_deadline_in_seconds"]
-            objectives_weights_parameter = client_selection_settings["objectives_weights_parameter"]
+            history_checker = client_selection_for_testing_settings["history_checker"]
+            assignment_capacities_init_settings \
+                = client_selection_for_testing_settings["assignment_capacities_init_settings"]
+            evaluate_deadline_in_seconds = client_selection_for_testing_settings["evaluate_deadline_in_seconds"]
+            objectives_weights_parameter = client_selection_for_testing_settings["objectives_weights_parameter"]
             evaluate_selection = select_clients_using_elastic_adapted(server_round,
                                                                       phase,
                                                                       num_evaluate_tasks,
@@ -789,13 +829,14 @@ class FlowerGOFFLSServer(Strategy):
                                                                       history_checker,
                                                                       assignment_capacities_init_settings,
                                                                       logger)
-        elif client_selector == "FedAECS":
+        elif client_selector_for_testing == "FedAECS":
             # Select clients using the FedAECS adapted algorithm.
-            history_checker = client_selection_settings["history_checker"]
-            assignment_capacities_init_settings = client_selection_settings["assignment_capacities_init_settings"]
-            evaluate_deadline_in_seconds = client_selection_settings["evaluate_deadline_in_seconds"]
-            accuracy_lower_bound = client_selection_settings["accuracy_lower_bound"]
-            total_bandwidth_in_hertz = client_selection_settings["total_bandwidth_in_hertz"]
+            history_checker = client_selection_for_testing_settings["history_checker"]
+            assignment_capacities_init_settings \
+                = client_selection_for_testing_settings["assignment_capacities_init_settings"]
+            evaluate_deadline_in_seconds = client_selection_for_testing_settings["evaluate_deadline_in_seconds"]
+            accuracy_lower_bound = client_selection_for_testing_settings["accuracy_lower_bound"]
+            total_bandwidth_in_hertz = client_selection_for_testing_settings["total_bandwidth_in_hertz"]
             if total_bandwidth_in_hertz == "inf":
                 total_bandwidth_in_hertz = inf
             evaluate_selection = select_clients_using_fedaecs_adapted(server_round,
@@ -844,7 +885,8 @@ class FlowerGOFFLSServer(Strategy):
         comm_round_key = "comm_round_{0}".format(comm_round)
         if comm_round_key not in individual_evaluate_metrics_history:
             client_selection_settings = self.get_attribute("_client_selection_settings")
-            client_selector = client_selection_settings["client_selector"]
+            client_selection_for_testing_settings = client_selection_settings["client_selection_for_testing_settings"]
+            client_selector_for_testing = client_selection_for_testing_settings["client_selector_for_testing"]
             selected_evaluate_clients_history = self.get_attribute("_selected_evaluate_clients_history")
             num_tasks = selected_evaluate_clients_history[comm_round_key]["num_tasks"]
             num_available_clients = selected_evaluate_clients_history[comm_round_key]["num_available_clients"]
@@ -859,7 +901,7 @@ class FlowerGOFFLSServer(Strategy):
                 client_metrics_copy["num_cpus"] = client_metrics_copy.pop("client_num_cpus")
                 client_metrics_copy["cpu_cores_list"] = client_metrics_copy.pop("client_cpu_cores_list")
                 evaluate_clients_metrics.append({client_id_str: client_metrics_copy})
-            comm_round_values = {"client_selector": client_selector,
+            comm_round_values = {"client_selector": client_selector_for_testing,
                                  "num_tasks": num_tasks,
                                  "num_available_clients": num_available_clients,
                                  "clients_metrics_dicts": evaluate_clients_metrics}
@@ -875,11 +917,12 @@ class FlowerGOFFLSServer(Strategy):
         comm_round_key = "comm_round_{0}".format(comm_round)
         if comm_round_key not in aggregated_evaluate_metrics_history:
             client_selection_settings = self.get_attribute("_client_selection_settings")
-            client_selector = client_selection_settings["client_selector"]
+            client_selection_for_testing_settings = client_selection_settings["client_selection_for_testing_settings"]
+            client_selector_for_testing = client_selection_for_testing_settings["client_selector_for_testing"]
             selected_evaluate_clients_history = self.get_attribute("_selected_evaluate_clients_history")
             num_tasks = selected_evaluate_clients_history[comm_round_key]["num_tasks"]
             num_available_clients = selected_evaluate_clients_history[comm_round_key]["num_available_clients"]
-            comm_round_values = {"client_selector": client_selector,
+            comm_round_values = {"client_selector": client_selector_for_testing,
                                  "metrics_aggregator": metrics_aggregator,
                                  "num_tasks": num_tasks,
                                  "num_available_clients": num_available_clients,
