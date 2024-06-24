@@ -21,7 +21,7 @@ def select_clients_using_ecmtc(comm_round: int,
                                complementary_tasks_fraction: float,
                                logger: Logger) -> dict:
     # Log a 'selecting clients' message.
-    message = "Selecting {0}ing clients using ECMTC...".format(phase)
+    message = "Selecting {0}ing clients for round {1} using ECMTC...".format(phase, comm_round)
     log_message(logger, message, "INFO")
     # Initialize the selection dictionary and the list of selected clients.
     selection = {}
@@ -270,10 +270,13 @@ def select_clients_using_ecmtc(comm_round: int,
         # Update the selection dictionary with the selected clients for the schedule.
         selection.update({"selected_clients": selected_clients})
     # Log a 'number of clients selected' message.
-    message = "{0} {1} (out of {2}) {3} selected!".format(len(selected_clients),
-                                                          "clients" if len(selected_clients) != 1 else "client",
-                                                          len(available_clients_map),
-                                                          "were" if len(selected_clients) != 1 else "was")
+    message = "{0} {1}ing {2} (out of {3}) {4} selected for round {5}!" \
+              .format(len(selected_clients),
+                      phase,
+                      "clients" if len(selected_clients) != 1 else "client",
+                      len(available_clients_map),
+                      "were" if len(selected_clients) != 1 else "was",
+                      comm_round)
     log_message(logger, message, "INFO")
     # Return the selection dictionary.
     return selection

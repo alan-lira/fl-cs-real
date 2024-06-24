@@ -5,13 +5,14 @@ from goffls.utils.client_selector_util import schedule_tasks_to_selected_clients
 from goffls.utils.logger_util import log_message
 
 
-def select_clients_using_random(phase: str,
+def select_clients_using_random(comm_round: int,
+                                phase: str,
                                 num_tasks_to_schedule: int,
                                 clients_fraction: float,
                                 available_clients_map: dict,
                                 logger: Logger) -> dict:
     # Log a 'selecting clients' message.
-    message = "Selecting {0}ing clients using Random...".format(phase)
+    message = "Selecting {0}ing clients for round {1} using Random...".format(phase, comm_round)
     log_message(logger, message, "INFO")
     # Initialize the selection dictionary and the list of selected clients.
     selection = {}
@@ -38,10 +39,13 @@ def select_clients_using_random(phase: str,
     # Update the selection dictionary with the selected clients for the schedule.
     selection.update({"selected_clients": selected_clients})
     # Log a 'number of clients selected' message.
-    message = "{0} {1} (out of {2}) {3} selected!".format(len(selected_clients),
-                                                          "clients" if len(selected_clients) != 1 else "client",
-                                                          num_available_clients,
-                                                          "were" if len(selected_clients) != 1 else "was")
+    message = "{0} {1}ing {2} (out of {3}) {4} selected for round {5}!" \
+              .format(len(selected_clients),
+                      phase,
+                      "clients" if len(selected_clients) != 1 else "client",
+                      len(available_clients_map),
+                      "were" if len(selected_clients) != 1 else "was",
+                      comm_round)
     log_message(logger, message, "INFO")
     # Return the selection dictionary.
     return selection
