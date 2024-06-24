@@ -485,22 +485,23 @@ class FlowerGOFFLSServer(Strategy):
         # If the client selection can be executed while clients are training...
         if enable_client_selection_while_training:
             if server_round == 1:
-                # Select clients only for the current round.
+                # Select clients, prior to the training, only for the current round.
                 rounds_to_select_clients = [server_round]
             elif server_round == 2:
-                # Select clients for the current round and its immediate next round, if applicable.
+                # Select clients, prior to the training, for the current round and,
+                # select clients, in advance, for its immediate next round, if applicable.
                 rounds_to_select_clients = [server_round]
                 immediate_next_round = server_round + 1
                 if immediate_next_round <= num_rounds:
                     rounds_to_select_clients.append(immediate_next_round)
             else:
-                # Select clients only for the immediate next round, if applicable.
+                # Select clients, in advance, only for the immediate next round, if applicable.
                 rounds_to_select_clients = []
                 immediate_next_round = server_round + 1
                 if immediate_next_round <= num_rounds:
                     rounds_to_select_clients.append(immediate_next_round)
         else:
-            # If not, select clients only for the current round.
+            # If not, select clients, prior to the training, only for the current round.
             rounds_to_select_clients = [server_round]
         # Select clients for training (non-blocking daemon thread).
         target = self._select_clients
@@ -784,22 +785,23 @@ class FlowerGOFFLSServer(Strategy):
         # If the client selection can be executed while clients are testing...
         if enable_client_selection_while_testing:
             if server_round == 1:
-                # Select clients only for the current round.
+                # Select clients, prior to the testing, only for the current round.
                 rounds_to_select_clients = [server_round]
             elif server_round == 2:
-                # Select clients for the current round and its immediate next round, if applicable.
+                # Select clients, prior to the testing, for the current round and,
+                # select clients, in advance, for its immediate next round, if applicable.
                 rounds_to_select_clients = [server_round]
                 immediate_next_round = server_round + 1
                 if immediate_next_round <= num_rounds:
                     rounds_to_select_clients.append(immediate_next_round)
             else:
-                # Select clients only for the immediate next round, if applicable.
+                # Select clients, in advance, only for the immediate next round, if applicable.
                 rounds_to_select_clients = []
                 immediate_next_round = server_round + 1
                 if immediate_next_round <= num_rounds:
                     rounds_to_select_clients.append(immediate_next_round)
         else:
-            # If not, select clients only for the current round.
+            # If not, select clients, prior to the testing, only for the current round.
             rounds_to_select_clients = [server_round]
         # Select clients for testing (non-blocking daemon thread).
         target = self._select_clients
