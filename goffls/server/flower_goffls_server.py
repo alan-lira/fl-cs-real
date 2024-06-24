@@ -502,7 +502,6 @@ class FlowerGOFFLSServer(Strategy):
         else:
             # If not, select clients only for the current round.
             rounds_to_select_clients = [server_round]
-        print(rounds_to_select_clients)
         # Select clients for training (non-blocking daemon thread).
         target = self._select_clients
         for round_to_select_clients in rounds_to_select_clients:
@@ -802,7 +801,6 @@ class FlowerGOFFLSServer(Strategy):
         else:
             # If not, select clients only for the current round.
             rounds_to_select_clients = [server_round]
-        print(rounds_to_select_clients)
         # Select clients for testing (non-blocking daemon thread).
         target = self._select_clients
         for round_to_select_clients in rounds_to_select_clients:
