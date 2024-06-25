@@ -1,5 +1,6 @@
 from logging import Logger
 from numpy import array, inf
+from random import sample
 
 from goffls.task_scheduler.ecmtc import ecmtc
 from goffls.utils.client_selector_util import calculate_linear_interpolation_or_extrapolation, get_metric_mean_value, \
@@ -16,9 +17,11 @@ def select_clients_using_ecmtc(comm_round: int,
                                individual_metrics_history: dict,
                                history_checker: str,
                                assignment_capacities_init_settings: dict,
+                               complementary_clients_fraction: float,
+                               complementary_tasks_fraction: float,
                                logger: Logger) -> dict:
     # Log a 'selecting clients' message.
-    message = "Selecting {0}ing clients using ECMTC...".format(phase)
+    message = "Selecting {0}ing clients for round {1} using ECMTC...".format(phase, comm_round)
     log_message(logger, message, "INFO")
     # Initialize the selection dictionary and the list of selected clients.
     selection = {}
@@ -56,6 +59,12 @@ def select_clients_using_ecmtc(comm_round: int,
         # Get the maximum number of tasks that can be scheduled to the available participating clients.
         available_participating_clients_capacities_sum = sum_clients_capacities(available_participating_clients_map,
                                                                                 phase)
+        # Set the number of tasks that will be scheduled to the complementary clients (if any).
+        num_complementary_tasks_to_schedule = int(num_tasks_to_schedule * complementary_tasks_fraction)
+        # If others than the clients selected by the ECMTC algorithm are to be used (i.e., complementary clients)...
+        if complementary_clients_fraction != 0 and complementary_tasks_fraction != 0:
+            # Set the number of tasks that will be scheduled to the selected clients.
+            num_tasks_to_schedule = num_tasks_to_schedule - num_complementary_tasks_to_schedule
         # Redefine the number of tasks to schedule, if the available participating clients capacities sum is lower.
         num_tasks_to_schedule = min(num_tasks_to_schedule, available_participating_clients_capacities_sum)
         # Initialize the global lists that will be transformed to array.
@@ -226,13 +235,48 @@ def select_clients_using_ecmtc(comm_round: int,
             selected_clients.append({"client_proxy": client_proxy,
                                      "client_capacity": client_capacity,
                                      "client_num_tasks_scheduled": client_num_tasks_scheduled})
+        # If there are complementary clients to be used other than the ones selected by the ECMTC algorithm...
+        if complementary_clients_fraction != 0 and complementary_tasks_fraction != 0:
+            # Initialize the list of complementary clients.
+            complementary_clients = []
+            # Determine the number of complementary clients to select.
+            num_complementary_clients_to_select = max(1, int(num_resources * complementary_clients_fraction))
+            # Filter (remove) the already selected clients from the available participating clients map.
+            available_participating_clients_filtered_map = available_participating_clients_map.copy()
+            for sel_index in selected_clients_indices:
+                client_id_str = client_ids[sel_index]
+                if client_id_str in available_participating_clients_filtered_map:
+                    del available_participating_clients_filtered_map[client_id_str]
+            # Select clients via random sampling if there are any available participating clients not selected yet.
+            if available_participating_clients_filtered_map:
+                sampled_clients_keys = sample(sorted(available_participating_clients_filtered_map),
+                                              num_complementary_clients_to_select)
+                for client_key in sampled_clients_keys:
+                    client_map = available_clients_map[client_key]
+                    client_proxy = client_map["client_proxy"]
+                    client_capacity = client_map["client_num_{0}ing_examples_available".format(phase)]
+                    complementary_clients.append({"client_proxy": client_proxy,
+                                                  "client_capacity": client_capacity,
+                                                  "client_num_tasks_scheduled": 0})
+                # Get the maximum number of tasks that can be scheduled to the complementary clients.
+                complementary_clients_capacities_sum = sum_clients_capacities(complementary_clients, phase)
+                # Redefine the number of tasks to schedule if the complementary clients capacities sum is lower.
+                num_complementary_tasks_to_schedule = min(num_complementary_tasks_to_schedule,
+                                                          complementary_clients_capacities_sum)
+                # Schedule the tasks to the complementary clients.
+                schedule_tasks_to_selected_clients(num_complementary_tasks_to_schedule, complementary_clients)
+                # Append the complementary clients to the list of selected clients.
+                selected_clients.extend(complementary_clients)
         # Update the selection dictionary with the selected clients for the schedule.
         selection.update({"selected_clients": selected_clients})
     # Log a 'number of clients selected' message.
-    message = "{0} {1} (out of {2}) {3} selected!".format(len(selected_clients),
-                                                          "clients" if len(selected_clients) != 1 else "client",
-                                                          len(available_clients_map),
-                                                          "were" if len(selected_clients) != 1 else "was")
+    message = "{0} {1}ing {2} (out of {3}) {4} selected for round {5}!" \
+              .format(len(selected_clients),
+                      phase,
+                      "clients" if len(selected_clients) != 1 else "client",
+                      len(available_clients_map),
+                      "were" if len(selected_clients) != 1 else "was",
+                      comm_round)
     log_message(logger, message, "INFO")
     # Return the selection dictionary.
     return selection
