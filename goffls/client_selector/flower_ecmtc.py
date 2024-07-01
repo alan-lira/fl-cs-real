@@ -17,6 +17,7 @@ def select_clients_using_ecmtc(comm_round: int,
                                individual_metrics_history: dict,
                                history_checker: str,
                                assignment_capacities_init_settings: dict,
+                               candidate_clients_fraction: float,
                                complementary_clients_fraction: float,
                                complementary_tasks_fraction: float,
                                logger: Logger) -> dict:
@@ -53,8 +54,18 @@ def select_clients_using_ecmtc(comm_round: int,
         available_participating_clients_map = map_available_participating_clients(comm_rounds,
                                                                                   available_clients_map,
                                                                                   individual_metrics_history)
-        # Set the number of resources,
-        # based on the number of available clients with entries in the individual metrics history.
+        # If only a fraction of the available clients is to be used by the algorithm (subset of candidate clients)...
+        if candidate_clients_fraction != 0:
+            # Set the number of resources,
+            # based on the number of available clients with entries in the individual metrics history.
+            num_resources = len(available_participating_clients_map)
+            # Determine the number of candidate clients.
+            num_candidate_clients = max(1, int(num_resources * candidate_clients_fraction))
+            # Filter the subset of candidate clients via random sampling.
+            sampled_clients_keys = sample(sorted(available_participating_clients_map), num_candidate_clients)
+            available_participating_clients_map = {client_key: available_participating_clients_map[client_key]
+                                                   for client_key in sampled_clients_keys}
+        # Set the number of resources.
         num_resources = len(available_participating_clients_map)
         # Get the maximum number of tasks that can be scheduled to the available participating clients.
         available_participating_clients_capacities_sum = sum_clients_capacities(available_participating_clients_map,
