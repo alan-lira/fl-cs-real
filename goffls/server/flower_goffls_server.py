@@ -126,16 +126,22 @@ class FlowerGOFFLSServer(Strategy):
                                          selection_duration: float,
                                          selected_clients: list) -> None:
         selected_clients_history_attribute = None
+        client_selection_for_phase_settings_key = None
+        client_selector_key = None
         if phase == "train":
             selected_clients_history_attribute = "_selected_fit_clients_history"
+            client_selection_for_phase_settings_key = "client_selection_for_training_settings"
+            client_selector_key = "client_selector_for_training"
         elif phase == "test":
             selected_clients_history_attribute = "_selected_evaluate_clients_history"
+            client_selection_for_phase_settings_key = "client_selection_for_testing_settings"
+            client_selector_key = "client_selector_for_testing"
         selected_clients_history = self.get_attribute(selected_clients_history_attribute)
         comm_round_key = "comm_round_{0}".format(comm_round)
         if comm_round_key not in selected_clients_history:
             client_selection_settings = self.get_attribute("_client_selection_settings")
-            client_selection_for_training_settings = client_selection_settings["client_selection_for_training_settings"]
-            client_selector_for_training = client_selection_for_training_settings["client_selector_for_training"]
+            client_selection_for_phase_settings = client_selection_settings[client_selection_for_phase_settings_key]
+            client_selector = client_selection_for_phase_settings[client_selector_key]
             available_clients_ids = list(available_clients_map.keys())
             num_available_clients = len(available_clients_ids)
             num_selected_clients = len(selected_clients)
@@ -147,7 +153,7 @@ class FlowerGOFFLSServer(Strategy):
                 client_index = available_clients_proxies.index(client_proxy)
                 client_id_str = available_clients_ids[client_index]
                 selected_clients_ids.append(client_id_str)
-            comm_round_values = {"client_selector": client_selector_for_training,
+            comm_round_values = {"client_selector": client_selector,
                                  "selection_duration": selection_duration,
                                  "num_tasks": num_tasks_to_schedule,
                                  "num_available_clients": num_available_clients,
@@ -334,6 +340,7 @@ class FlowerGOFFLSServer(Strategy):
                 deadline_in_seconds = client_selector_settings["fit_deadline_in_seconds"]
             elif phase == "test":
                 deadline_in_seconds = client_selector_settings["evaluate_deadline_in_seconds"]
+            candidate_clients_fraction = client_selector_settings["candidate_clients_fraction"]
             complementary_clients_fraction = client_selector_settings["complementary_clients_fraction"]
             complementary_tasks_fraction = client_selector_settings["complementary_tasks_fraction"]
             selection = select_clients_using_ecmtc(comm_round,
@@ -344,6 +351,7 @@ class FlowerGOFFLSServer(Strategy):
                                                    individual_metrics_history,
                                                    history_checker,
                                                    assignment_capacities_init_settings,
+                                                   candidate_clients_fraction,
                                                    complementary_clients_fraction,
                                                    complementary_tasks_fraction,
                                                    logger)
@@ -363,6 +371,7 @@ class FlowerGOFFLSServer(Strategy):
             # Select clients using the (MC)²MKP adapted algorithm.
             history_checker = client_selector_settings["history_checker"]
             assignment_capacities_init_settings = client_selector_settings["assignment_capacities_init_settings"]
+            candidate_clients_fraction = client_selector_settings["candidate_clients_fraction"]
             complementary_clients_fraction = client_selector_settings["complementary_clients_fraction"]
             complementary_tasks_fraction = client_selector_settings["complementary_tasks_fraction"]
             selection = select_clients_using_mc2mkp_adapted(comm_round,
@@ -372,6 +381,7 @@ class FlowerGOFFLSServer(Strategy):
                                                             individual_metrics_history,
                                                             history_checker,
                                                             assignment_capacities_init_settings,
+                                                            candidate_clients_fraction,
                                                             complementary_clients_fraction,
                                                             complementary_tasks_fraction,
                                                             logger)
