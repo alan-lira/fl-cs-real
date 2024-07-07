@@ -330,6 +330,10 @@ class FlowerServerLauncher:
                                       "num_selected_clients",
                                       "selected_clients")
                 file.write(header_line)
+        # Order the selected_fit_clients_history dictionary in ascending order of communication round.
+        sorted_comm_round_keys = sorted(list(selected_fit_clients_history.keys()), key=lambda x: (len(x), x))
+        selected_fit_clients_history = {comm_round_key: selected_fit_clients_history[comm_round_key]
+                                        for comm_round_key in sorted_comm_round_keys}
         # Write the history data lines to the output file.
         with open(file=selected_fit_clients_history_file, mode="a", encoding="utf-8") as file:
             for comm_round_key, comm_round_values in selected_fit_clients_history.items():
@@ -351,6 +355,10 @@ class FlowerServerLauncher:
 
     def _generate_selected_evaluate_clients_history_output_file(self) -> None:
         # Get the necessary attributes.
+        server_strategy_settings = self.get_attribute("_server_strategy_settings")
+        client_selection_settings = server_strategy_settings["client_selection"]
+        client_selection_for_training_settings = client_selection_settings["client_selection_for_training_settings"]
+        client_selector_for_training = client_selection_for_training_settings["client_selector_for_training"]
         server_strategy = self.get_attribute("_server_strategy")
         selected_evaluate_clients_history = server_strategy.get_attribute("_selected_evaluate_clients_history")
         output_settings = self.get_attribute("_output_settings")
@@ -374,10 +382,14 @@ class FlowerServerLauncher:
                                       "num_selected_clients",
                                       "selected_clients")
                 file.write(header_line)
+        # Order the selected_evaluate_clients_history dictionary in ascending order of communication round.
+        sorted_comm_round_keys = sorted(list(selected_evaluate_clients_history.keys()), key=lambda x: (len(x), x))
+        selected_evaluate_clients_history = {comm_round_key: selected_evaluate_clients_history[comm_round_key]
+                                             for comm_round_key in sorted_comm_round_keys}
         # Write the history data lines to the output file.
         with open(file=selected_evaluate_clients_history_file, mode="a", encoding="utf-8") as file:
             for comm_round_key, comm_round_values in selected_evaluate_clients_history.items():
-                client_selector = comm_round_values["client_selector"]
+                client_selector = "{0} ({1})".format(comm_round_values["client_selector"], client_selector_for_training)
                 selection_duration = comm_round_values["selection_duration"]
                 num_tasks = comm_round_values["num_tasks"]
                 num_available_clients = comm_round_values["num_available_clients"]
@@ -424,6 +436,10 @@ class FlowerServerLauncher:
                                       "client_id",
                                       ",".join(fit_metrics_names))
                 file.write(header_line)
+        # Order the individual_fit_metrics_history dictionary in ascending order of communication round.
+        sorted_comm_round_keys = sorted(list(individual_fit_metrics_history.keys()), key=lambda x: (len(x), x))
+        individual_fit_metrics_history = {comm_round_key: individual_fit_metrics_history[comm_round_key]
+                                          for comm_round_key in sorted_comm_round_keys}
         # Write the history data lines to the output file.
         with open(file=individual_fit_metrics_history_file, mode="a", encoding="utf-8") as file:
             for comm_round_key, comm_round_values in individual_fit_metrics_history.items():
@@ -479,6 +495,10 @@ class FlowerServerLauncher:
                                       "num_available_clients",
                                       ",".join(fit_metrics_names))
                 file.write(header_line)
+        # Order the aggregated_fit_metrics_history dictionary in ascending order of communication round.
+        sorted_comm_round_keys = sorted(list(aggregated_fit_metrics_history.keys()), key=lambda x: (len(x), x))
+        aggregated_fit_metrics_history = {comm_round_key: aggregated_fit_metrics_history[comm_round_key]
+                                          for comm_round_key in sorted_comm_round_keys}
         # Write the history data lines to the output file.
         with open(file=aggregated_fit_metrics_history_file, mode="a", encoding="utf-8") as file:
             for comm_round, comm_round_values in aggregated_fit_metrics_history.items():
@@ -504,6 +524,10 @@ class FlowerServerLauncher:
 
     def _generate_individual_evaluate_metrics_history_output_file(self) -> None:
         # Get the necessary attributes.
+        server_strategy_settings = self.get_attribute("_server_strategy_settings")
+        client_selection_settings = server_strategy_settings["client_selection"]
+        client_selection_for_training_settings = client_selection_settings["client_selection_for_training_settings"]
+        client_selector_for_training = client_selection_for_training_settings["client_selector_for_training"]
         server_strategy = self.get_attribute("_server_strategy")
         individual_evaluate_metrics_history = server_strategy.get_attribute("_individual_evaluate_metrics_history")
         output_settings = self.get_attribute("_output_settings")
@@ -534,10 +558,14 @@ class FlowerServerLauncher:
                                       "client_id",
                                       ",".join(evaluate_metrics_names))
                 file.write(header_line)
+        # Order the individual_evaluate_metrics_history dictionary in ascending order of communication round.
+        sorted_comm_round_keys = sorted(list(individual_evaluate_metrics_history.keys()), key=lambda x: (len(x), x))
+        individual_evaluate_metrics_history = {comm_round_key: individual_evaluate_metrics_history[comm_round_key]
+                                               for comm_round_key in sorted_comm_round_keys}
         # Write the history data lines to the output file.
         with open(file=individual_evaluate_metrics_history_file, mode="a", encoding="utf-8") as file:
             for comm_round_key, comm_round_values in individual_evaluate_metrics_history.items():
-                client_selector = comm_round_values["client_selector"]
+                client_selector = "{0} ({1})".format(comm_round_values["client_selector"], client_selector_for_training)
                 num_tasks = comm_round_values["num_tasks"]
                 num_available_clients = comm_round_values["num_available_clients"]
                 clients_metrics_dicts = comm_round_values["clients_metrics_dicts"]
@@ -562,6 +590,10 @@ class FlowerServerLauncher:
 
     def _generate_aggregated_evaluate_metrics_history_output_file(self) -> None:
         # Get the necessary attributes.
+        server_strategy_settings = self.get_attribute("_server_strategy_settings")
+        client_selection_settings = server_strategy_settings["client_selection"]
+        client_selection_for_training_settings = client_selection_settings["client_selection_for_training_settings"]
+        client_selector_for_training = client_selection_for_training_settings["client_selector_for_training"]
         server_strategy = self.get_attribute("_server_strategy")
         aggregated_evaluate_metrics_history = server_strategy.get_attribute("_aggregated_evaluate_metrics_history")
         output_settings = self.get_attribute("_output_settings")
@@ -590,10 +622,14 @@ class FlowerServerLauncher:
                                       "num_available_clients",
                                       ",".join(evaluate_metrics_names))
                 file.write(header_line)
+        # Order the aggregated_evaluate_metrics_history dictionary in ascending order of communication round.
+        sorted_comm_round_keys = sorted(list(aggregated_evaluate_metrics_history.keys()), key=lambda x: (len(x), x))
+        aggregated_evaluate_metrics_history = {comm_round_key: aggregated_evaluate_metrics_history[comm_round_key]
+                                               for comm_round_key in sorted_comm_round_keys}
         # Write the history data lines to the output file.
         with open(file=aggregated_evaluate_metrics_history_file, mode="a", encoding="utf-8") as file:
             for comm_round, comm_round_values in aggregated_evaluate_metrics_history.items():
-                client_selector = comm_round_values["client_selector"]
+                client_selector = "{0} ({1})".format(comm_round_values["client_selector"], client_selector_for_training)
                 metrics_aggregator = comm_round_values["metrics_aggregator"]
                 num_tasks = comm_round_values["num_tasks"]
                 num_available_clients = comm_round_values["num_available_clients"]
@@ -640,6 +676,10 @@ class FlowerServerLauncher:
                                       "expected_accuracy",
                                       "actual_accuracy")
                 file.write(header_line)
+        # Order the fit_selection_performance_history dictionary in ascending order of communication round.
+        sorted_comm_round_keys = sorted(list(fit_selection_performance_history.keys()), key=lambda x: (len(x), x))
+        fit_selection_performance_history = {comm_round_key: fit_selection_performance_history[comm_round_key]
+                                             for comm_round_key in sorted_comm_round_keys}
         # Write the history data lines to the output file.
         with open(file=fit_selection_performance_history_file, mode="a", encoding="utf-8") as file:
             for comm_round_key, comm_round_values in fit_selection_performance_history.items():
@@ -665,6 +705,10 @@ class FlowerServerLauncher:
 
     def _generate_evaluate_selection_performance_history_output_file(self) -> None:
         # Get the necessary attributes.
+        server_strategy_settings = self.get_attribute("_server_strategy_settings")
+        client_selection_settings = server_strategy_settings["client_selection"]
+        client_selection_for_training_settings = client_selection_settings["client_selection_for_training_settings"]
+        client_selector_for_training = client_selection_for_training_settings["client_selector_for_training"]
         server_strategy = self.get_attribute("_server_strategy")
         evaluate_selection_performance_history \
             = server_strategy.get_attribute("_evaluate_selection_performance_history")
@@ -691,10 +735,14 @@ class FlowerServerLauncher:
                                       "expected_accuracy",
                                       "actual_accuracy")
                 file.write(header_line)
+        # Order the evaluate_selection_performance_history dictionary in ascending order of communication round.
+        sorted_comm_round_keys = sorted(list(evaluate_selection_performance_history.keys()), key=lambda x: (len(x), x))
+        evaluate_selection_performance_history = {comm_round_key: evaluate_selection_performance_history[comm_round_key]
+                                                  for comm_round_key in sorted_comm_round_keys}
         # Write the history data lines to the output file.
         with open(file=evaluate_selection_performance_history_file, mode="a", encoding="utf-8") as file:
             for comm_round_key, comm_round_values in evaluate_selection_performance_history.items():
-                client_selector = comm_round_values["client_selector"]
+                client_selector = "{0} ({1})".format(comm_round_values["client_selector"], client_selector_for_training)
                 num_tasks = comm_round_values["num_tasks"]
                 expected_makespan = comm_round_values["expected_makespan"]
                 actual_makespan = comm_round_values["actual_makespan"]
