@@ -221,9 +221,12 @@ def select_clients_using_mc2mkp_adapted(comm_round: int,
             client_proxy = client_map["client_proxy"]
             client_capacity = client_map["client_num_{0}ing_examples_available".format(phase)]
             client_num_tasks_scheduled = int(mc2mkp_schedule[sel_index])
+            i_index = list(assignment_capacities[sel_index]).index(client_num_tasks_scheduled)
+            client_expected_energy_consumption = energy_costs[sel_index][i_index]
             selected_clients.append({"client_proxy": client_proxy,
                                      "client_capacity": client_capacity,
-                                     "client_num_tasks_scheduled": client_num_tasks_scheduled})
+                                     "client_num_tasks_scheduled": client_num_tasks_scheduled,
+                                     "client_expected_energy_consumption": client_expected_energy_consumption})
         # If there are complementary clients to be used other than the ones selected by the (MC)²MKP algorithm...
         if complementary_clients_fraction != 0 and complementary_tasks_fraction != 0:
             # Initialize the list of complementary clients.

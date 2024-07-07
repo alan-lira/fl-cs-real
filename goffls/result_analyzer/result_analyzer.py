@@ -230,12 +230,14 @@ class ResultAnalyzer:
         selected_fit_clients_history_settings = self.get_attribute("_selected_fit_clients_history_settings")
         num_tasks = selected_fit_clients_history_settings["num_tasks"]
         num_available_clients = selected_fit_clients_history_settings["num_available_clients"]
+        comm_rounds = selected_fit_clients_history_settings["comm_rounds"]
         client_selectors = selected_fit_clients_history_settings["client_selectors"]
         metrics_names = selected_fit_clients_history_settings["metrics_names"]
         time_unit_to_output = selected_fit_clients_history_settings["time_unit_to_output"]
         plotting_settings = selected_fit_clients_history_settings["plotting_settings"]
         x_data = plotting_settings["x_data"]
         x_label = plotting_settings["x_label"]
+        x_ticks = plotting_settings["x_ticks"]
         y_data = plotting_settings["y_data"]
         y_label = plotting_settings["y_label"]
         y_ticks = plotting_settings["y_ticks"]
@@ -304,6 +306,21 @@ class ResultAnalyzer:
                                 plotting_data.append({"num_available_clients": n_available_clients,
                                                       "client_selector": client_selector,
                                                       "mean_num_selected_clients": mean_num_selected_clients})
+                        # If the current metric name equals to 'num_selected_clients'...
+                        elif metric_name == "num_selected_clients":
+                            if "num_selected_clients" in filtered_df.columns:
+                                # Iterate through the list of communication rounds.
+                                for index, _ in enumerate(comm_rounds):
+                                    # Get the current communication round.
+                                    comm_round = comm_rounds[index]
+                                    comm_round_str = "comm_round_{0}".format(comm_round)
+                                    # Get the number of selected clients for the current communication round.
+                                    comm_round_df = filtered_df.loc[filtered_df['comm_round'] == comm_round_str]
+                                    num_selected_clients_comm_round = comm_round_df["num_selected_clients"].values[0]
+                                    # Append the number of selected clients per round to the plotting data.
+                                    plotting_data.append({"comm_round": comm_round,
+                                                          "client_selector": client_selector,
+                                                          "num_selected_clients": num_selected_clients_comm_round})
                 # If there is data to plot...
                 if plotting_data:
                     # If the current metric name equals to 'total_selection_duration'...
@@ -390,14 +407,45 @@ class ResultAnalyzer:
                         if y_lim == "Auto":
                             y_lim_new = None
                             plotting_settings["y_lim"] = y_lim_new
+                    # If the current metric name equals to 'num_selected_clients'...
+                    elif metric_name == "num_selected_clients":
+                        # Set the 'y_data' value, if equals to 'Auto'.
+                        if y_data == "Auto":
+                            y_data_new = "num_selected_clients"
+                            plotting_settings["y_data"] = y_data_new
+                        # Set the 'y_scale' value, if equals to 'Auto'.
+                        if y_scale == "Auto":
+                            y_scale_new = None
+                            plotting_settings["y_scale"] = y_scale_new
+                        # Set the 'y_label' value, if equals to 'Auto'.
+                        if y_label == "Auto":
+                            y_label_new = "{0}".format("Number of selected clients")
+                            plotting_settings["y_label"] = y_label_new
+                        # Set the 'y_ticks' value, if equals to 'Auto'.
+                        if y_ticks == "Auto":
+                            y_ticks_new = None
+                            plotting_settings["y_ticks"] = y_ticks_new
+                        # Set the 'y_lim' value, if equals to 'Auto'.
+                        if y_lim == "Auto":
+                            y_lim_new = None
+                            plotting_settings["y_lim"] = y_lim_new
                     # Set the 'x_data' value, if equals to 'Auto'.
                     if x_data == "Auto":
                         x_data_new = "num_available_clients"
+                        if metric_name == "num_selected_clients":
+                            x_data_new = "comm_round"
                         plotting_settings["x_data"] = x_data_new
                     # Set the 'x_label' value, if equals to 'Auto'.
                     if x_label == "Auto":
                         x_label_new = "Number of available clients"
+                        if metric_name == "num_selected_clients":
+                            x_label_new = "Communication round"
                         plotting_settings["x_label"] = x_label_new
+                    # Set the 'x_ticks' value, if equals to 'Auto'.
+                    if x_ticks == "Auto":
+                        plotting_settings["x_ticks"] = num_available_clients
+                        if metric_name == "num_selected_clients":
+                            plotting_settings["x_ticks"] = list(range(0, max(comm_rounds) + 1, 10))
                     # Set the 'hue' value, if equals to 'Auto'.
                     if hue == "Auto":
                         hue_new = "client_selector"
@@ -443,6 +491,7 @@ class ResultAnalyzer:
         results_df_settings = selected_fit_clients_history_settings["results_df_settings"]
         num_tasks = selected_fit_clients_history_settings["num_tasks"]
         num_available_clients = selected_fit_clients_history_settings["num_available_clients"]
+        comm_rounds = selected_fit_clients_history_settings["comm_rounds"]
         client_selectors = selected_fit_clients_history_settings["client_selectors"]
         plotting_settings = selected_fit_clients_history_settings["plotting_settings"]
         logger = self.get_attribute("_logger")
@@ -473,7 +522,8 @@ class ResultAnalyzer:
 
         # TODO: Fix Parser for dict and tuple values for dictionary keys.
         plotting_settings["figure_size"] = (6, 5)
-        plotting_settings["line_colors"] = ["#00FFFF", "#FFA500", "#E0115F", "#0000FF", "#7FFFD4", "#228B22"]
+        plotting_settings["line_colors"] = ["#00FFFF", "#FFA500", "#FF4F4F", "#0000FF",
+                                            "#7FFFD4", "#228B22", "#635F4C", "#A82378"]
         plotting_settings["line_sizes"] = [2, 2, 2, 2, 2, 2]
 
         # Set the 'num_tasks' value, if equals to 'Auto'.
@@ -484,6 +534,11 @@ class ResultAnalyzer:
         if num_available_clients == "Auto":
             num_available_clients = list(results_df["num_available_clients"].sort_values().unique())
             selected_fit_clients_history_settings["num_available_clients"] = num_available_clients
+        # Set the 'comm_rounds' value, if equals to 'Auto'.
+        if comm_rounds == "Auto":
+            comm_rounds = sorted([int(comm_round.replace("comm_round_", ""))
+                                  for comm_round in list(results_df["comm_round"].sort_values().unique())])
+            selected_fit_clients_history_settings["comm_rounds"] = comm_rounds
         # Set the 'client_selectors' value, if equals to 'Auto'.
         if client_selectors == "Auto":
             client_selectors = list(results_df["client_selector"].sort_values().unique())
@@ -491,9 +546,6 @@ class ResultAnalyzer:
         # Set the 'n_colors' value, if equals to 'Auto'.
         if plotting_settings["n_colors"] == "Auto":
             plotting_settings["n_colors"] = len(client_selectors)
-        # Set the 'x_ticks' value, if equals to 'Auto'.
-        if plotting_settings["x_ticks"] == "Auto":
-            plotting_settings["x_ticks"] = num_available_clients
         # Update the plotting settings.
         selected_fit_clients_history_settings["plotting_settings"] = plotting_settings
         self._set_attribute("_selected_fit_clients_history_settings", selected_fit_clients_history_settings)
@@ -509,12 +561,14 @@ class ResultAnalyzer:
         selected_evaluate_clients_history_settings = self.get_attribute("_selected_evaluate_clients_history_settings")
         num_tasks = selected_evaluate_clients_history_settings["num_tasks"]
         num_available_clients = selected_evaluate_clients_history_settings["num_available_clients"]
+        comm_rounds = selected_evaluate_clients_history_settings["comm_rounds"]
         client_selectors = selected_evaluate_clients_history_settings["client_selectors"]
         metrics_names = selected_evaluate_clients_history_settings["metrics_names"]
         time_unit_to_output = selected_evaluate_clients_history_settings["time_unit_to_output"]
         plotting_settings = selected_evaluate_clients_history_settings["plotting_settings"]
         x_data = plotting_settings["x_data"]
         x_label = plotting_settings["x_label"]
+        x_ticks = plotting_settings["x_ticks"]
         y_data = plotting_settings["y_data"]
         y_label = plotting_settings["y_label"]
         y_ticks = plotting_settings["y_ticks"]
@@ -583,6 +637,21 @@ class ResultAnalyzer:
                                 plotting_data.append({"num_available_clients": n_available_clients,
                                                       "client_selector": client_selector,
                                                       "mean_num_selected_clients": mean_num_selected_clients})
+                        # If the current metric name equals to 'num_selected_clients'...
+                        elif metric_name == "num_selected_clients":
+                            if "num_selected_clients" in filtered_df.columns:
+                                # Iterate through the list of communication rounds.
+                                for index, _ in enumerate(comm_rounds):
+                                    # Get the current communication round.
+                                    comm_round = comm_rounds[index]
+                                    comm_round_str = "comm_round_{0}".format(comm_round)
+                                    # Get the number of selected clients for the current communication round.
+                                    comm_round_df = filtered_df.loc[filtered_df['comm_round'] == comm_round_str]
+                                    num_selected_clients_comm_round = comm_round_df["num_selected_clients"].values[0]
+                                    # Append the number of selected clients per round to the plotting data.
+                                    plotting_data.append({"comm_round": comm_round,
+                                                          "client_selector": client_selector,
+                                                          "num_selected_clients": num_selected_clients_comm_round})
                 # If there is data to plot...
                 if plotting_data:
                     # If the current metric name equals to 'total_selection_duration'...
@@ -669,14 +738,45 @@ class ResultAnalyzer:
                         if y_lim == "Auto":
                             y_lim_new = None
                             plotting_settings["y_lim"] = y_lim_new
+                    # If the current metric name equals to 'num_selected_clients'...
+                    elif metric_name == "num_selected_clients":
+                        # Set the 'y_data' value, if equals to 'Auto'.
+                        if y_data == "Auto":
+                            y_data_new = "num_selected_clients"
+                            plotting_settings["y_data"] = y_data_new
+                        # Set the 'y_scale' value, if equals to 'Auto'.
+                        if y_scale == "Auto":
+                            y_scale_new = None
+                            plotting_settings["y_scale"] = y_scale_new
+                        # Set the 'y_label' value, if equals to 'Auto'.
+                        if y_label == "Auto":
+                            y_label_new = "{0}".format("Number of selected clients")
+                            plotting_settings["y_label"] = y_label_new
+                        # Set the 'y_ticks' value, if equals to 'Auto'.
+                        if y_ticks == "Auto":
+                            y_ticks_new = None
+                            plotting_settings["y_ticks"] = y_ticks_new
+                        # Set the 'y_lim' value, if equals to 'Auto'.
+                        if y_lim == "Auto":
+                            y_lim_new = None
+                            plotting_settings["y_lim"] = y_lim_new
                     # Set the 'x_data' value, if equals to 'Auto'.
                     if x_data == "Auto":
                         x_data_new = "num_available_clients"
+                        if metric_name == "num_selected_clients":
+                            x_data_new = "comm_round"
                         plotting_settings["x_data"] = x_data_new
                     # Set the 'x_label' value, if equals to 'Auto'.
                     if x_label == "Auto":
                         x_label_new = "Number of available clients"
+                        if metric_name == "num_selected_clients":
+                            x_label_new = "Communication round"
                         plotting_settings["x_label"] = x_label_new
+                    # Set the 'x_ticks' value, if equals to 'Auto'.
+                    if x_ticks == "Auto":
+                        plotting_settings["x_ticks"] = num_available_clients
+                        if metric_name == "num_selected_clients":
+                            plotting_settings["x_ticks"] = list(range(0, max(comm_rounds) + 1, 10))
                     # Set the 'hue' value, if equals to 'Auto'.
                     if hue == "Auto":
                         hue_new = "client_selector"
@@ -724,6 +824,7 @@ class ResultAnalyzer:
         results_df_settings = selected_evaluate_clients_history_settings["results_df_settings"]
         num_tasks = selected_evaluate_clients_history_settings["num_tasks"]
         num_available_clients = selected_evaluate_clients_history_settings["num_available_clients"]
+        comm_rounds = selected_evaluate_clients_history_settings["comm_rounds"]
         client_selectors = selected_evaluate_clients_history_settings["client_selectors"]
         plotting_settings = selected_evaluate_clients_history_settings["plotting_settings"]
         logger = self.get_attribute("_logger")
@@ -754,7 +855,8 @@ class ResultAnalyzer:
 
         # TODO: Fix Parser for dict and tuple values for dictionary keys.
         plotting_settings["figure_size"] = (6, 5)
-        plotting_settings["line_colors"] = ["#00FFFF", "#FFA500", "#E0115F", "#0000FF", "#7FFFD4", "#228B22"]
+        plotting_settings["line_colors"] = ["#00FFFF", "#FFA500", "#FF4F4F", "#0000FF",
+                                            "#7FFFD4", "#228B22", "#635F4C", "#A82378"]
         plotting_settings["line_sizes"] = [2, 2, 2, 2, 2, 2]
 
         # Set the 'num_tasks' value, if equals to 'Auto'.
@@ -765,6 +867,11 @@ class ResultAnalyzer:
         if num_available_clients == "Auto":
             num_available_clients = list(results_df["num_available_clients"].sort_values().unique())
             selected_evaluate_clients_history_settings["num_available_clients"] = num_available_clients
+        # Set the 'comm_rounds' value, if equals to 'Auto'.
+        if comm_rounds == "Auto":
+            comm_rounds = sorted([int(comm_round.replace("comm_round_", ""))
+                                  for comm_round in list(results_df["comm_round"].sort_values().unique())])
+            selected_evaluate_clients_history_settings["comm_rounds"] = comm_rounds
         # Set the 'client_selectors' value, if equals to 'Auto'.
         if client_selectors == "Auto":
             client_selectors = list(results_df["client_selector"].sort_values().unique())
@@ -772,9 +879,6 @@ class ResultAnalyzer:
         # Set the 'n_colors' value, if equals to 'Auto'.
         if plotting_settings["n_colors"] == "Auto":
             plotting_settings["n_colors"] = len(client_selectors)
-        # Set the 'x_ticks' value, if equals to 'Auto'.
-        if plotting_settings["x_ticks"] == "Auto":
-            plotting_settings["x_ticks"] = num_available_clients
         # Update the plotting settings.
         selected_evaluate_clients_history_settings["plotting_settings"] = plotting_settings
         self._set_attribute("_selected_evaluate_clients_history_settings", selected_evaluate_clients_history_settings)
@@ -1034,7 +1138,8 @@ class ResultAnalyzer:
 
         # TODO: Fix Parser for dict and tuple values for dictionary keys.
         plotting_settings["figure_size"] = (6, 5)
-        plotting_settings["line_colors"] = ["#00FFFF", "#FFA500", "#E0115F", "#0000FF", "#7FFFD4", "#228B22"]
+        plotting_settings["line_colors"] = ["#00FFFF", "#FFA500", "#FF4F4F", "#0000FF",
+                                            "#7FFFD4", "#228B22", "#635F4C", "#A82378"]
         plotting_settings["line_sizes"] = [2, 2, 2, 2, 2, 2]
 
         # Set the 'num_tasks' value, if equals to 'Auto'.
@@ -1322,7 +1427,8 @@ class ResultAnalyzer:
 
         # TODO: Fix Parser for dict and tuple values for dictionary keys.
         plotting_settings["figure_size"] = (6, 5)
-        plotting_settings["line_colors"] = ["#00FFFF", "#FFA500", "#E0115F", "#0000FF", "#7FFFD4", "#228B22"]
+        plotting_settings["line_colors"] = ["#00FFFF", "#FFA500", "#FF4F4F", "#0000FF",
+                                            "#7FFFD4", "#228B22", "#635F4C", "#A82378"]
         plotting_settings["line_sizes"] = [2, 2, 2, 2, 2, 2]
 
         # Set the 'num_tasks' value, if equals to 'Auto'.
