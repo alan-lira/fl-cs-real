@@ -174,9 +174,12 @@ def select_clients_using_olar_adapted(comm_round: int,
             client_proxy = client_map["client_proxy"]
             client_capacity = client_map["client_num_{0}ing_examples_available".format(phase)]
             client_num_tasks_scheduled = int(olar_schedule[sel_index])
+            i_index = list(assignment_capacities[sel_index]).index(client_num_tasks_scheduled)
+            client_expected_duration = time_costs[sel_index][i_index]
             selected_clients.append({"client_proxy": client_proxy,
                                      "client_capacity": client_capacity,
-                                     "client_num_tasks_scheduled": client_num_tasks_scheduled})
+                                     "client_num_tasks_scheduled": client_num_tasks_scheduled,
+                                     "client_expected_duration": client_expected_duration})
         # Update the selection dictionary with the selected clients for the schedule.
         selection.update({"selected_clients": selected_clients})
     # Log a 'number of clients selected' message.

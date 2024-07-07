@@ -148,17 +148,32 @@ class FlowerGOFFLSServer(Strategy):
             available_clients_proxies = [client_values["client_proxy"]
                                          for client_values in list(available_clients_map.values())]
             selected_clients_ids = []
-            for client in selected_clients:
-                client_proxy = client["client_proxy"]
+            expected_durations = [None for _ in selected_clients]
+            expected_energy_consumptions = [None for _ in selected_clients]
+            expected_accuracies = [None for _ in selected_clients]
+            for index, _ in enumerate(selected_clients):
+                client_proxy = selected_clients[index]["client_proxy"]
                 client_index = available_clients_proxies.index(client_proxy)
                 client_id_str = available_clients_ids[client_index]
+                if "client_expected_duration" in selected_clients[index]:
+                    client_expected_duration = selected_clients[index]["client_expected_duration"]
+                    expected_durations[index] = client_expected_duration
+                if "client_expected_energy_consumption" in selected_clients[index]:
+                    client_expected_energy_consumption = selected_clients[index]["client_expected_energy_consumption"]
+                    expected_energy_consumptions[index] = client_expected_energy_consumption
+                if "client_expected_accuracy" in selected_clients[index]:
+                    client_expected_accuracy = selected_clients[index]["client_expected_accuracy"]
+                    expected_accuracies[index] = client_expected_accuracy
                 selected_clients_ids.append(client_id_str)
             comm_round_values = {"client_selector": client_selector,
                                  "selection_duration": selection_duration,
                                  "num_tasks": num_tasks_to_schedule,
                                  "num_available_clients": num_available_clients,
                                  "num_selected_clients": num_selected_clients,
-                                 "selected_clients": selected_clients_ids}
+                                 "selected_clients": selected_clients_ids,
+                                 "expected_durations": expected_durations,
+                                 "expected_energy_consumptions": expected_energy_consumptions,
+                                 "expected_accuracies": expected_accuracies}
             comm_round_selected_clients = {comm_round_key: comm_round_values}
             selected_clients_history.update(comm_round_selected_clients)
             self._set_attribute(selected_clients_history_attribute, selected_clients_history)
