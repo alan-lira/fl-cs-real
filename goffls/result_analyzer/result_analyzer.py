@@ -133,12 +133,14 @@ class ResultAnalyzer:
         x_label = plotting_settings["x_label"]
         x_font_size = plotting_settings["x_font_size"]
         x_ticks = plotting_settings["x_ticks"]
+        x_ticks_label_size = plotting_settings["x_ticks_label_size"]
         x_rotation = plotting_settings["x_rotation"]
         x_lim = plotting_settings["x_lim"]
         x_scale = plotting_settings["x_scale"]
         y_label = plotting_settings["y_label"]
         y_font_size = plotting_settings["y_font_size"]
         y_ticks = plotting_settings["y_ticks"]
+        y_ticks_label_size = plotting_settings["y_ticks_label_size"]
         y_rotation = plotting_settings["y_rotation"]
         y_lim = plotting_settings["y_lim"]
         y_scale = plotting_settings["y_scale"]
@@ -148,7 +150,8 @@ class ResultAnalyzer:
                facecolor=figure_face_color,
                edgecolor=figure_edge_color,
                frameon=figure_frame_on,
-               layout=figure_layout)
+               layout=figure_layout,
+               clear=True)
         # Set the title settings.
         title(label=title_label,
               fontsize=title_font_size)
@@ -160,6 +163,7 @@ class ResultAnalyzer:
         if x_ticks is not None:
             xticks(ticks=x_ticks,
                    rotation=x_rotation)
+        rcParams["xtick.labelsize"] = x_ticks_label_size
         if x_lim is not None:
             xlim(x_lim)
         if x_scale is not None:
@@ -170,6 +174,7 @@ class ResultAnalyzer:
         if y_ticks is not None:
             yticks(ticks=y_ticks,
                    rotation=y_rotation)
+        rcParams["ytick.labelsize"] = y_ticks_label_size
         if y_lim is not None:
             ylim(y_lim)
         if y_scale is not None:
@@ -990,6 +995,18 @@ class ResultAnalyzer:
                                                           "client_selector": client_selector,
                                                           "weighted_mean_sparse_categorical_accuracy":
                                                           weighted_mean_sparse_categorical_accuracy})
+                            # If the current metric name equals to 'max_communication_time'...
+                            elif metric_name == "max_communication_time":
+                                if "communication_time" in filtered_df.columns:
+                                    # Get the maximum communication time among the participating clients.
+                                    max_communication_time = filtered_df["communication_time"].max()
+                                    # Convert the maximum communication time, if needed to.
+                                    max_communication_time, time_unit_symbol \
+                                        = self._convert_time(max_communication_time, time_unit_to_output)
+                                    # Append the maximum communication time to the plotting data.
+                                    plotting_data.append({"comm_round": comm_round,
+                                                          "client_selector": client_selector,
+                                                          "max_communication_time": max_communication_time})
                     # If there is data to plot...
                     if plotting_data:
                         # If the current metric name equals to 'max_training_elapsed_time'...
@@ -1051,6 +1068,18 @@ class ResultAnalyzer:
                                 y_scale_new = None
                                 plotting_settings["y_scale"] = y_scale_new
                                 y_label_new = "{0}".format("Weighted mean accuracy")
+                                plotting_settings["y_label"] = y_label_new
+                        # If the current metric name equals to 'max_communication_time'...
+                        elif metric_name == "max_communication_time":
+                            # Set the 'y_data' value, if equals to 'Auto'.
+                            if y_data == "Auto":
+                                y_data_new = "max_communication_time"
+                                plotting_settings["y_data"] = y_data_new
+                            # Set the 'y_label' value, if equals to 'Auto'.
+                            if y_label == "Auto":
+                                y_scale_new = None
+                                plotting_settings["y_scale"] = y_scale_new
+                                y_label_new = "{0} ({1})".format("Max. Communication Time", time_unit_symbol)
                                 plotting_settings["y_label"] = y_label_new
                         # Set the 'x_data' value, if equals to 'Auto'.
                         if x_data == "Auto":
@@ -1277,6 +1306,18 @@ class ResultAnalyzer:
                                                           "client_selector": client_selector,
                                                           "weighted_mean_sparse_categorical_accuracy":
                                                           weighted_mean_sparse_categorical_accuracy})
+                            # If the current metric name equals to 'max_communication_time'...
+                            elif metric_name == "max_communication_time":
+                                if "communication_time" in filtered_df.columns:
+                                    # Get the maximum communication time among the participating clients.
+                                    max_communication_time = filtered_df["communication_time"].max()
+                                    # Convert the maximum communication time, if needed to.
+                                    max_communication_time, time_unit_symbol \
+                                        = self._convert_time(max_communication_time, time_unit_to_output)
+                                    # Append the maximum communication time to the plotting data.
+                                    plotting_data.append({"comm_round": comm_round,
+                                                          "client_selector": client_selector,
+                                                          "max_communication_time": max_communication_time})
                     # If there is data to plot...
                     if plotting_data:
                         # If the current metric name equals to 'max_testing_elapsed_time'...
@@ -1338,6 +1379,18 @@ class ResultAnalyzer:
                                 y_scale_new = None
                                 plotting_settings["y_scale"] = y_scale_new
                                 y_label_new = "{0}".format("Weighted mean accuracy")
+                                plotting_settings["y_label"] = y_label_new
+                        # If the current metric name equals to 'max_communication_time'...
+                        elif metric_name == "max_communication_time":
+                            # Set the 'y_data' value, if equals to 'Auto'.
+                            if y_data == "Auto":
+                                y_data_new = "max_communication_time"
+                                plotting_settings["y_data"] = y_data_new
+                            # Set the 'y_label' value, if equals to 'Auto'.
+                            if y_label == "Auto":
+                                y_scale_new = None
+                                plotting_settings["y_scale"] = y_scale_new
+                                y_label_new = "{0} ({1})".format("Max. Communication Time", time_unit_symbol)
                                 plotting_settings["y_label"] = y_label_new
                         # Set the 'x_data' value, if equals to 'Auto'.
                         if x_data == "Auto":

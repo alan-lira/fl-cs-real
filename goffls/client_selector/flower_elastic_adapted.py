@@ -67,6 +67,7 @@ def select_clients_using_elastic_adapted(comm_round: int,
                                  for available_participating_client in selected_all_available_participating_clients]
         # Initialize the global lists that will be transformed to array.
         client_ids = []
+        client_assignment_capacities = []
         time_costs = []
         energy_costs = []
         # For each available client that has entries in the individual metrics history...
@@ -198,6 +199,7 @@ def select_clients_using_elastic_adapted(comm_round: int,
                     filtered_energy_costs_client.append(energy_costs_client[index])
             # Append his lists into the global lists.
             client_ids.append(client_key)
+            client_assignment_capacities.append(assignment_capacities_client)
             time_costs.append(filtered_time_costs_client)
             energy_costs.append(filtered_energy_costs_client)
         # Convert the global lists into Numpy arrays.
@@ -205,7 +207,7 @@ def select_clients_using_elastic_adapted(comm_round: int,
         time_costs = array(time_costs, dtype=object)
         energy_costs = array(energy_costs, dtype=object)
         # Execute the ELASTIC adapted algorithm.
-        _, elastic_schedule, elastic_selected_clients_indices, elastic_makespan, elastic_energy_consumption \
+        _, elastic_schedule, elastic_selected_clients_indices \
             = elastic_adapted(num_resources,
                               assignment_capacities,
                               time_costs,
@@ -213,6 +215,16 @@ def select_clients_using_elastic_adapted(comm_round: int,
                               deadline_in_seconds,
                               objectives_weights_parameter)
         # Update the selection dictionary with the expected metrics for the schedule.
+        elastic_makespan = 0
+        elastic_energy_consumption = 0
+        for sel_index, client_num_tasks_scheduled in enumerate(list(elastic_schedule)):
+            if client_num_tasks_scheduled > 0:
+                i_index = client_assignment_capacities[sel_index].index(client_num_tasks_scheduled)
+                time_cost_i = time_costs[sel_index][i_index]
+                if time_cost_i > elastic_makespan:
+                    elastic_makespan = time_cost_i
+                energy_cost_i = energy_costs[sel_index][i_index]
+                elastic_energy_consumption += energy_cost_i
         selection.update({"expected_makespan": elastic_makespan,
                           "expected_energy_consumption": elastic_energy_consumption})
         # Log the ELASTIC adapted algorithm's result.
@@ -226,7 +238,7 @@ def select_clients_using_elastic_adapted(comm_round: int,
             client_proxy = client_map["client_proxy"]
             client_capacity = client_map["client_num_{0}ing_examples_available".format(phase)]
             client_num_tasks_scheduled = int(elastic_schedule[sel_index])
-            i_index = list(assignment_capacities[sel_index]).index(client_num_tasks_scheduled)
+            i_index = client_assignment_capacities[sel_index].index(client_num_tasks_scheduled)
             client_expected_duration = time_costs[sel_index][i_index]
             client_expected_energy_consumption = energy_costs[sel_index][i_index]
             selected_clients.append({"client_proxy": client_proxy,

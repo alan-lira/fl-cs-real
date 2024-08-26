@@ -61,8 +61,6 @@ def elastic_adapted(I: int,
     # Organize the solution.
     tasks_assignment = []
     selected_clients = []
-    makespan = 0
-    energy_consumption = 0
     for index, _ in enumerate(x):
         tasks_assignment.append(0)
         if x[index] == 1:
@@ -71,10 +69,4 @@ def elastic_adapted(I: int,
             j_num_tasks_assigned = A[j]
             tasks_assignment[index] = j_num_tasks_assigned
             selected_clients.append(j)
-            Ai_index = list(A).index(j_num_tasks_assigned)
-            makespan_j = t[j][Ai_index]
-            if makespan_j > makespan:
-                makespan = makespan_j
-            energy_consumption_j = E[j][Ai_index]
-            energy_consumption += energy_consumption_j
-    return x, tasks_assignment, selected_clients, makespan, energy_consumption
+    return x, tasks_assignment, selected_clients

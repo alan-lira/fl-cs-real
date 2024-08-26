@@ -1,10 +1,20 @@
 from logging import FileHandler, Formatter, getLevelName, Logger, StreamHandler
 from pathlib import Path
-from typing import Optional
+from typing import Union
 
 
 def load_logger(logging_settings: dict,
-                logger_name: str) -> Optional[Logger]:
+                logger_name: str) -> Union[Logger, None]:
+    """
+    Loads a Logger instance.
+
+    Args:
+        logging_settings (dict): the logging settings to be used by the logger.
+        logger_name (str): the logger name.
+
+    Returns:
+        Union[Logger, None]: the Logger instance.
+    """
     logger = None
     enable_logging = logging_settings["enable_logging"]
     log_to_file = logging_settings["log_to_file"]
@@ -37,15 +47,27 @@ def load_logger(logging_settings: dict,
 def log_message(logger: Logger,
                 message: str,
                 message_level: str) -> None:
-    logger_level = getLevelName(logger.getEffectiveLevel())
-    if logger and logger_level != "NOTSET":
-        if message_level == "DEBUG":
-            logger.debug(msg=message)
-        elif message_level == "INFO":
-            logger.info(msg=message)
-        elif message_level == "WARNING":
-            logger.warning(msg=message)
-        elif message_level == "ERROR":
-            logger.error(msg=message)
-        elif message_level == "CRITICAL":
-            logger.critical(msg=message)
+    """
+    Logs a message using a Logger instance.
+
+    Args:
+        logger (Logger): the Logger instance.
+        message (str): the message to be logged.
+        message_level (str): the message level.
+
+    Returns:
+        None
+    """
+    if logger:
+        logger_level = getLevelName(logger.getEffectiveLevel())
+        if logger_level != "NOTSET":
+            if message_level == "DEBUG":
+                logger.debug(msg=message)
+            elif message_level == "INFO":
+                logger.info(msg=message)
+            elif message_level == "WARNING":
+                logger.warning(msg=message)
+            elif message_level == "ERROR":
+                logger.error(msg=message)
+            elif message_level == "CRITICAL":
+                logger.critical(msg=message)

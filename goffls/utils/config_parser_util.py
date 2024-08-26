@@ -1,41 +1,120 @@
 from configparser import ConfigParser
 from pathlib import Path
 from re import match, search, split
+from typing import Type
 
 
 def is_representation_of_none_type(value: str) -> bool:
+    """
+    Verifies if a string value represents a None type.
+
+    Args:
+        value (str): the string value to be verified.
+
+    Returns:
+        bool: whether the string value represents a None type or not.
+    """
     return not value or value == "None"
 
 
-def cast_to_none() -> any:
+def cast_to_none() -> Type[None]:
+    """
+    Casts to None type.
+
+    Returns:
+        Type[None]: the cast value.
+    """
     return None
 
 
 def is_representation_of_bool_type(value: str) -> bool:
+    """
+    Verifies if a string value represents a bool type.
+
+    Args:
+        value (str): the string value to be verified.
+
+    Returns:
+        bool: whether the string value represents a bool type or not.
+    """
     return value in ["True", "Yes", "False", "No"]
 
 
 def cast_to_bool(value: str) -> bool:
+    """
+    Casts to a bool type.
+
+    Args:
+        value (str): the string value under casting.
+
+    Returns:
+        bool: the cast value.
+    """
     return value in ["True", "Yes"]
 
 
 def is_representation_of_int_type(value: str) -> bool:
+    """
+    Verifies if a string value represents an int type.
+
+    Args:
+        value (str): the string value to be verified.
+
+    Returns:
+        bool: whether the string value represents an int type or not.
+    """
     return bool(match(r"^\d+$", value))
 
 
 def cast_to_int(value: str) -> int:
+    """
+    Casts to an int type.
+
+    Args:
+        value (str): the string value under casting.
+
+    Returns:
+        int: the cast value.
+    """
     return int(value)
 
 
 def is_representation_of_float_type(value: str) -> bool:
+    """
+    Verifies if a string value represents a float type.
+
+    Args:
+        value (str): the string value to be verified.
+
+    Returns:
+        bool: whether the string value represents a float type or not.
+    """
     return bool(match(r"^[-+]?[0-9]*\.?[0-9]+$", value))
 
 
 def cast_to_float(value: str) -> float:
+    """
+    Casts to a float type.
+
+    Args:
+        value (str): the string value under casting.
+
+    Returns:
+        float: the cast value.
+    """
     return float(value)
 
 
 def is_representation_of_tuple_type(value: str) -> bool:
+    """
+    Verifies if a string value represents a tuple type.
+
+    Args:
+        value (str): the string value to be verified.
+
+    Returns:
+        bool: whether the string value represents a bool type or not.
+    """
     return value[0] == "(" and value[-1] == ")"
 
 
@@ -43,6 +122,18 @@ def cast_to_tuple_recursively(tuple_element_str: str,
                               tuple_pattern: str,
                               left_delimiter: str,
                               right_delimiter: str) -> tuple:
+    """
+    Casts to a tuple type, recursively.
+
+    Args:
+        tuple_element_str (str): the string representation of a tuple element.
+        tuple_pattern (str): the tuple pattern to be used during the match searching.
+        left_delimiter (str): the string representation of the tuple left delimiter.
+        right_delimiter (str): the string representation of the tuple right delimiter.
+
+    Returns:
+        tuple: the cast value.
+    """
     casted_tuple = ()
     left_delimiter_counter = tuple_element_str.count(left_delimiter)
     right_delimiter_counter = tuple_element_str.count(right_delimiter)
@@ -76,27 +167,48 @@ def cast_to_tuple_recursively(tuple_element_str: str,
 
 
 def cast_to_tuple(value: str) -> tuple:
-    tuple_pattern = r"\((\(*.+?\)*)\)$"
-    left_delimiter = "("
-    right_delimiter = ")"
-    tuple_element_pattern = r"([\{\[\(a-zA-Z0-9:._\-@\\/\)\]\}\s]*),*\s*"
-    tuple_elements_str = [tuple_elem.strip() for tuple_elem in split(tuple_element_pattern, value[1:-1]) if tuple_elem]
-    for index, _ in enumerate(tuple_elements_str):
-        while tuple_elements_str[index].count(left_delimiter) != tuple_elements_str[index].count(right_delimiter):
-            tuple_elements_str[index] = tuple_elements_str[index] + ", " + tuple_elements_str[index+1]
-            del tuple_elements_str[index+1]
+    """
+    Casts to a tuple type.
+
+    Args:
+        value (str): the string value under casting.
+
+    Returns:
+        tuple: the cast value.
+    """
     resulting_tuple = ()
-    for tuple_element in tuple_elements_str:
-        tuple_element = left_delimiter + tuple_element + right_delimiter
-        casted_tuple_element = cast_to_tuple_recursively(tuple_element,
-                                                         tuple_pattern,
-                                                         left_delimiter,
-                                                         right_delimiter)
-        resulting_tuple = resulting_tuple + (casted_tuple_element,)
+    if value:
+        tuple_pattern = r"\((\(*.+?\)*)\)$"
+        left_delimiter = "("
+        right_delimiter = ")"
+        tuple_element_pattern = r"([\{\[\(a-zA-Z0-9:._\-@\\/\)\]\}\s]*),*\s*"
+        if value[0] == left_delimiter and value[-1] == right_delimiter:
+            value = value[1:-1]
+        tuple_elements_str = [tuple_elem.strip() for tuple_elem in split(tuple_element_pattern, value) if tuple_elem]
+        for index, _ in enumerate(tuple_elements_str):
+            while tuple_elements_str[index].count(left_delimiter) != tuple_elements_str[index].count(right_delimiter):
+                tuple_elements_str[index] = tuple_elements_str[index] + ", " + tuple_elements_str[index+1]
+                del tuple_elements_str[index+1]
+        for tuple_element in tuple_elements_str:
+            tuple_element = left_delimiter + tuple_element + right_delimiter
+            casted_tuple_element = cast_to_tuple_recursively(tuple_element,
+                                                             tuple_pattern,
+                                                             left_delimiter,
+                                                             right_delimiter)
+            resulting_tuple = resulting_tuple + (casted_tuple_element,)
     return resulting_tuple
 
 
 def is_representation_of_list_type(value: str) -> bool:
+    """
+    Verifies if a string value represents a list type.
+
+    Args:
+        value (str): the string value to be verified.
+
+    Returns:
+        bool: whether the string value represents a list type or not.
+    """
     return value[0] == "[" and value[-1] == "]"
 
 
@@ -104,6 +216,18 @@ def cast_to_list_recursively(list_element_str: str,
                              list_pattern: str,
                              left_delimiter: str,
                              right_delimiter: str) -> list:
+    """
+    Casts to a list type, recursively.
+
+    Args:
+        list_element_str (str): the string representation of a list element.
+        list_pattern (str): the list pattern to be used during the match searching.
+        left_delimiter (str): the string representation of the list left delimiter.
+        right_delimiter (str): the string representation of the list right delimiter.
+
+    Returns:
+        list: the cast value.
+    """
     casted_list = []
     left_delimiter_counter = list_element_str.count(left_delimiter)
     right_delimiter_counter = list_element_str.count(right_delimiter)
@@ -137,27 +261,48 @@ def cast_to_list_recursively(list_element_str: str,
 
 
 def cast_to_list(value: str) -> list:
-    list_pattern = r"\[(\[*.+?\]*)\]$"
-    left_delimiter = "["
-    right_delimiter = "]"
-    list_element_pattern = r"([\{\[\(a-zA-Z0-9:._\-@\\/\)\]\}\s]*),*\s*"
-    list_elements_str = [list_elem.strip() for list_elem in split(list_element_pattern, value[1:-1]) if list_elem]
-    for index, _ in enumerate(list_elements_str):
-        while list_elements_str[index].count(left_delimiter) != list_elements_str[index].count(right_delimiter):
-            list_elements_str[index] = list_elements_str[index] + ", " + list_elements_str[index+1]
-            del list_elements_str[index+1]
+    """
+    Casts to a list type.
+
+    Args:
+        value (str): the string value under casting.
+
+    Returns:
+        list: the cast value.
+    """
     resulting_list = []
-    for list_element_str in list_elements_str:
-        list_element_str = left_delimiter + list_element_str + right_delimiter
-        casted_list_element = cast_to_list_recursively(list_element_str,
-                                                       list_pattern,
-                                                       left_delimiter,
-                                                       right_delimiter)
-        resulting_list.append(casted_list_element)
+    if value:
+        list_pattern = r"\[(\[*.+?\]*)\]$"
+        left_delimiter = "["
+        right_delimiter = "]"
+        list_element_pattern = r"([\{\[\(a-zA-Z0-9:._\-@\\/\)\]\}\s]*),*\s*"
+        if value[0] == left_delimiter and value[-1] == right_delimiter:
+            value = value[1:-1]
+        list_elements_str = [list_elem.strip() for list_elem in split(list_element_pattern, value) if list_elem]
+        for index, _ in enumerate(list_elements_str):
+            while list_elements_str[index].count(left_delimiter) != list_elements_str[index].count(right_delimiter):
+                list_elements_str[index] = list_elements_str[index] + ", " + list_elements_str[index+1]
+                del list_elements_str[index+1]
+        for list_element_str in list_elements_str:
+            list_element_str = left_delimiter + list_element_str + right_delimiter
+            casted_list_element = cast_to_list_recursively(list_element_str,
+                                                           list_pattern,
+                                                           left_delimiter,
+                                                           right_delimiter)
+            resulting_list.append(casted_list_element)
     return resulting_list
 
 
 def is_representation_of_dict_type(value: str) -> bool:
+    """
+    Verifies if a string value represents a dict type.
+
+    Args:
+        value (str): the string value to be verified.
+
+    Returns:
+        bool: whether the string value represents a dict type or not.
+    """
     return value[0] == "{" and value[-1] == "}"
 
 
@@ -165,6 +310,18 @@ def cast_to_dict_recursively(dict_element_str: str,
                              dict_pattern: str,
                              left_delimiter: str,
                              right_delimiter: str) -> dict:
+    """
+    Casts to dict type, recursively.
+
+    Args:
+        dict_element_str (str): the string representation of a dict element.
+        dict_pattern (str): the dict pattern to be used during the match searching.
+        left_delimiter (str): the string representation of the dict left delimiter.
+        right_delimiter (str): the string representation of the dict right delimiter.
+
+    Returns:
+        dict: the cast value.
+    """
     casted_dict = {}
     left_delimiter_counter = dict_element_str.count(left_delimiter)
     right_delimiter_counter = dict_element_str.count(right_delimiter)
@@ -200,35 +357,57 @@ def cast_to_dict_recursively(dict_element_str: str,
 
 
 def cast_to_dict(value: str) -> dict:
-    dict_pattern = r"\{(.+?)\s*:\s*(\{*.+?\}*)\}$"
-    left_delimiter = "{"
-    right_delimiter = "}"
-    dict_element_pattern = r"([\{a-zA-Z0-9._\-@\\/\}:\s]*\s*:\s*[\{\[\(a-zA-Z0-9:._\-@\\/\)\]\}\s]*)"
-    dict_elements_str = [dict_elem.strip() for dict_elem in split(dict_element_pattern, value[1:-1]) if dict_elem]
-    for index, _ in enumerate(dict_elements_str):
-        while dict_elements_str[index].count(left_delimiter) != dict_elements_str[index].count(right_delimiter):
-            dict_elements_str[index] = dict_elements_str[index] + " " + dict_elements_str[index+1]
-            del dict_elements_str[index+1]
+    """
+    Casts to dict type.
+
+    Args:
+        value (str): the string value under casting.
+
+    Returns:
+        dict: the cast value.
+    """
     resulting_dict = {}
-    for dict_element_str in dict_elements_str:
-        dict_element_str = left_delimiter + dict_element_str + right_delimiter
-        casted_dict_element = cast_to_dict_recursively(dict_element_str,
-                                                       dict_pattern,
-                                                       left_delimiter,
-                                                       right_delimiter)
-        for casted_dict_key, casted_dict_value in casted_dict_element.items():
-            if casted_dict_key in resulting_dict:
-                if isinstance(resulting_dict[casted_dict_key], dict):
-                    resulting_dict[casted_dict_key].update(casted_dict_value)
-                elif isinstance(resulting_dict[casted_dict_key], list):
-                    resulting_dict[casted_dict_key].append(casted_dict_value)
-            else:
-                resulting_dict.update(casted_dict_element)
+    if value:
+        dict_pattern = r"\{(.+?)\s*:\s*(\{*.+?\}*)\}$"
+        left_delimiter = "{"
+        right_delimiter = "}"
+        dict_element_pattern = r"([\{a-zA-Z0-9._\-@\\/\}:\s]*\s*:\s*[\{\[\(a-zA-Z0-9:._\-@\\/\)\]\}\s]*)"
+        if value[0] == left_delimiter and value[-1] == right_delimiter:
+            value = value[1:-1]
+        dict_elements_str = [dict_elem.strip() for dict_elem in split(dict_element_pattern, value) if dict_elem]
+        for index, _ in enumerate(dict_elements_str):
+            while dict_elements_str[index].count(left_delimiter) != dict_elements_str[index].count(right_delimiter):
+                dict_elements_str[index] = dict_elements_str[index] + " " + dict_elements_str[index+1]
+                del dict_elements_str[index+1]
+        for dict_element_str in dict_elements_str:
+            dict_element_str = left_delimiter + dict_element_str + right_delimiter
+            casted_dict_element = cast_to_dict_recursively(dict_element_str,
+                                                           dict_pattern,
+                                                           left_delimiter,
+                                                           right_delimiter)
+            for casted_dict_key, casted_dict_value in casted_dict_element.items():
+                if casted_dict_key in resulting_dict:
+                    if isinstance(resulting_dict[casted_dict_key], dict):
+                        resulting_dict[casted_dict_key].update(casted_dict_value)
+                    elif isinstance(resulting_dict[casted_dict_key], list):
+                        resulting_dict[casted_dict_key].append(casted_dict_value)
+                else:
+                    resulting_dict.update(casted_dict_element)
     return resulting_dict
 
 
 def parse_config_section(config_file: Path,
                          section_name: str) -> dict:
+    """
+    Parses a config file's section.
+
+    Args:
+        config_file (Path): the config file.
+        section_name (str): the section name to be parsed.
+
+    Returns:
+        dict: the parsed section.
+    """
     cp = ConfigParser()
     cp.optionxform = str
     cp.read(filenames=config_file, encoding="utf-8")
@@ -258,6 +437,17 @@ def parse_config_section(config_file: Path,
 def get_option_value(config_file: Path,
                      section_name: str,
                      option_name: str) -> str:
+    """
+    Gets the value of an option that belongs to a config file's section.
+
+    Args:
+        config_file (Path): the config file.
+        section_name (str): the section name.
+        option_name (str): the option name from which the value will be retrieved.
+
+    Returns:
+        str: the option's value.
+    """
     cp = ConfigParser()
     cp.optionxform = str
     cp.read(filenames=config_file, encoding="utf-8")
@@ -269,6 +459,18 @@ def set_option_value(config_file: Path,
                      section_name: str,
                      option_name: str,
                      new_value: str) -> None:
+    """
+    Sets the value of an option that belongs to a config file's section.
+
+    Args:
+        config_file (Path): the config file.
+        section_name (str): the section name.
+        option_name (str): the option name whose value will be updated.
+        new_value (str): the new value to set.
+
+    Returns:
+        None
+    """
     cp = ConfigParser()
     cp.optionxform = str
     cp.read(filenames=config_file, encoding="utf-8")

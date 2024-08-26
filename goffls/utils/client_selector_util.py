@@ -36,6 +36,9 @@ def schedule_tasks_to_selected_clients(num_tasks_to_schedule: int,
                                    for sel_index, _ in enumerate(selected_clients)])
         # Get the number of remaining tasks to schedule.
         remaining_tasks_to_schedule = num_tasks_to_schedule - num_tasks_scheduled
+        # If no more tasks left to schedule, end.
+        if remaining_tasks_to_schedule == 0:
+            break
         # Get the clients with remaining capacity.
         clients_with_remaining_capacity = [selected_clients[index] for index, _ in enumerate(selected_clients)
                                            if selected_clients[index]["client_capacity"] -
@@ -76,14 +79,6 @@ def schedule_tasks_to_selected_clients(num_tasks_to_schedule: int,
                             = client_num_tasks_scheduled_before + client_num_tasks_to_schedule
                         selected_clients[sel_index].update({"client_num_tasks_scheduled":
                                                             client_num_tasks_scheduled_then})
-        # Get the number of tasks already scheduled.
-        num_tasks_scheduled = sum([selected_clients[sel_index]["client_num_tasks_scheduled"]
-                                   for sel_index, _ in enumerate(selected_clients)])
-        # Get the number of remaining tasks to schedule.
-        remaining_tasks_to_schedule = num_tasks_to_schedule - num_tasks_scheduled
-        # If no more tasks left to schedule, end.
-        if remaining_tasks_to_schedule == 0:
-            break
 
 
 def map_available_participating_clients(comm_rounds: list,
