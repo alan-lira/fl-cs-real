@@ -6,8 +6,8 @@ from seaborn import color_palette, lineplot, set_palette, set_theme
 from shutil import rmtree
 from warnings import filterwarnings
 
-from goffls.utils.config_parser_util import parse_config_section
-from goffls.utils.logger_util import load_logger, log_message
+from fl_cs_real.utils.config_parser_util import parse_config_section
+from fl_cs_real.utils.logger_util import load_logger, log_message
 
 
 class ResultAnalyzer:

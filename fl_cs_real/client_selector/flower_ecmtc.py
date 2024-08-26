@@ -2,26 +2,27 @@ from logging import Logger
 from numpy import array, inf
 from random import sample
 
-from goffls.task_scheduler.mc2mkp_adapted import mc2mkp_adapted
-from goffls.utils.client_selector_util import calculate_linear_interpolation_or_extrapolation, get_metric_mean_value, \
-    map_available_participating_clients, schedule_tasks_to_selected_clients, select_all_available_clients, \
-    sum_clients_capacities
-from goffls.utils.logger_util import log_message
+from fl_cs_real.task_scheduler.ecmtc import ecmtc
+from fl_cs_real.utils.client_selector_util import calculate_linear_interpolation_or_extrapolation, \
+    get_metric_mean_value, map_available_participating_clients, schedule_tasks_to_selected_clients, \
+    select_all_available_clients, sum_clients_capacities
+from fl_cs_real.utils.logger_util import log_message
 
 
-def select_clients_using_mc2mkp_adapted(comm_round: int,
-                                        phase: str,
-                                        num_tasks_to_schedule: int,
-                                        available_clients_map: dict,
-                                        individual_metrics_history: dict,
-                                        history_checker: str,
-                                        assignment_capacities_init_settings: dict,
-                                        candidate_clients_fraction: float,
-                                        complementary_clients_fraction: float,
-                                        complementary_tasks_fraction: float,
-                                        logger: Logger) -> dict:
+def select_clients_using_ecmtc(comm_round: int,
+                               phase: str,
+                               num_tasks_to_schedule: int,
+                               deadline_in_seconds: float,
+                               available_clients_map: dict,
+                               individual_metrics_history: dict,
+                               history_checker: str,
+                               assignment_capacities_init_settings: dict,
+                               candidate_clients_fraction: float,
+                               complementary_clients_fraction: float,
+                               complementary_tasks_fraction: float,
+                               logger: Logger) -> dict:
     # Log a 'selecting clients' message.
-    message = "Selecting {0}ing clients for round {1} using (MC)²MKP (adapted)...".format(phase, comm_round)
+    message = "Selecting {0}ing clients for round {1} using ECMTC...".format(phase, comm_round)
     log_message(logger, message, "INFO")
     # Initialize the selection dictionary and the list of selected clients.
     selection = {}
@@ -71,7 +72,7 @@ def select_clients_using_mc2mkp_adapted(comm_round: int,
                                                                                 phase)
         # Set the number of tasks that will be scheduled to the complementary clients (if any).
         num_complementary_tasks_to_schedule = int(num_tasks_to_schedule * complementary_tasks_fraction)
-        # If others than the clients selected by the (MC)²MKP algorithm are to be used (i.e., complementary clients)...
+        # If others than the clients selected by the ECMTC algorithm are to be used (i.e., complementary clients)...
         if complementary_clients_fraction != 0 and complementary_tasks_fraction != 0:
             # Set the number of tasks that will be scheduled to the selected clients.
             num_tasks_to_schedule = num_tasks_to_schedule - num_complementary_tasks_to_schedule
@@ -80,10 +81,12 @@ def select_clients_using_mc2mkp_adapted(comm_round: int,
         # Initialize the global lists that will be transformed to array.
         client_ids = []
         assignment_capacities = []
+        time_costs = []
         energy_costs = []
         # For each available client that has entries in the individual metrics history...
         for client_key, client_values in available_participating_clients_map.items():
             # Initialize his costs lists, based on the number of tasks (examples) to be scheduled.
+            time_costs_client = [inf for _ in range(0, num_tasks_to_schedule+1)]
             energy_costs_client = [inf for _ in range(0, num_tasks_to_schedule+1)]
             # Get his individual metrics history entries...
             individual_metrics_history_entries = [list(comm_round_metrics)[0]
@@ -93,6 +96,12 @@ def select_clients_using_mc2mkp_adapted(comm_round: int,
                 # Get the number of examples used by him.
                 num_examples_key = "num_{0}ing_examples_used".format(phase)
                 num_examples = individual_metrics_history_entry[num_examples_key]
+                # Get the time spent by him (if available).
+                time_key = "{0}ing_elapsed_time".format(phase)
+                if time_key in individual_metrics_history_entry:
+                    # Update his time costs list for this number of examples.
+                    time_cost = individual_metrics_history_entry[time_key]
+                    time_costs_client[num_examples] = time_cost
                 # Initialize the energy cost with the zero value, so different energy costs can be summed up.
                 energy_cost = 0
                 # Get the energy consumed by his CPU (if available).
@@ -157,6 +166,7 @@ def select_clients_using_mc2mkp_adapted(comm_round: int,
                 assignment_capacities_client = custom_range_set_sorted
                 # Set the costs of zero tasks scheduled, allowing the data point (x=0, y=0) to be used during the
                 # estimation of costs for the unknown values belonging to the custom range.
+                time_costs_client[0] = 0
                 energy_costs_client[0] = 0
                 previous_num_tasks_assigned.append(0)
                 # Estimates the costs for the unknown values via linear interpolation/extrapolation.
@@ -173,6 +183,14 @@ def select_clients_using_mc2mkp_adapted(comm_round: int,
                             # Extrapolation.
                             x1 = x1_candidates[-2]
                             x2 = x1_candidates[-1]
+                        # Calculate the linear interpolation/extrapolation for the time cost.
+                        y1_time = time_costs_client[x1]
+                        y2_time = time_costs_client[x2]
+                        time_cost_estimation = calculate_linear_interpolation_or_extrapolation(x1,
+                                                                                               x2,
+                                                                                               y1_time,
+                                                                                               y2_time,
+                                                                                               assignment_capacity)
                         # Calculate the linear interpolation/extrapolation for the energy cost.
                         y1_energy = energy_costs_client[x1]
                         y2_energy = energy_costs_client[x2]
@@ -182,52 +200,58 @@ def select_clients_using_mc2mkp_adapted(comm_round: int,
                                                                                                  y2_energy,
                                                                                                  assignment_capacity)
                         # Update the cost lists with the estimated values.
+                        time_costs_client[assignment_capacity] = time_cost_estimation
                         energy_costs_client[assignment_capacity] = energy_cost_estimation
             # Filter his costs lists.
+            filtered_time_costs_client = []
             filtered_energy_costs_client = []
-            for index in range(0, len(energy_costs_client)):
+            for index in range(0, len(time_costs_client)):
+                if time_costs_client[index] != inf:
+                    filtered_time_costs_client.append(time_costs_client[index])
                 if energy_costs_client[index] != inf:
                     filtered_energy_costs_client.append(energy_costs_client[index])
             # Append his lists into the global lists.
             client_ids.append(client_key)
             assignment_capacities.append(assignment_capacities_client)
+            time_costs.append(filtered_time_costs_client)
             energy_costs.append(filtered_energy_costs_client)
         # Convert the global lists into Numpy arrays.
         assignment_capacities = array(assignment_capacities, dtype=object)
+        time_costs = array(time_costs, dtype=object)
         energy_costs = array(energy_costs, dtype=object)
-        # Execute the (MC)²MKP adapted algorithm.
-        mc2mkp_schedule = mc2mkp_adapted(num_tasks_to_schedule,
-                                         num_resources,
-                                         energy_costs,
-                                         assignment_capacities)
+        # Execute the ECMTC algorithm.
+        ecmtc_schedule, ecmtc_energy_consumption, ecmtc_makespan = ecmtc(num_resources,
+                                                                         num_tasks_to_schedule,
+                                                                         assignment_capacities,
+                                                                         time_costs,
+                                                                         energy_costs,
+                                                                         deadline_in_seconds)
         # Update the selection dictionary with the expected metrics for the schedule.
-        mc2mkp_energy_consumption = 0
-        for sel_index, client_num_tasks_scheduled in enumerate(list(mc2mkp_schedule)):
-            if client_num_tasks_scheduled > 0:
-                i_index = list(assignment_capacities[sel_index]).index(client_num_tasks_scheduled)
-                energy_cost_i = energy_costs[sel_index][i_index]
-                mc2mkp_energy_consumption += energy_cost_i
-        selection.update({"expected_energy_consumption": mc2mkp_energy_consumption})
-        # Log the (MC)²MKP adapted algorithm's result.
-        message = "X*: {0}".format(mc2mkp_schedule)
+        selection.update({"expected_makespan": ecmtc_makespan,
+                          "expected_energy_consumption": ecmtc_energy_consumption})
+        # Log the ECMTC algorithm's result.
+        message = "X*: {0}\nMinimal makespan (Cₘₐₓ): {1}\nMinimal energy consumption (ΣE): {2}" \
+                  .format(ecmtc_schedule, ecmtc_makespan, ecmtc_energy_consumption)
         log_message(logger, message, "DEBUG")
         # Get the list of indices from the selected clients.
         selected_clients_indices = [sel_index for sel_index, client_num_tasks_scheduled
-                                    in enumerate(list(mc2mkp_schedule)) if client_num_tasks_scheduled > 0]
+                                    in enumerate(ecmtc_schedule) if client_num_tasks_scheduled > 0]
         # Append their corresponding proxies objects and numbers of tasks scheduled into the selected clients list.
         for sel_index in selected_clients_indices:
             client_id_str = client_ids[sel_index]
             client_map = available_participating_clients_map[client_id_str]
             client_proxy = client_map["client_proxy"]
             client_capacity = client_map["client_num_{0}ing_examples_available".format(phase)]
-            client_num_tasks_scheduled = int(mc2mkp_schedule[sel_index])
+            client_num_tasks_scheduled = int(ecmtc_schedule[sel_index])
             i_index = list(assignment_capacities[sel_index]).index(client_num_tasks_scheduled)
+            client_expected_duration = time_costs[sel_index][i_index]
             client_expected_energy_consumption = energy_costs[sel_index][i_index]
             selected_clients.append({"client_proxy": client_proxy,
                                      "client_capacity": client_capacity,
                                      "client_num_tasks_scheduled": client_num_tasks_scheduled,
+                                     "client_expected_duration": client_expected_duration,
                                      "client_expected_energy_consumption": client_expected_energy_consumption})
-        # If there are complementary clients to be used other than the ones selected by the (MC)²MKP algorithm...
+        # If there are complementary clients to be used other than the ones selected by the ECMTC algorithm...
         if complementary_clients_fraction != 0 and complementary_tasks_fraction != 0:
             # Initialize the list of complementary clients.
             complementary_clients = []

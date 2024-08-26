@@ -13,10 +13,10 @@ from time import perf_counter, process_time
 
 from flwr.client import NumPyClient
 from flwr.common import NDArray, NDArrays
-from goffls.energy_monitor.powerjoular_energy_monitor import PowerJoularEnergyMonitor
-from goffls.energy_monitor.pyjoules_energy_monitor import PyJoulesEnergyMonitor
-from goffls.utils.logger_util import log_message
-from goffls.utils.platform_util import get_system
+from fl_cs_real.energy_monitor.powerjoular_energy_monitor import PowerJoularEnergyMonitor
+from fl_cs_real.energy_monitor.pyjoules_energy_monitor import PyJoulesEnergyMonitor
+from fl_cs_real.utils.logger_util import log_message
+from fl_cs_real.utils.platform_util import get_system
 
 
 class TrainingMeasurementsCallback(Callback):

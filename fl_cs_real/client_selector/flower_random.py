@@ -1,8 +1,8 @@
 from logging import Logger
 from random import sample
 
-from goffls.utils.client_selector_util import schedule_tasks_to_selected_clients, sum_clients_capacities
-from goffls.utils.logger_util import log_message
+from fl_cs_real.utils.client_selector_util import schedule_tasks_to_selected_clients, sum_clients_capacities
+from fl_cs_real.utils.logger_util import log_message
 
 
 def select_clients_using_random(comm_round: int,
