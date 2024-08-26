@@ -2,6 +2,15 @@ from pathlib import Path
 
 
 def get_version(version_file: Path) -> str:
+    """
+    Gets the package version.
+
+    Args:
+        version_file (Path): the file from which the version will be retrieved.
+
+    Returns:
+        str: the package's version.
+    """
     major = 0
     minor = 0
     patch = 0
@@ -23,12 +32,30 @@ def get_version(version_file: Path) -> str:
 
 
 def get_readme(readme_file: Path) -> str:
+    """
+    Gets the package long description (README).
+
+    Args:
+        readme_file (Path): the file from which the long description will be retrieved.
+
+    Returns:
+        str: the package's long description.
+    """
     with open(file=readme_file, encoding="utf-8") as readme_file:
         readme = readme_file.read()
     return readme
 
 
 def get_requirements_list(requirements_file: Path) -> list:
+    """
+    Gets the package requirements list.
+
+    Args:
+        requirements_file (Path): the file from which the list of requirements to install will be retrieved.
+
+    Returns:
+        list: the package's requirements.
+    """
     with open(file=requirements_file, encoding="utf-8") as requirements_file:
         requirements_list = requirements_file.read().splitlines()
     return requirements_list
