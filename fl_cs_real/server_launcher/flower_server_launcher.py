@@ -5,9 +5,9 @@ from flwr.common import NDArrays
 from flwr.server import Server, ServerConfig, SimpleClientManager, start_server
 from flwr.server.strategy import Strategy
 
-from goffls.server.flower_goffls_server import FlowerGOFFLSServer
-from goffls.utils.config_parser_util import parse_config_section
-from goffls.utils.logger_util import load_logger, log_message
+from fl_cs_real.server.flower_server import FlowerServer
+from fl_cs_real.utils.config_parser_util import parse_config_section
+from fl_cs_real.utils.logger_util import load_logger, log_message
 
 
 class FlowerServerLauncher:
@@ -259,17 +259,17 @@ class FlowerServerLauncher:
         metrics_aggregation_settings = self.get_attribute("_metrics_aggregation_settings")
         # Initialize the server strategy.
         server_strategy = None
-        if strategy == "GOFFLS":
-            # Instantiate the GOFFLS (Generic Optimization Framework for Federated Learning Schedules) server strategy.
-            server_strategy = FlowerGOFFLSServer(id_=server_id,
-                                                 fl_settings=fl_settings,
-                                                 client_selection_settings=client_selection_settings,
-                                                 model_aggregation_settings=model_aggregation_settings,
-                                                 metrics_aggregation_settings=metrics_aggregation_settings,
-                                                 fit_config=fit_config,
-                                                 evaluate_config=evaluate_config,
-                                                 initial_parameters=initial_parameters,
-                                                 logger=logger)
+        if strategy == "FL-CS-Real":
+            # Instantiate the FL-CS-Real server strategy.
+            server_strategy = FlowerServer(id_=server_id,
+                                           fl_settings=fl_settings,
+                                           client_selection_settings=client_selection_settings,
+                                           model_aggregation_settings=model_aggregation_settings,
+                                           metrics_aggregation_settings=metrics_aggregation_settings,
+                                           fit_config=fit_config,
+                                           evaluate_config=evaluate_config,
+                                           initial_parameters=initial_parameters,
+                                           logger=logger)
         # Set the server strategy.
         self._set_attribute("_server_strategy", server_strategy)
         # Return the server strategy.

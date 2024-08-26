@@ -1,28 +1,23 @@
 from logging import Logger
 from numpy import array, inf
-from random import sample
 
-from goffls.task_scheduler.ecmtc import ecmtc
-from goffls.utils.client_selector_util import calculate_linear_interpolation_or_extrapolation, get_metric_mean_value, \
+from fl_cs_real.task_scheduler.olar_adapted import olar_adapted
+from fl_cs_real.utils.client_selector_util import calculate_linear_interpolation_or_extrapolation, \
     map_available_participating_clients, schedule_tasks_to_selected_clients, select_all_available_clients, \
     sum_clients_capacities
-from goffls.utils.logger_util import log_message
+from fl_cs_real.utils.logger_util import log_message
 
 
-def select_clients_using_ecmtc(comm_round: int,
-                               phase: str,
-                               num_tasks_to_schedule: int,
-                               deadline_in_seconds: float,
-                               available_clients_map: dict,
-                               individual_metrics_history: dict,
-                               history_checker: str,
-                               assignment_capacities_init_settings: dict,
-                               candidate_clients_fraction: float,
-                               complementary_clients_fraction: float,
-                               complementary_tasks_fraction: float,
-                               logger: Logger) -> dict:
+def select_clients_using_olar_adapted(comm_round: int,
+                                      phase: str,
+                                      num_tasks_to_schedule: int,
+                                      available_clients_map: dict,
+                                      individual_metrics_history: dict,
+                                      history_checker: str,
+                                      assignment_capacities_init_settings: dict,
+                                      logger: Logger) -> dict:
     # Log a 'selecting clients' message.
-    message = "Selecting {0}ing clients for round {1} using ECMTC...".format(phase, comm_round)
+    message = "Selecting {0}ing clients for round {1} using OLAR (adapted)...".format(phase, comm_round)
     log_message(logger, message, "INFO")
     # Initialize the selection dictionary and the list of selected clients.
     selection = {}
@@ -54,40 +49,22 @@ def select_clients_using_ecmtc(comm_round: int,
         available_participating_clients_map = map_available_participating_clients(comm_rounds,
                                                                                   available_clients_map,
                                                                                   individual_metrics_history)
-        # If only a fraction of the available clients is to be used by the algorithm (subset of candidate clients)...
-        if candidate_clients_fraction != 0:
-            # Set the number of resources,
-            # based on the number of available clients with entries in the individual metrics history.
-            num_resources = len(available_participating_clients_map)
-            # Determine the number of candidate clients.
-            num_candidate_clients = max(1, int(num_resources * candidate_clients_fraction))
-            # Filter the subset of candidate clients via random sampling.
-            sampled_clients_keys = sample(sorted(available_participating_clients_map), num_candidate_clients)
-            available_participating_clients_map = {client_key: available_participating_clients_map[client_key]
-                                                   for client_key in sampled_clients_keys}
-        # Set the number of resources.
+        # Set the number of resources,
+        # based on the number of available clients with entries in the individual metrics history.
         num_resources = len(available_participating_clients_map)
         # Get the maximum number of tasks that can be scheduled to the available participating clients.
         available_participating_clients_capacities_sum = sum_clients_capacities(available_participating_clients_map,
                                                                                 phase)
-        # Set the number of tasks that will be scheduled to the complementary clients (if any).
-        num_complementary_tasks_to_schedule = int(num_tasks_to_schedule * complementary_tasks_fraction)
-        # If others than the clients selected by the ECMTC algorithm are to be used (i.e., complementary clients)...
-        if complementary_clients_fraction != 0 and complementary_tasks_fraction != 0:
-            # Set the number of tasks that will be scheduled to the selected clients.
-            num_tasks_to_schedule = num_tasks_to_schedule - num_complementary_tasks_to_schedule
         # Redefine the number of tasks to schedule, if the available participating clients capacities sum is lower.
         num_tasks_to_schedule = min(num_tasks_to_schedule, available_participating_clients_capacities_sum)
         # Initialize the global lists that will be transformed to array.
         client_ids = []
         assignment_capacities = []
         time_costs = []
-        energy_costs = []
         # For each available client that has entries in the individual metrics history...
         for client_key, client_values in available_participating_clients_map.items():
             # Initialize his costs lists, based on the number of tasks (examples) to be scheduled.
             time_costs_client = [inf for _ in range(0, num_tasks_to_schedule+1)]
-            energy_costs_client = [inf for _ in range(0, num_tasks_to_schedule+1)]
             # Get his individual metrics history entries...
             individual_metrics_history_entries = [list(comm_round_metrics)[0]
                                                   for key, comm_round_metrics in client_values.items()
@@ -102,40 +79,6 @@ def select_clients_using_ecmtc(comm_round: int,
                     # Update his time costs list for this number of examples.
                     time_cost = individual_metrics_history_entry[time_key]
                     time_costs_client[num_examples] = time_cost
-                # Initialize the energy cost with the zero value, so different energy costs can be summed up.
-                energy_cost = 0
-                # Get the energy consumed by his CPU (if available).
-                energy_cpu_key = "{0}ing_energy_cpu".format(phase)
-                if energy_cpu_key in individual_metrics_history_entry:
-                    energy_cpu_cost = individual_metrics_history_entry[energy_cpu_key]
-                    # If the CPU energy cost is a valid value (higher than 0), take it.
-                    if energy_cpu_cost > 0:
-                        energy_cost += energy_cpu_cost
-                    # Otherwise, take the mean of the CPU energy costs for this number of examples, if available.
-                    else:
-                        energy_cpu_cost_mean_value = get_metric_mean_value(individual_metrics_history,
-                                                                           client_key,
-                                                                           num_examples_key,
-                                                                           num_examples,
-                                                                           energy_cpu_key)
-                        energy_cost += energy_cpu_cost_mean_value
-                # Get the energy consumed by his NVIDIA GPU (if available).
-                energy_nvidia_gpu_key = "{0}ing_energy_nvidia_gpu".format(phase)
-                if energy_nvidia_gpu_key in individual_metrics_history_entry:
-                    energy_nvidia_gpu_cost = individual_metrics_history_entry[energy_nvidia_gpu_key]
-                    # If the NVIDIA GPU energy cost is a valid value (higher than 0), take it.
-                    if energy_nvidia_gpu_cost > 0:
-                        energy_cost += energy_nvidia_gpu_cost
-                    # Otherwise, take the mean of the NVIDIA GPU energy costs for this number of examples, if available.
-                    else:
-                        energy_nvidia_gpu_cost_mean_value = get_metric_mean_value(individual_metrics_history,
-                                                                                  client_key,
-                                                                                  num_examples_key,
-                                                                                  num_examples,
-                                                                                  energy_nvidia_gpu_key)
-                        energy_cost += energy_nvidia_gpu_cost_mean_value
-                # Update his energy costs list for this number of examples.
-                energy_costs_client[num_examples] = energy_cost
             # Initialize his assignment capacities list...
             assignment_capacities_client = None
             assignment_capacities_initializer = assignment_capacities_init_settings["assignment_capacities_initializer"]
@@ -167,7 +110,6 @@ def select_clients_using_ecmtc(comm_round: int,
                 # Set the costs of zero tasks scheduled, allowing the data point (x=0, y=0) to be used during the
                 # estimation of costs for the unknown values belonging to the custom range.
                 time_costs_client[0] = 0
-                energy_costs_client[0] = 0
                 previous_num_tasks_assigned.append(0)
                 # Estimates the costs for the unknown values via linear interpolation/extrapolation.
                 for assignment_capacity in assignment_capacities_client:
@@ -191,98 +133,53 @@ def select_clients_using_ecmtc(comm_round: int,
                                                                                                y1_time,
                                                                                                y2_time,
                                                                                                assignment_capacity)
-                        # Calculate the linear interpolation/extrapolation for the energy cost.
-                        y1_energy = energy_costs_client[x1]
-                        y2_energy = energy_costs_client[x2]
-                        energy_cost_estimation = calculate_linear_interpolation_or_extrapolation(x1,
-                                                                                                 x2,
-                                                                                                 y1_energy,
-                                                                                                 y2_energy,
-                                                                                                 assignment_capacity)
                         # Update the cost lists with the estimated values.
                         time_costs_client[assignment_capacity] = time_cost_estimation
-                        energy_costs_client[assignment_capacity] = energy_cost_estimation
             # Filter his costs lists.
             filtered_time_costs_client = []
-            filtered_energy_costs_client = []
             for index in range(0, len(time_costs_client)):
                 if time_costs_client[index] != inf:
                     filtered_time_costs_client.append(time_costs_client[index])
-                if energy_costs_client[index] != inf:
-                    filtered_energy_costs_client.append(energy_costs_client[index])
             # Append his lists into the global lists.
             client_ids.append(client_key)
             assignment_capacities.append(assignment_capacities_client)
             time_costs.append(filtered_time_costs_client)
-            energy_costs.append(filtered_energy_costs_client)
         # Convert the global lists into Numpy arrays.
         assignment_capacities = array(assignment_capacities, dtype=object)
         time_costs = array(time_costs, dtype=object)
-        energy_costs = array(energy_costs, dtype=object)
-        # Execute the ECMTC algorithm.
-        ecmtc_schedule, ecmtc_energy_consumption, ecmtc_makespan = ecmtc(num_resources,
-                                                                         num_tasks_to_schedule,
-                                                                         assignment_capacities,
-                                                                         time_costs,
-                                                                         energy_costs,
-                                                                         deadline_in_seconds)
+        # Execute the OLAR adapted algorithm.
+        olar_schedule = olar_adapted(num_tasks_to_schedule,
+                                     num_resources,
+                                     time_costs,
+                                     assignment_capacities)
         # Update the selection dictionary with the expected metrics for the schedule.
-        selection.update({"expected_makespan": ecmtc_makespan,
-                          "expected_energy_consumption": ecmtc_energy_consumption})
-        # Log the ECMTC algorithm's result.
-        message = "X*: {0}\nMinimal makespan (Cₘₐₓ): {1}\nMinimal energy consumption (ΣE): {2}" \
-                  .format(ecmtc_schedule, ecmtc_makespan, ecmtc_energy_consumption)
+        olar_makespan = 0
+        for sel_index, client_num_tasks_scheduled in enumerate(list(olar_schedule)):
+            if client_num_tasks_scheduled > 0:
+                i_index = list(assignment_capacities[sel_index]).index(client_num_tasks_scheduled)
+                time_cost_i = time_costs[sel_index][i_index]
+                if time_cost_i > olar_makespan:
+                    olar_makespan = time_cost_i
+        selection.update({"expected_makespan": olar_makespan})
+        # Log the OLAR adapted algorithm's result.
+        message = "X*: {0}".format(olar_schedule)
         log_message(logger, message, "DEBUG")
         # Get the list of indices from the selected clients.
         selected_clients_indices = [sel_index for sel_index, client_num_tasks_scheduled
-                                    in enumerate(ecmtc_schedule) if client_num_tasks_scheduled > 0]
+                                    in enumerate(list(olar_schedule)) if client_num_tasks_scheduled > 0]
         # Append their corresponding proxies objects and numbers of tasks scheduled into the selected clients list.
         for sel_index in selected_clients_indices:
             client_id_str = client_ids[sel_index]
             client_map = available_participating_clients_map[client_id_str]
             client_proxy = client_map["client_proxy"]
             client_capacity = client_map["client_num_{0}ing_examples_available".format(phase)]
-            client_num_tasks_scheduled = int(ecmtc_schedule[sel_index])
+            client_num_tasks_scheduled = int(olar_schedule[sel_index])
             i_index = list(assignment_capacities[sel_index]).index(client_num_tasks_scheduled)
             client_expected_duration = time_costs[sel_index][i_index]
-            client_expected_energy_consumption = energy_costs[sel_index][i_index]
             selected_clients.append({"client_proxy": client_proxy,
                                      "client_capacity": client_capacity,
                                      "client_num_tasks_scheduled": client_num_tasks_scheduled,
-                                     "client_expected_duration": client_expected_duration,
-                                     "client_expected_energy_consumption": client_expected_energy_consumption})
-        # If there are complementary clients to be used other than the ones selected by the ECMTC algorithm...
-        if complementary_clients_fraction != 0 and complementary_tasks_fraction != 0:
-            # Initialize the list of complementary clients.
-            complementary_clients = []
-            # Determine the number of complementary clients to select.
-            num_complementary_clients_to_select = max(1, int(num_resources * complementary_clients_fraction))
-            # Filter (remove) the already selected clients from the available participating clients map.
-            available_participating_clients_filtered_map = available_participating_clients_map.copy()
-            for sel_index in selected_clients_indices:
-                client_id_str = client_ids[sel_index]
-                if client_id_str in available_participating_clients_filtered_map:
-                    del available_participating_clients_filtered_map[client_id_str]
-            # Select clients via random sampling if there are any available participating clients not selected yet.
-            if available_participating_clients_filtered_map:
-                sampled_clients_keys = sample(sorted(available_participating_clients_filtered_map),
-                                              num_complementary_clients_to_select)
-                for client_key in sampled_clients_keys:
-                    client_map = available_clients_map[client_key]
-                    client_proxy = client_map["client_proxy"]
-                    client_capacity = client_map["client_num_{0}ing_examples_available".format(phase)]
-                    complementary_clients.append({"client_proxy": client_proxy,
-                                                  "client_capacity": client_capacity,
-                                                  "client_num_tasks_scheduled": 0})
-                # Get the maximum number of tasks that can be scheduled to the complementary clients.
-                complementary_clients_capacities_sum = sum_clients_capacities(complementary_clients, phase)
-                # Redefine the number of tasks to schedule if the complementary clients capacities sum is lower.
-                num_complementary_tasks_to_schedule = min(num_complementary_tasks_to_schedule,
-                                                          complementary_clients_capacities_sum)
-                # Schedule the tasks to the complementary clients.
-                schedule_tasks_to_selected_clients(num_complementary_tasks_to_schedule, complementary_clients)
-                # Append the complementary clients to the list of selected clients.
-                selected_clients.extend(complementary_clients)
+                                     "client_expected_duration": client_expected_duration})
         # Update the selection dictionary with the selected clients for the schedule.
         selection.update({"selected_clients": selected_clients})
     # Log a 'number of clients selected' message.

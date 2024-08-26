@@ -11,12 +11,12 @@ from typing import Optional
 from flwr.client import Client, start_client
 from flwr.common import NDArray
 
-from goffls.client.flower_numpy_client import FlowerNumpyClient
-from goffls.energy_monitor.powerjoular_energy_monitor import PowerJoularEnergyMonitor
-from goffls.energy_monitor.pyjoules_energy_monitor import PyJoulesEnergyMonitor
-from goffls.utils.config_parser_util import parse_config_section
-from goffls.utils.logger_util import load_logger, log_message
-from goffls.utils.multiclass_image_dataset_loader_util import load_x_y_for_multiclass_image_dataset
+from fl_cs_real.client.flower_numpy_client import FlowerNumpyClient
+from fl_cs_real.energy_monitor.powerjoular_energy_monitor import PowerJoularEnergyMonitor
+from fl_cs_real.energy_monitor.pyjoules_energy_monitor import PyJoulesEnergyMonitor
+from fl_cs_real.utils.config_parser_util import parse_config_section
+from fl_cs_real.utils.logger_util import load_logger, log_message
+from fl_cs_real.utils.multiclass_image_dataset_loader_util import load_x_y_for_multiclass_image_dataset
 
 
 class FlowerClientLauncher:

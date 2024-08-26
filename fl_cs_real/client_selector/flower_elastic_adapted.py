@@ -1,11 +1,11 @@
 from logging import Logger
 from numpy import array, inf
 
-from goffls.task_scheduler.elastic_adapted import elastic_adapted
-from goffls.utils.client_selector_util import calculate_linear_interpolation_or_extrapolation, get_metric_mean_value, \
-    map_available_participating_clients, schedule_tasks_to_selected_clients, select_all_available_clients, \
-    sum_clients_capacities
-from goffls.utils.logger_util import log_message
+from fl_cs_real.task_scheduler.elastic_adapted import elastic_adapted
+from fl_cs_real.utils.client_selector_util import calculate_linear_interpolation_or_extrapolation, \
+    get_metric_mean_value, map_available_participating_clients, schedule_tasks_to_selected_clients, \
+    select_all_available_clients, sum_clients_capacities
+from fl_cs_real.utils.logger_util import log_message
 
 
 def select_clients_using_elastic_adapted(comm_round: int,

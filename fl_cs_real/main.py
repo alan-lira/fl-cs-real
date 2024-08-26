@@ -4,11 +4,11 @@ from pathlib import Path
 from sys import argv
 from time import perf_counter
 
-from goffls.client_launcher.flower_client_launcher import FlowerClientLauncher
-from goffls.result_analyzer.result_analyzer import ResultAnalyzer
-from goffls.server_launcher.flower_server_launcher import FlowerServerLauncher
-from goffls.utils.logger_util import load_logger, log_message
-from goffls.utils.setup_tools_util import get_version
+from fl_cs_real.client_launcher.flower_client_launcher import FlowerClientLauncher
+from fl_cs_real.result_analyzer.result_analyzer import ResultAnalyzer
+from fl_cs_real.server_launcher.flower_server_launcher import FlowerServerLauncher
+from fl_cs_real.utils.logger_util import load_logger, log_message
+from fl_cs_real.utils.setup_tools_util import get_version
 
 # Paths.
 __BASE_PATH = Path(__file__).parent.resolve()
@@ -18,7 +18,7 @@ __FLOWER_SERVER_CONFIG_FILE = __BASE_PATH.joinpath("server/config/flower_server.
 __RESULT_ANALYZER_CONFIG_FILE = __BASE_PATH.joinpath("result_analyzer/config/results_analyzer.cfg")
 
 # List of implemented tools.
-__AVAILABLE_TOOLS = [{"name": "GOFFLS",
+__AVAILABLE_TOOLS = [{"name": "FL-CS-Real",
                       "description": "",
                       "actions": [{"launch_server": "launches a FL server instance"},
                                   {"launch_client": "launches a FL client instance"},
@@ -82,7 +82,7 @@ def _set_logger() -> Logger:
                         "level": "INFO",
                         "format_str": "%(asctime)s.%(msecs)03d %(levelname)s: %(message)s",
                         "date_format": "%Y/%m/%d %H:%M:%S"}
-    logger_name = "GOFFLS_Logger"
+    logger_name = "FL-CS-Real_Logger"
     logger = load_logger(logging_settings, logger_name)
     return logger
 
@@ -99,9 +99,9 @@ def main() -> None:
     perf_counter_start = perf_counter()
     # Get the version.
     version = get_version(__VERSION_FILE)
-    # Parse the GOFFLS arguments.
-    usage = "goffls [-v | --version] [-h | --help] <action> [args]"
-    description = '''Generic Optimization Framework for Federated Learning Schedules (GOFFLS).\n'''
+    # Parse the FL-CS-Real arguments.
+    usage = "fl-cs-real [-v | --version] [-h | --help] <action> [args]"
+    description = '''Runs real-world FL experiments for the evaluation of client selection algorithms.\n'''
     epilog = ('''{0}'''.format("\n".join([tool_info for tool_info in _get_tools_info()])))
     ap = ArgumentParser(usage=usage,
                         description=description,
@@ -113,7 +113,7 @@ def main() -> None:
                     version="%(prog)s version {0}".format(version))
     ap.add_argument("action",
                     type=str,
-                    help="action to perform with GOFFLS tool")
+                    help="action to perform with FL-CS-Real tool")
     if "launch_server" in argv:
         ap.add_argument("--implementation",
                         type=str,
@@ -149,7 +149,7 @@ def main() -> None:
     # Get the user-provided arguments.
     action = str(parsed_args.action)
     # Verify if the user-provided action is valid.
-    _verify_if_tool_action_is_valid("GOFFLS", action)
+    _verify_if_tool_action_is_valid("FL-CS-Real", action)
     # Set the logger.
     logger = _set_logger()
     if action == "launch_server":

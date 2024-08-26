@@ -1,5 +1,5 @@
 from unittest import TestCase
 
 
-class TestFlowerGOFFLSServer(TestCase):
+class TestFlowerServer(TestCase):
     pass

@@ -12,20 +12,20 @@ from flwr.server.client_manager import ClientManager
 from flwr.server.client_proxy import ClientProxy
 from flwr.server.strategy.strategy import Strategy
 
-from goffls.client_selector.flower_ecmtc import select_clients_using_ecmtc
-from goffls.client_selector.flower_elastic_adapted import select_clients_using_elastic_adapted
-from goffls.client_selector.flower_fedaecs_adapted import select_clients_using_fedaecs_adapted
-from goffls.client_selector.flower_mc2mkp_adapted import select_clients_using_mc2mkp_adapted
-from goffls.client_selector.flower_mec import select_clients_using_mec
-from goffls.client_selector.flower_olar_adapted import select_clients_using_olar_adapted
-from goffls.client_selector.flower_random import select_clients_using_random
-from goffls.metrics_aggregator.flower_weighted_average import aggregate_loss_by_weighted_average, \
+from fl_cs_real.client_selector.flower_ecmtc import select_clients_using_ecmtc
+from fl_cs_real.client_selector.flower_elastic_adapted import select_clients_using_elastic_adapted
+from fl_cs_real.client_selector.flower_fedaecs_adapted import select_clients_using_fedaecs_adapted
+from fl_cs_real.client_selector.flower_mc2mkp_adapted import select_clients_using_mc2mkp_adapted
+from fl_cs_real.client_selector.flower_mec import select_clients_using_mec
+from fl_cs_real.client_selector.flower_olar_adapted import select_clients_using_olar_adapted
+from fl_cs_real.client_selector.flower_random import select_clients_using_random
+from fl_cs_real.metrics_aggregator.flower_weighted_average import aggregate_loss_by_weighted_average, \
     aggregate_metrics_by_weighted_average
-from goffls.model_aggregator.flower_weighted_average import aggregate_parameters_by_weighted_average
-from goffls.utils.logger_util import log_message
+from fl_cs_real.model_aggregator.flower_weighted_average import aggregate_parameters_by_weighted_average
+from fl_cs_real.utils.logger_util import log_message
 
 
-class FlowerGOFFLSServer(Strategy):
+class FlowerServer(Strategy):
 
     def __init__(self,
                  *,
