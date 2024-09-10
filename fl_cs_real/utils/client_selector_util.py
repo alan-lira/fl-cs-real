@@ -26,8 +26,8 @@ def sum_clients_capacities(clients: Union[list, dict],
 
 def schedule_tasks_to_selected_clients(num_tasks_to_schedule: int,
                                        selected_clients: list) -> None:
-    # If no clients were selected, the tasks can't be scheduled.
-    if not selected_clients:
+    # If there are no tasks to schedule or selected clients, end.
+    if num_tasks_to_schedule == 0 or not selected_clients:
         return
     # While there are tasks left to schedule...
     while True:
@@ -35,7 +35,7 @@ def schedule_tasks_to_selected_clients(num_tasks_to_schedule: int,
         num_tasks_scheduled = sum([selected_clients[sel_index]["client_num_tasks_scheduled"]
                                    for sel_index, _ in enumerate(selected_clients)])
         # Get the number of remaining tasks to schedule.
-        remaining_tasks_to_schedule = num_tasks_to_schedule - num_tasks_scheduled
+        remaining_tasks_to_schedule = abs(num_tasks_scheduled - num_tasks_to_schedule)
         # If no more tasks left to schedule, end.
         if remaining_tasks_to_schedule == 0:
             break
