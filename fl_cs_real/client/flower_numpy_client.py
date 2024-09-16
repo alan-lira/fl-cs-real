@@ -229,6 +229,8 @@ class FlowerNumpyClient(NumPyClient):
                  y_train: NDArray,
                  x_test: NDArray,
                  y_test: NDArray,
+                 task_assignment_capacities_train: list,
+                 task_assignment_capacities_test: list,
                  energy_monitor: any,
                  daemon_settings: dict,
                  affinity_settings: dict,
@@ -241,6 +243,8 @@ class FlowerNumpyClient(NumPyClient):
         self._y_train = y_train
         self._x_test = x_test
         self._y_test = y_test
+        self._task_assignment_capacities_train = task_assignment_capacities_train
+        self._task_assignment_capacities_test = task_assignment_capacities_test
         self._energy_monitor = energy_monitor
         self._daemon_settings = daemon_settings
         self._affinity_settings = affinity_settings
@@ -371,6 +375,16 @@ class FlowerNumpyClient(NumPyClient):
         if "client_num_testing_examples_available" in config:
             client_num_testing_examples_available = len(self.get_attribute("_x_test"))
             config.update({"client_num_testing_examples_available": client_num_testing_examples_available})
+        if "client_task_assignment_capacities_train" in config:
+            client_task_assignment_capacities_train = self.get_attribute("_task_assignment_capacities_train")
+            client_task_assignment_capacities_train_str \
+                = "|".join([str(capacity) for capacity in client_task_assignment_capacities_train])
+            config.update({"client_task_assignment_capacities_train": client_task_assignment_capacities_train_str})
+        if "client_task_assignment_capacities_test" in config:
+            client_task_assignment_capacities_test = self.get_attribute("_task_assignment_capacities_test")
+            client_task_assignment_capacities_test_str \
+                = "|".join([str(capacity) for capacity in client_task_assignment_capacities_test])
+            config.update({"client_task_assignment_capacities_test": client_task_assignment_capacities_test_str})
         # Return the properties requested by the server.
         return config
 

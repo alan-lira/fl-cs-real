@@ -92,12 +92,16 @@ class FlowerServer(Strategy):
             client_cpu_cores_list_property = "client_cpu_cores_list"
             client_num_training_examples_available_property = "client_num_training_examples_available"
             client_num_testing_examples_available_property = "client_num_testing_examples_available"
+            client_task_assignment_capacities_train_property = "client_task_assignment_capacities_train"
+            client_task_assignment_capacities_test_property = "client_task_assignment_capacities_test"
             gpi = GetPropertiesIns({client_id_property: "?",
                                     client_hostname_property: "?",
                                     client_num_cpus_property: "?",
                                     client_cpu_cores_list_property: "?",
                                     client_num_training_examples_available_property: "?",
-                                    client_num_testing_examples_available_property: "?"})
+                                    client_num_testing_examples_available_property: "?",
+                                    client_task_assignment_capacities_train_property: "?",
+                                    client_task_assignment_capacities_test_property: "?"})
             client_prompted = client_proxy.get_properties(gpi, timeout=9999)
             client_id = client_prompted.properties[client_id_property]
             client_hostname = client_prompted.properties[client_hostname_property]
@@ -107,13 +111,19 @@ class FlowerServer(Strategy):
                 client_prompted.properties[client_num_training_examples_available_property]
             client_num_testing_examples_available = \
                 client_prompted.properties[client_num_testing_examples_available_property]
+            client_task_assignment_capacities_train = \
+                client_prompted.properties[client_task_assignment_capacities_train_property]
+            client_task_assignment_capacities_test = \
+                client_prompted.properties[client_task_assignment_capacities_test_property]
             client_id_str = "client_{0}".format(client_id)
             client_map = {"client_proxy": client_proxy,
                           "client_hostname": client_hostname,
                           "client_num_cpus": client_num_cpus,
                           "client_cpu_cores_list": client_cpu_cores_list,
                           "client_num_training_examples_available": client_num_training_examples_available,
-                          "client_num_testing_examples_available": client_num_testing_examples_available}
+                          "client_num_testing_examples_available": client_num_testing_examples_available,
+                          "client_task_assignment_capacities_train": client_task_assignment_capacities_train,
+                          "client_task_assignment_capacities_test": client_task_assignment_capacities_test}
             available_clients_map.update({client_id_str: client_map})
         self._set_attribute("_available_clients_map", available_clients_map)
         return available_clients_map
