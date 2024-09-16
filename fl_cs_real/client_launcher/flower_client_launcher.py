@@ -32,6 +32,7 @@ class FlowerClientLauncher:
         self._ssl_settings = None
         self._grpc_settings = None
         self._dataset_settings = None
+        self._task_assignment_capacities_settings = None
         self._energy_monitoring_settings = None
         self._model_settings = None
         self._logger = None
@@ -76,6 +77,10 @@ class FlowerClientLauncher:
         dataset_section = "Dataset Settings"
         dataset_settings = parse_config_section(config_file, dataset_section)
         self._set_attribute("_dataset_settings", dataset_settings)
+        # Parse and set the task assignment capacities settings.
+        task_assignment_capacities_section = "Task Assignment Capacities Settings"
+        task_assignment_capacities_settings = parse_config_section(config_file, task_assignment_capacities_section)
+        self._set_attribute("_task_assignment_capacities_settings", task_assignment_capacities_settings)
         # Parse and set the energy monitoring settings.
         energy_monitoring_section = "Energy Monitoring Settings"
         energy_monitoring_settings = parse_config_section(config_file,
@@ -91,13 +96,13 @@ class FlowerClientLauncher:
         model_provider = model_settings["provider"]
         model_provider_section = "{0} Model Settings".format(model_provider)
         model_provider_settings = parse_config_section(config_file, model_provider_section)
-        model_name = model_provider_settings["name"]
+        model_name = model_provider_settings["model_name"]
         model_provider_specific_section = "{0} {1} Settings".format(model_provider, model_name)
         model_provider_specific_settings = parse_config_section(config_file, model_provider_specific_section)
-        optimizer = model_provider_settings["optimizer"]
+        optimizer = model_provider_settings["optimizer_name"]
         optimizer_section = "{0} {1} Settings".format(model_provider, optimizer)
         optimizer_settings = parse_config_section(config_file, optimizer_section)
-        loss = model_provider_settings["loss"]
+        loss = model_provider_settings["loss_name"]
         loss_section = "{0} {1} Settings".format(model_provider, loss)
         loss_settings = parse_config_section(config_file, loss_section)
         model_settings.update({model_provider: model_provider_settings,
@@ -158,22 +163,19 @@ class FlowerClientLauncher:
         dataset_loading_duration_start = perf_counter()
         # Get the necessary attributes.
         dataset_settings = self.get_attribute("_dataset_settings")
-        storage_location = dataset_settings["storage_location"]
-        category = dataset_settings["category"]
+        dataset_storage_location = dataset_settings["dataset_storage_location"]
+        dataset_root_folder = Path(dataset_settings["dataset_root_folder"])
+        dataset_type = dataset_settings["dataset_type"]
         client_id = self.get_attribute("_client_id")
         logger = self.get_attribute("_logger")
-        # Update the dataset root folder with the partition number that is associated to the client id.
-        dataset_settings["root_folder"] = dataset_settings["root_folder"] + "partition_{0}".format(client_id)
-        self._set_attribute("_dataset_settings", dataset_settings)
-        dataset_root_folder = Path(dataset_settings["root_folder"])
         # Log a 'loading the dataset' message.
         message = "[Client {0}] Loading the '{1}' dataset ({2} storage)..." \
-                  .format(client_id, dataset_root_folder, storage_location)
+                  .format(client_id, dataset_root_folder, dataset_storage_location)
         log_message(logger, message, "INFO")
         # Initialize x_train, y_train, x_test, and y_test.
         x_train = y_train = x_test = y_test = None
-        if category == "multi_class_image_classification":
-            if storage_location == "Local":
+        if dataset_type == "multi_class_image_classification":
+            if dataset_storage_location == "Local":
                 # Load x_train and y_train.
                 x_train, y_train = load_x_y_for_multiclass_image_dataset(dataset_root_folder, "train")
                 # Load x_test and y_test.
@@ -185,6 +187,29 @@ class FlowerClientLauncher:
         log_message(logger, message, "INFO")
         # Return the loaded dataset (x_train, y_train, x_test, and y_test).
         return x_train, y_train, x_test, y_test
+
+    def _get_task_assignment_capacities(self,
+                                        x_train: NDArray,
+                                        x_test: NDArray) -> tuple:
+        # Get the necessary attributes.
+        task_assignment_capacities_settings = self.get_attribute("_task_assignment_capacities_settings")
+        task_assignment_capacities_train = task_assignment_capacities_settings["task_assignment_capacities_train"]
+        task_assignment_capacities_test = task_assignment_capacities_settings["task_assignment_capacities_test"]
+        if not task_assignment_capacities_train:
+            lower_bound = task_assignment_capacities_settings["lower_bound"]
+            upper_bound = task_assignment_capacities_settings["upper_bound"]
+            if upper_bound == "client_capacity":
+                upper_bound = len(x_train)
+            step = task_assignment_capacities_settings["step"]
+            task_assignment_capacities_train = list(range(lower_bound, upper_bound + 1, step))
+        if not task_assignment_capacities_test:
+            lower_bound = task_assignment_capacities_settings["lower_bound"]
+            upper_bound = task_assignment_capacities_settings["upper_bound"]
+            if upper_bound == "client_capacity":
+                upper_bound = len(x_test)
+            step = task_assignment_capacities_settings["step"]
+            task_assignment_capacities_test = list(range(lower_bound, upper_bound + 1, step))
+        return task_assignment_capacities_train, task_assignment_capacities_test
 
     def _load_energy_monitor(self) -> any:
         # Get the necessary attributes.
@@ -223,7 +248,7 @@ class FlowerClientLauncher:
         model_settings = self.get_attribute("_model_settings")
         model_provider = model_settings["provider"]
         model_provider_settings = model_settings[model_provider]
-        optimizer_name = model_provider_settings["optimizer"]
+        optimizer_name = model_provider_settings["optimizer_name"]
         optimizer_settings = model_settings[optimizer_name]
         # Initialize the optimizer.
         optimizer = None
@@ -233,7 +258,7 @@ class FlowerClientLauncher:
                 optimizer = SGD(learning_rate=optimizer_settings["learning_rate"],
                                 momentum=optimizer_settings["momentum"],
                                 nesterov=optimizer_settings["nesterov"],
-                                name=optimizer_settings["name"])
+                                name=optimizer_settings["optimizer_name"])
         # Return the optimizer.
         return optimizer
 
@@ -242,7 +267,7 @@ class FlowerClientLauncher:
         model_settings = self.get_attribute("_model_settings")
         model_provider = model_settings["provider"]
         model_provider_settings = model_settings[model_provider]
-        loss_name = model_provider_settings["loss"]
+        loss_name = model_provider_settings["loss_name"]
         loss_settings = model_settings[loss_name]
         # Initialize the loss.
         loss = None
@@ -252,7 +277,7 @@ class FlowerClientLauncher:
                 loss = SparseCategoricalCrossentropy(from_logits=loss_settings["from_logits"],
                                                      ignore_class=loss_settings["ignore_class"],
                                                      reduction=loss_settings["reduction"],
-                                                     name=loss_settings["name"])
+                                                     name=loss_settings["loss_name"])
         # Return the loss function.
         return loss
 
@@ -278,7 +303,7 @@ class FlowerClientLauncher:
         model_settings = self.get_attribute("_model_settings")
         model_provider = model_settings["provider"]
         model_provider_settings = model_settings[model_provider]
-        model_name = model_provider_settings["name"]
+        model_name = model_provider_settings["model_name"]
         model_provider_specific_settings = model_settings[model_name]
         # Initialize the model and its metrics names.
         model = None
@@ -323,6 +348,8 @@ class FlowerClientLauncher:
                                    y_train: NDArray,
                                    x_test: NDArray,
                                    y_test: NDArray,
+                                   task_assignment_capacities_train: list,
+                                   task_assignment_capacities_test: list,
                                    energy_monitor: any,
                                    daemon_settings: dict,
                                    affinity_settings: dict,
@@ -335,6 +362,8 @@ class FlowerClientLauncher:
                                           y_train=y_train,
                                           x_test=x_test,
                                           y_test=y_test,
+                                          task_assignment_capacities_train=task_assignment_capacities_train,
+                                          task_assignment_capacities_test=task_assignment_capacities_test,
                                           energy_monitor=energy_monitor,
                                           daemon_settings=daemon_settings,
                                           affinity_settings=affinity_settings,
@@ -368,6 +397,9 @@ class FlowerClientLauncher:
         max_message_length_in_bytes = self._get_max_message_length_in_bytes()
         # Load the dataset (x_train, y_train, x_test, and y_test).
         x_train, y_train, x_test, y_test = self._load_dataset()
+        # Get the task assignment capacities.
+        task_assignment_capacities_train, task_assignment_capacities_test \
+            = self._get_task_assignment_capacities(x_train, x_test)
         # Load the energy monitor.
         energy_monitor = self._load_energy_monitor()
         # Instantiate the optimizer.
@@ -389,8 +421,10 @@ class FlowerClientLauncher:
             energy_monitor.start()
             # Instantiate the flower client.
             flower_client = self._instantiate_flower_client(client_id, model, metrics_names, x_train, y_train,
-                                                            x_test, y_test, powerjoular_unique_attributes,
-                                                            daemon_settings, affinity_settings, logger)
+                                                            x_test, y_test, task_assignment_capacities_train,
+                                                            task_assignment_capacities_test,
+                                                            powerjoular_unique_attributes, daemon_settings,
+                                                            affinity_settings, logger)
             # Start the flower client.
             self._start_flower_client(flower_server_address,
                                       flower_client,
@@ -402,8 +436,9 @@ class FlowerClientLauncher:
         else:
             # Instantiate the flower client.
             flower_client = self._instantiate_flower_client(client_id, model, metrics_names, x_train, y_train,
-                                                            x_test, y_test, energy_monitor, daemon_settings,
-                                                            affinity_settings, logger)
+                                                            x_test, y_test, task_assignment_capacities_train,
+                                                            task_assignment_capacities_test, energy_monitor,
+                                                            daemon_settings, affinity_settings, logger)
             # Start the flower client.
             self._start_flower_client(flower_server_address,
                                       flower_client,
