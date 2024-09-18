@@ -31,10 +31,7 @@ class FlowerServer(Strategy):
                  *,
                  id_: int,
                  fl_settings: dict,
-                 client_selection_settings: dict,
-                 model_aggregation_settings: dict,
-                 metrics_aggregator: str,
-                 history_checker: str,
+                 server_strategy_settings: dict,
                  fit_config: dict,
                  evaluate_config: dict,
                  initial_parameters: Optional[NDArrays],
@@ -43,10 +40,7 @@ class FlowerServer(Strategy):
         super().__init__()
         self._server_id = id_
         self._fl_settings = fl_settings
-        self._client_selection_settings = client_selection_settings
-        self._model_aggregation_settings = model_aggregation_settings
-        self._metrics_aggregator = metrics_aggregator
-        self._history_checker = history_checker
+        self._server_strategy_settings = server_strategy_settings
         self._fit_config = fit_config
         self._evaluate_config = evaluate_config
         self._initial_parameters = initial_parameters
@@ -155,7 +149,8 @@ class FlowerServer(Strategy):
         selected_clients_history = self.get_attribute(selected_clients_history_attribute)
         comm_round_key = "comm_round_{0}".format(comm_round)
         if comm_round_key not in selected_clients_history:
-            client_selection_settings = self.get_attribute("_client_selection_settings")
+            server_strategy_settings = self.get_attribute("_server_strategy_settings")
+            client_selection_settings = server_strategy_settings["client_selection"]
             client_selection_for_phase_settings = client_selection_settings[client_selection_for_phase_settings_key]
             client_selector = client_selection_for_phase_settings[client_selector_key]
             available_clients_ids = list(available_clients_map.keys())
@@ -222,7 +217,8 @@ class FlowerServer(Strategy):
                 expected_energy_consumption = selection["expected_energy_consumption"]
             if "expected_accuracy" in selection:
                 expected_accuracy = selection["expected_accuracy"]
-            client_selection_settings = self.get_attribute("_client_selection_settings")
+            server_strategy_settings = self.get_attribute("_server_strategy_settings")
+            client_selection_settings = server_strategy_settings["client_selection"]
             client_selection_for_phase_settings = client_selection_settings[client_selection_for_phase_settings_key]
             client_selector = client_selection_for_phase_settings[client_selector_key]
             comm_round_values = {"client_selector": client_selector,
@@ -477,12 +473,8 @@ class FlowerServer(Strategy):
         fl_settings = self.get_attribute("_fl_settings")
         num_rounds = fl_settings["num_rounds"]
         enable_training = fl_settings["enable_training"]
-        enable_client_selection_while_training = fl_settings["enable_client_selection_while_training"]
-        num_fit_tasks = fl_settings["num_fit_tasks"]
-        client_selection_settings = self.get_attribute("_client_selection_settings")
-        client_selection_for_training_settings = client_selection_settings["client_selection_for_training_settings"]
-        client_selector_for_training = client_selection_for_training_settings["client_selector_for_training"]
-        history_checker = self.get_attribute("_history_checker")
+        server_strategy_settings = self.get_attribute("_server_strategy_settings")
+        server_strategy = server_strategy_settings["strategy"]
         individual_fit_metrics_history = self.get_attribute("_individual_fit_metrics_history")
         logger = self.get_attribute("_logger")
         # Wait for the initial clients to connect before starting the first round.
@@ -498,43 +490,54 @@ class FlowerServer(Strategy):
         available_fit_clients_map = self._map_available_clients(client_manager)
         # Set the phase value.
         phase = "train"
-        # Set the list of rounds in which the training clients will be selected.
-        # If the client selection can be executed while clients are training...
-        if enable_client_selection_while_training:
-            if server_round == 1:
-                # Select clients, prior to the training, only for the current round.
-                rounds_to_select_clients = [server_round]
-            elif server_round == 2:
-                # Select clients, prior to the training, for the current round and,
-                # select clients, in advance, for its immediate next round, if applicable.
-                rounds_to_select_clients = [server_round]
-                immediate_next_round = server_round + 1
-                if immediate_next_round <= num_rounds:
-                    rounds_to_select_clients.append(immediate_next_round)
-            else:
-                # Select clients, in advance, only for the immediate next round, if applicable.
-                rounds_to_select_clients = []
-                immediate_next_round = server_round + 1
-                if immediate_next_round <= num_rounds:
-                    rounds_to_select_clients.append(immediate_next_round)
-        else:
-            # If not, select clients, prior to the training, only for the current round.
-            rounds_to_select_clients = [server_round]
-        # Select clients for training (non-blocking daemon thread).
-        target = self._select_clients
-        for round_to_select_clients in rounds_to_select_clients:
-            args = (round_to_select_clients,
-                    parameters,
-                    available_fit_clients_map,
-                    phase,
-                    num_fit_tasks,
-                    history_checker,
-                    individual_fit_metrics_history,
-                    client_selector_for_training,
-                    client_selection_for_training_settings,
-                    logger)
-            client_selection_thread = Thread(target=target, args=args, daemon=True)
-            client_selection_thread.start()
+        match server_strategy:
+            case "FL-CS-Real":
+                # Get the necessary attributes.
+                num_fit_tasks = server_strategy_settings["num_fit_tasks"]
+                client_selection_settings = server_strategy_settings["client_selection"]
+                client_selection_for_training_settings \
+                    = client_selection_settings["client_selection_for_training_settings"]
+                client_selector_for_training = client_selection_for_training_settings["client_selector_for_training"]
+                enable_client_selection_while_training \
+                    = client_selection_for_training_settings["enable_client_selection_while_training"]
+                history_checker = server_strategy_settings["history_checker"]
+                # Determine the list of rounds in which the training clients will be selected.
+                # If the client selection can be executed while clients are training...
+                if enable_client_selection_while_training:
+                    if server_round == 1:
+                        # Select clients, prior to the training, only for the current round.
+                        rounds_to_select_clients = [server_round]
+                    elif server_round == 2:
+                        # Select clients, prior to the training, for the current round and,
+                        # select clients, in advance, for its immediate next round, if applicable.
+                        rounds_to_select_clients = [server_round]
+                        immediate_next_round = server_round + 1
+                        if immediate_next_round <= num_rounds:
+                            rounds_to_select_clients.append(immediate_next_round)
+                    else:
+                        # Select clients, in advance, only for the immediate next round, if applicable.
+                        rounds_to_select_clients = []
+                        immediate_next_round = server_round + 1
+                        if immediate_next_round <= num_rounds:
+                            rounds_to_select_clients.append(immediate_next_round)
+                else:
+                    # If not, select clients, prior to the training, only for the current round.
+                    rounds_to_select_clients = [server_round]
+                # Select clients for training (non-blocking daemon thread).
+                target = self._select_clients
+                for round_to_select_clients in rounds_to_select_clients:
+                    args = (round_to_select_clients,
+                            parameters,
+                            available_fit_clients_map,
+                            phase,
+                            num_fit_tasks,
+                            history_checker,
+                            individual_fit_metrics_history,
+                            client_selector_for_training,
+                            client_selection_for_training_settings,
+                            logger)
+                    client_selection_thread = Thread(target=target, args=args, daemon=True)
+                    client_selection_thread.start()
         # Wait for the selection of training clients for the current round.
         while True:
             fit_pairs_repository = self.get_attribute("_fit_pairs_repository")
@@ -637,7 +640,8 @@ class FlowerServer(Strategy):
         individual_fit_metrics_history = self.get_attribute("_individual_fit_metrics_history")
         comm_round_key = "comm_round_{0}".format(comm_round)
         if comm_round_key not in individual_fit_metrics_history:
-            client_selection_settings = self.get_attribute("_client_selection_settings")
+            server_strategy_settings = self.get_attribute("_server_strategy_settings")
+            client_selection_settings = server_strategy_settings["client_selection"]
             client_selection_for_training_settings = client_selection_settings["client_selection_for_training_settings"]
             client_selector_for_training = client_selection_for_training_settings["client_selector_for_training"]
             selected_fit_clients_history = self.get_attribute("_selected_fit_clients_history")
@@ -679,7 +683,8 @@ class FlowerServer(Strategy):
         aggregated_fit_metrics_history = self.get_attribute("_aggregated_fit_metrics_history")
         comm_round_key = "comm_round_{0}".format(comm_round)
         if comm_round_key not in aggregated_fit_metrics_history:
-            client_selection_settings = self.get_attribute("_client_selection_settings")
+            server_strategy_settings = self.get_attribute("_server_strategy_settings")
+            client_selection_settings = server_strategy_settings["client_selection"]
             client_selection_for_training_settings = client_selection_settings["client_selection_for_training_settings"]
             client_selector_for_training = client_selection_for_training_settings["client_selector_for_training"]
             selected_fit_clients_history = self.get_attribute("_selected_fit_clients_history")
@@ -700,7 +705,8 @@ class FlowerServer(Strategy):
         """Aggregates the training metrics (fit_metrics).
         \nCalled by Flower after each training phase."""
         # Get the necessary attributes.
-        metrics_aggregator = self.get_attribute("_metrics_aggregator")
+        server_strategy_settings = self.get_attribute("_server_strategy_settings")
+        metrics_aggregator = server_strategy_settings["metrics_aggregator"]
         server_id = self.get_attribute("_server_id")
         logger = self.get_attribute("_logger")
         available_clients_map = self.get_attribute("_available_clients_map")
@@ -756,7 +762,8 @@ class FlowerServer(Strategy):
         # Get the necessary attributes.
         fl_settings = self.get_attribute("_fl_settings")
         accept_clients_failures = fl_settings["accept_clients_failures"]
-        model_aggregation_settings = self.get_attribute("_model_aggregation_settings")
+        server_strategy_settings = self.get_attribute("_server_strategy_settings")
+        model_aggregation_settings = server_strategy_settings["model_aggregation"]
         model_aggregator = model_aggregation_settings["model_aggregator"]
         # Do not aggregate if there are no results or if there are clients' failures and failures are not accepted.
         if not results or (failures and not accept_clients_failures):
@@ -784,12 +791,8 @@ class FlowerServer(Strategy):
         fl_settings = self.get_attribute("_fl_settings")
         num_rounds = fl_settings["num_rounds"]
         enable_testing = fl_settings["enable_testing"]
-        enable_client_selection_while_testing = fl_settings["enable_client_selection_while_testing"]
-        num_evaluate_tasks = fl_settings["num_evaluate_tasks"]
-        client_selection_settings = self.get_attribute("_client_selection_settings")
-        client_selection_for_testing_settings = client_selection_settings["client_selection_for_testing_settings"]
-        client_selector_for_testing = client_selection_for_testing_settings["client_selector_for_testing"]
-        history_checker = self.get_attribute("_history_checker")
+        server_strategy_settings = self.get_attribute("_server_strategy_settings")
+        server_strategy = server_strategy_settings["strategy"]
         individual_evaluate_metrics_history = self.get_attribute("_individual_evaluate_metrics_history")
         logger = self.get_attribute("_logger")
         # Do not configure federated testing if it is not enabled.
@@ -799,43 +802,54 @@ class FlowerServer(Strategy):
         available_evaluate_clients_map = self._map_available_clients(client_manager)
         # Set the phase value.
         phase = "test"
-        # Set the list of rounds in which the testing clients will be selected.
-        # If the client selection can be executed while clients are testing...
-        if enable_client_selection_while_testing:
-            if server_round == 1:
-                # Select clients, prior to the testing, only for the current round.
-                rounds_to_select_clients = [server_round]
-            elif server_round == 2:
-                # Select clients, prior to the testing, for the current round and,
-                # select clients, in advance, for its immediate next round, if applicable.
-                rounds_to_select_clients = [server_round]
-                immediate_next_round = server_round + 1
-                if immediate_next_round <= num_rounds:
-                    rounds_to_select_clients.append(immediate_next_round)
-            else:
-                # Select clients, in advance, only for the immediate next round, if applicable.
-                rounds_to_select_clients = []
-                immediate_next_round = server_round + 1
-                if immediate_next_round <= num_rounds:
-                    rounds_to_select_clients.append(immediate_next_round)
-        else:
-            # If not, select clients, prior to the testing, only for the current round.
-            rounds_to_select_clients = [server_round]
-        # Select clients for testing (non-blocking daemon thread).
-        target = self._select_clients
-        for round_to_select_clients in rounds_to_select_clients:
-            args = (round_to_select_clients,
-                    parameters,
-                    available_evaluate_clients_map,
-                    phase,
-                    num_evaluate_tasks,
-                    history_checker,
-                    individual_evaluate_metrics_history,
-                    client_selector_for_testing,
-                    client_selection_for_testing_settings,
-                    logger)
-            client_selection_thread = Thread(target=target, args=args, daemon=True)
-            client_selection_thread.start()
+        match server_strategy:
+            case "FL-CS-Real":
+                # Get the necessary attributes.
+                num_evaluate_tasks = server_strategy_settings["num_evaluate_tasks"]
+                client_selection_settings = server_strategy_settings["client_selection"]
+                client_selection_for_testing_settings \
+                    = client_selection_settings["client_selection_for_testing_settings"]
+                client_selector_for_testing = client_selection_for_testing_settings["client_selector_for_testing"]
+                enable_client_selection_while_testing \
+                    = client_selection_for_testing_settings["enable_client_selection_while_testing"]
+                history_checker = server_strategy_settings["history_checker"]
+                # Determine the list of rounds in which the testing clients will be selected.
+                # If the client selection can be executed while clients are testing...
+                if enable_client_selection_while_testing:
+                    if server_round == 1:
+                        # Select clients, prior to the testing, only for the current round.
+                        rounds_to_select_clients = [server_round]
+                    elif server_round == 2:
+                        # Select clients, prior to the testing, for the current round and,
+                        # select clients, in advance, for its immediate next round, if applicable.
+                        rounds_to_select_clients = [server_round]
+                        immediate_next_round = server_round + 1
+                        if immediate_next_round <= num_rounds:
+                            rounds_to_select_clients.append(immediate_next_round)
+                    else:
+                        # Select clients, in advance, only for the immediate next round, if applicable.
+                        rounds_to_select_clients = []
+                        immediate_next_round = server_round + 1
+                        if immediate_next_round <= num_rounds:
+                            rounds_to_select_clients.append(immediate_next_round)
+                else:
+                    # If not, select clients, prior to the testing, only for the current round.
+                    rounds_to_select_clients = [server_round]
+                # Select clients for testing (non-blocking daemon thread).
+                target = self._select_clients
+                for round_to_select_clients in rounds_to_select_clients:
+                    args = (round_to_select_clients,
+                            parameters,
+                            available_evaluate_clients_map,
+                            phase,
+                            num_evaluate_tasks,
+                            history_checker,
+                            individual_evaluate_metrics_history,
+                            client_selector_for_testing,
+                            client_selection_for_testing_settings,
+                            logger)
+                    client_selection_thread = Thread(target=target, args=args, daemon=True)
+                    client_selection_thread.start()
         # Wait for the selection of testing clients for the current round.
         while True:
             evaluate_pairs_repository = self.get_attribute("_evaluate_pairs_repository")
@@ -856,7 +870,8 @@ class FlowerServer(Strategy):
         individual_evaluate_metrics_history = self.get_attribute("_individual_evaluate_metrics_history")
         comm_round_key = "comm_round_{0}".format(comm_round)
         if comm_round_key not in individual_evaluate_metrics_history:
-            client_selection_settings = self.get_attribute("_client_selection_settings")
+            server_strategy_settings = self.get_attribute("_server_strategy_settings")
+            client_selection_settings = server_strategy_settings["client_selection"]
             client_selection_for_testing_settings = client_selection_settings["client_selection_for_testing_settings"]
             client_selector_for_testing = client_selection_for_testing_settings["client_selector_for_testing"]
             selected_evaluate_clients_history = self.get_attribute("_selected_evaluate_clients_history")
@@ -888,7 +903,8 @@ class FlowerServer(Strategy):
         aggregated_evaluate_metrics_history = self.get_attribute("_aggregated_evaluate_metrics_history")
         comm_round_key = "comm_round_{0}".format(comm_round)
         if comm_round_key not in aggregated_evaluate_metrics_history:
-            client_selection_settings = self.get_attribute("_client_selection_settings")
+            server_strategy_settings = self.get_attribute("_server_strategy_settings")
+            client_selection_settings = server_strategy_settings["client_selection"]
             client_selection_for_testing_settings = client_selection_settings["client_selection_for_testing_settings"]
             client_selector_for_testing = client_selection_for_testing_settings["client_selector_for_testing"]
             selected_evaluate_clients_history = self.get_attribute("_selected_evaluate_clients_history")
@@ -909,7 +925,8 @@ class FlowerServer(Strategy):
         """Aggregates the testing metrics (evaluate_metrics).
         \nCalled by Flower after each testing phase."""
         # Get the necessary attributes.
-        metrics_aggregator = self.get_attribute("_metrics_aggregator")
+        server_strategy_settings = self.get_attribute("_server_strategy_settings")
+        metrics_aggregator = server_strategy_settings["metrics_aggregator"]
         server_id = self.get_attribute("_server_id")
         logger = self.get_attribute("_logger")
         available_clients_map = self.get_attribute("_available_clients_map")
@@ -965,7 +982,8 @@ class FlowerServer(Strategy):
         # Get the necessary attributes.
         fl_settings = self.get_attribute("_fl_settings")
         accept_clients_failures = fl_settings["accept_clients_failures"]
-        model_aggregation_settings = self.get_attribute("_model_aggregation_settings")
+        server_strategy_settings = self.get_attribute("_server_strategy_settings")
+        model_aggregation_settings = server_strategy_settings["model_aggregation"]
         model_aggregator = model_aggregation_settings["model_aggregator"]
         # Do not aggregate if there are no results or if there are clients' failures and failures are not accepted.
         if not results or (failures and not accept_clients_failures):

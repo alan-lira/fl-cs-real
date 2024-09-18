@@ -66,6 +66,11 @@ class FlowerServerLauncher:
                                                                       client_selection_for_training_section)
         client_selection_for_training_settings.update({"client_selector_for_training":
                                                       client_selector_for_training})
+        if "enable_client_selection_while_training" in server_strategy_implementation_settings:
+            enable_client_selection_while_training \
+                = server_strategy_implementation_settings["enable_client_selection_while_training"]
+            client_selection_for_training_settings.update({"enable_client_selection_while_training":
+                                                           enable_client_selection_while_training})
         client_selection_settings.update({"client_selection_for_training_settings":
                                           client_selection_for_training_settings})
         client_selector_for_testing = server_strategy_implementation_settings["client_selector_for_testing"]
@@ -74,6 +79,11 @@ class FlowerServerLauncher:
                                                                      client_selection_for_testing_section)
         client_selection_for_testing_settings.update({"client_selector_for_testing":
                                                      client_selector_for_testing})
+        if "enable_client_selection_while_testing" in server_strategy_implementation_settings:
+            enable_client_selection_while_testing \
+                = server_strategy_implementation_settings["enable_client_selection_while_testing"]
+            client_selection_for_testing_settings.update({"enable_client_selection_while_testing":
+                                                         enable_client_selection_while_testing})
         client_selection_settings.update({"client_selection_for_testing_settings":
                                          client_selection_for_testing_settings})
         model_aggregator = server_strategy_implementation_settings["model_aggregator"]
@@ -84,6 +94,12 @@ class FlowerServerLauncher:
         history_checker = server_strategy_implementation_settings["history_checker"]
         server_strategy_settings = {}
         server_strategy_settings.update({"strategy": server_strategy})
+        if "num_fit_tasks" in server_strategy_implementation_settings:
+            num_fit_tasks = server_strategy_implementation_settings["num_fit_tasks"]
+            server_strategy_settings.update({"num_fit_tasks": num_fit_tasks})
+        if "num_evaluate_tasks" in server_strategy_implementation_settings:
+            num_evaluate_tasks = server_strategy_implementation_settings["num_evaluate_tasks"]
+            server_strategy_settings.update({"num_evaluate_tasks": num_evaluate_tasks})
         server_strategy_settings.update({"client_selection": client_selection_settings})
         server_strategy_settings.update({"model_aggregation": model_aggregator_settings})
         server_strategy_settings.update({"metrics_aggregator": metrics_aggregator})
@@ -223,20 +239,13 @@ class FlowerServerLauncher:
         fl_settings = self.get_attribute("_fl_settings")
         server_strategy_settings = self.get_attribute("_server_strategy_settings")
         strategy = server_strategy_settings["strategy"]
-        client_selection_settings = server_strategy_settings["client_selection"]
-        model_aggregation_settings = server_strategy_settings["model_aggregation"]
-        metrics_aggregator = server_strategy_settings["metrics_aggregator"]
-        history_checker = server_strategy_settings["history_checker"]
         # Initialize the server strategy.
         server_strategy = None
         if strategy == "FL-CS-Real":
             # Instantiate the FL-CS-Real server strategy.
             server_strategy = FlowerServer(id_=server_id,
                                            fl_settings=fl_settings,
-                                           client_selection_settings=client_selection_settings,
-                                           model_aggregation_settings=model_aggregation_settings,
-                                           metrics_aggregator=metrics_aggregator,
-                                           history_checker=history_checker,
+                                           server_strategy_settings=server_strategy_settings,
                                            fit_config=fit_config,
                                            evaluate_config=evaluate_config,
                                            initial_parameters=initial_parameters,
