@@ -18,7 +18,8 @@ class PowerJoularEnergyMonitor:
                  process_monitoring: bool,
                  unique_monitor: bool,
                  report_consumptions_per_timestamp: bool,
-                 remove_energy_consumptions_files: bool) -> None:
+                 remove_energy_consumptions_files: bool,
+                 energy_consumptions_file: Path) -> None:
         # Initialize the attributes.
         self._env_variables = env_variables
         self._monitoring_domains = monitoring_domains
@@ -27,8 +28,8 @@ class PowerJoularEnergyMonitor:
         self._unique_monitor = unique_monitor
         self._report_consumptions_per_timestamp = report_consumptions_per_timestamp
         self._remove_energy_consumptions_files = remove_energy_consumptions_files
+        self._energy_consumptions_file = energy_consumptions_file
         self._to_monitor_pid = None
-        self._energy_consumptions_file = None
         self._powerjoular_monitoring_process = None
 
     def _set_attribute(self,
@@ -61,12 +62,13 @@ class PowerJoularEnergyMonitor:
         env_variables = self.get_attribute("_env_variables")
         process_monitoring = self.get_attribute("_process_monitoring")
         unique_monitor = self.get_attribute("_unique_monitor")
+        energy_consumptions_file = Path(self.get_attribute("_energy_consumptions_file")).absolute()
         powerjoular_process_is_already_running = self._powerjoular_process_is_already_running()
-        # Set the energy consumptions file.
-        energy_consumptions_file = Path("energy_consumptions").absolute()
         if not unique_monitor:
-            # If more than one monitoring process is running in the system, a different name should be used.
-            energy_consumptions_file = Path("energy_consumptions_" + str(randint(1, 9999999))).absolute()
+            # If more than one monitoring process is running in the system,
+            # a different name of the energy consumptions file should be used for each process.
+            energy_consumptions_file_prefix = str(energy_consumptions_file)
+            energy_consumptions_file = Path(energy_consumptions_file_prefix + "_" + str(randint(1, 9999999)))
         self._set_attribute("_energy_consumptions_file", energy_consumptions_file)
         # Verify if more than one monitoring process is allowed to run in the system.
         # If not, verify if the single monitoring process has not been launched yet.
