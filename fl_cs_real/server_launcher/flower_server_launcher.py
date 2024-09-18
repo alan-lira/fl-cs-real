@@ -20,7 +20,6 @@ class FlowerServerLauncher:
         self._logging_settings = None
         self._fl_settings = None
         self._server_strategy_settings = None
-        self._metrics_aggregation_settings = None
         self._ssl_settings = None
         self._grpc_settings = None
         self._fit_config_settings = None
@@ -65,21 +64,6 @@ class FlowerServerLauncher:
         client_selection_for_training_section = "{0} Client Selection Settings".format(client_selector_for_training)
         client_selection_for_training_settings = parse_config_section(config_file,
                                                                       client_selection_for_training_section)
-        if "assignment_capacities_initializer" in client_selection_for_training_settings:
-            assignment_capacities_initializer \
-                = client_selection_for_training_settings["assignment_capacities_initializer"]
-            assignment_capacities_init_settings = {}
-            try:
-                assignment_capacities_init_section = "{0} Settings".format(assignment_capacities_initializer)
-                assignment_capacities_init_settings = parse_config_section(config_file,
-                                                                           assignment_capacities_init_section)
-            except KeyError:
-                pass
-            assignment_capacities_init_settings.update({"assignment_capacities_initializer":
-                                                        assignment_capacities_initializer})
-            client_selection_for_training_settings.update({"assignment_capacities_init_settings":
-                                                          assignment_capacities_init_settings})
-            client_selection_for_training_settings.pop("assignment_capacities_initializer")
         client_selection_for_training_settings.update({"client_selector_for_training":
                                                       client_selector_for_training})
         client_selection_settings.update({"client_selection_for_training_settings":
@@ -88,21 +72,6 @@ class FlowerServerLauncher:
         client_selection_for_testing_section = "{0} Client Selection Settings".format(client_selector_for_testing)
         client_selection_for_testing_settings = parse_config_section(config_file,
                                                                      client_selection_for_testing_section)
-        if "assignment_capacities_initializer" in client_selection_for_testing_settings:
-            assignment_capacities_initializer \
-                = client_selection_for_testing_settings["assignment_capacities_initializer"]
-            assignment_capacities_init_settings = {}
-            try:
-                assignment_capacities_init_section = "{0} Settings".format(assignment_capacities_initializer)
-                assignment_capacities_init_settings = parse_config_section(config_file,
-                                                                           assignment_capacities_init_section)
-            except KeyError:
-                pass
-            assignment_capacities_init_settings.update({"assignment_capacities_initializer":
-                                                        assignment_capacities_initializer})
-            client_selection_for_testing_settings.update({"assignment_capacities_init_settings":
-                                                          assignment_capacities_init_settings})
-            client_selection_for_testing_settings.pop("assignment_capacities_initializer")
         client_selection_for_testing_settings.update({"client_selector_for_testing":
                                                      client_selector_for_testing})
         client_selection_settings.update({"client_selection_for_testing_settings":
@@ -111,15 +80,15 @@ class FlowerServerLauncher:
         model_aggregator_section = "{0} Model Aggregation Settings".format(model_aggregator)
         model_aggregator_settings = parse_config_section(config_file, model_aggregator_section)
         model_aggregator_settings.update({"model_aggregator": model_aggregator})
+        metrics_aggregator = server_strategy_implementation_settings["metrics_aggregator"]
+        history_checker = server_strategy_implementation_settings["history_checker"]
         server_strategy_settings = {}
         server_strategy_settings.update({"strategy": server_strategy})
         server_strategy_settings.update({"client_selection": client_selection_settings})
         server_strategy_settings.update({"model_aggregation": model_aggregator_settings})
+        server_strategy_settings.update({"metrics_aggregator": metrics_aggregator})
+        server_strategy_settings.update({"history_checker": history_checker})
         self._set_attribute("_server_strategy_settings", server_strategy_settings)
-        # Parse and set the metrics aggregation settings.
-        metrics_aggregation_section = "Metrics Aggregation Settings"
-        metrics_aggregation_settings = parse_config_section(config_file, metrics_aggregation_section)
-        self._set_attribute("_metrics_aggregation_settings", metrics_aggregation_settings)
         # Parse and set the ssl settings.
         ssl_section = "SSL Settings"
         ssl_settings = parse_config_section(config_file, ssl_section)
@@ -256,7 +225,8 @@ class FlowerServerLauncher:
         strategy = server_strategy_settings["strategy"]
         client_selection_settings = server_strategy_settings["client_selection"]
         model_aggregation_settings = server_strategy_settings["model_aggregation"]
-        metrics_aggregation_settings = self.get_attribute("_metrics_aggregation_settings")
+        metrics_aggregator = server_strategy_settings["metrics_aggregator"]
+        history_checker = server_strategy_settings["history_checker"]
         # Initialize the server strategy.
         server_strategy = None
         if strategy == "FL-CS-Real":
@@ -265,7 +235,8 @@ class FlowerServerLauncher:
                                            fl_settings=fl_settings,
                                            client_selection_settings=client_selection_settings,
                                            model_aggregation_settings=model_aggregation_settings,
-                                           metrics_aggregation_settings=metrics_aggregation_settings,
+                                           metrics_aggregator=metrics_aggregator,
+                                           history_checker=history_checker,
                                            fit_config=fit_config,
                                            evaluate_config=evaluate_config,
                                            initial_parameters=initial_parameters,

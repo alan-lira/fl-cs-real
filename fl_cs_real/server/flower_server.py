@@ -33,7 +33,8 @@ class FlowerServer(Strategy):
                  fl_settings: dict,
                  client_selection_settings: dict,
                  model_aggregation_settings: dict,
-                 metrics_aggregation_settings: dict,
+                 metrics_aggregator: str,
+                 history_checker: str,
                  fit_config: dict,
                  evaluate_config: dict,
                  initial_parameters: Optional[NDArrays],
@@ -44,7 +45,8 @@ class FlowerServer(Strategy):
         self._fl_settings = fl_settings
         self._client_selection_settings = client_selection_settings
         self._model_aggregation_settings = model_aggregation_settings
-        self._metrics_aggregation_settings = metrics_aggregation_settings
+        self._metrics_aggregator = metrics_aggregator
+        self._history_checker = history_checker
         self._fit_config = fit_config
         self._evaluate_config = evaluate_config
         self._initial_parameters = initial_parameters
@@ -113,8 +115,12 @@ class FlowerServer(Strategy):
                 client_prompted.properties[client_num_testing_examples_available_property]
             client_task_assignment_capacities_train = \
                 client_prompted.properties[client_task_assignment_capacities_train_property]
+            client_task_assignment_capacities_train = client_task_assignment_capacities_train.split("|")
+            client_task_assignment_capacities_train = [int(i) for i in client_task_assignment_capacities_train]
             client_task_assignment_capacities_test = \
                 client_prompted.properties[client_task_assignment_capacities_test_property]
+            client_task_assignment_capacities_test = client_task_assignment_capacities_test.split("|")
+            client_task_assignment_capacities_test = [int(i) for i in client_task_assignment_capacities_test]
             client_id_str = "client_{0}".format(client_id)
             client_map = {"client_proxy": client_proxy,
                           "client_hostname": client_hostname,
@@ -323,6 +329,7 @@ class FlowerServer(Strategy):
                         available_clients_map: dict,
                         phase: str,
                         num_tasks_to_schedule: int,
+                        history_checker: str,
                         individual_metrics_history: dict,
                         client_selector: str,
                         client_selector_settings: dict,
@@ -346,28 +353,21 @@ class FlowerServer(Strategy):
                                                     logger)
         elif client_selector == "MEC":
             # Select clients using the MEC algorithm.
-            history_checker = client_selector_settings["history_checker"]
-            assignment_capacities_init_settings = client_selector_settings["assignment_capacities_init_settings"]
             selection = select_clients_using_mec(comm_round,
                                                  phase,
                                                  num_tasks_to_schedule,
                                                  available_clients_map,
                                                  individual_metrics_history,
                                                  history_checker,
-                                                 assignment_capacities_init_settings,
                                                  logger)
         elif client_selector == "ECMTC":
             # Select clients using the ECMTC algorithm.
-            history_checker = client_selector_settings["history_checker"]
-            assignment_capacities_init_settings = client_selector_settings["assignment_capacities_init_settings"]
             deadline_in_seconds = 0
             if phase == "train":
                 deadline_in_seconds = client_selector_settings["fit_deadline_in_seconds"]
             elif phase == "test":
                 deadline_in_seconds = client_selector_settings["evaluate_deadline_in_seconds"]
             candidate_clients_fraction = client_selector_settings["candidate_clients_fraction"]
-            complementary_clients_fraction = client_selector_settings["complementary_clients_fraction"]
-            complementary_tasks_fraction = client_selector_settings["complementary_tasks_fraction"]
             selection = select_clients_using_ecmtc(comm_round,
                                                    phase,
                                                    num_tasks_to_schedule,
@@ -375,45 +375,30 @@ class FlowerServer(Strategy):
                                                    available_clients_map,
                                                    individual_metrics_history,
                                                    history_checker,
-                                                   assignment_capacities_init_settings,
                                                    candidate_clients_fraction,
-                                                   complementary_clients_fraction,
-                                                   complementary_tasks_fraction,
                                                    logger)
         elif client_selector == "OLAR":
             # Select clients using the OLAR adapted algorithm.
-            history_checker = client_selector_settings["history_checker"]
-            assignment_capacities_init_settings = client_selector_settings["assignment_capacities_init_settings"]
             selection = select_clients_using_olar_adapted(comm_round,
                                                           phase,
                                                           num_tasks_to_schedule,
                                                           available_clients_map,
                                                           individual_metrics_history,
                                                           history_checker,
-                                                          assignment_capacities_init_settings,
                                                           logger)
         elif client_selector == "MC2MKP":
             # Select clients using the (MC)²MKP adapted algorithm.
-            history_checker = client_selector_settings["history_checker"]
-            assignment_capacities_init_settings = client_selector_settings["assignment_capacities_init_settings"]
             candidate_clients_fraction = client_selector_settings["candidate_clients_fraction"]
-            complementary_clients_fraction = client_selector_settings["complementary_clients_fraction"]
-            complementary_tasks_fraction = client_selector_settings["complementary_tasks_fraction"]
             selection = select_clients_using_mc2mkp_adapted(comm_round,
                                                             phase,
                                                             num_tasks_to_schedule,
                                                             available_clients_map,
                                                             individual_metrics_history,
                                                             history_checker,
-                                                            assignment_capacities_init_settings,
                                                             candidate_clients_fraction,
-                                                            complementary_clients_fraction,
-                                                            complementary_tasks_fraction,
                                                             logger)
         elif client_selector == "ELASTIC":
             # Select clients using the ELASTIC adapted algorithm.
-            history_checker = client_selector_settings["history_checker"]
-            assignment_capacities_init_settings = client_selector_settings["assignment_capacities_init_settings"]
             deadline_in_seconds = 0
             if phase == "train":
                 deadline_in_seconds = client_selector_settings["fit_deadline_in_seconds"]
@@ -428,12 +413,9 @@ class FlowerServer(Strategy):
                                                              available_clients_map,
                                                              individual_metrics_history,
                                                              history_checker,
-                                                             assignment_capacities_init_settings,
                                                              logger)
         elif client_selector == "FedAECS":
             # Select clients using the FedAECS adapted algorithm.
-            history_checker = client_selector_settings["history_checker"]
-            assignment_capacities_init_settings = client_selector_settings["assignment_capacities_init_settings"]
             deadline_in_seconds = 0
             if phase == "train":
                 deadline_in_seconds = client_selector_settings["fit_deadline_in_seconds"]
@@ -452,7 +434,6 @@ class FlowerServer(Strategy):
                                                              available_clients_map,
                                                              individual_metrics_history,
                                                              history_checker,
-                                                             assignment_capacities_init_settings,
                                                              logger)
         # Get the clients' selection duration.
         selection_duration = perf_counter() - selection_duration_start
@@ -501,6 +482,7 @@ class FlowerServer(Strategy):
         client_selection_settings = self.get_attribute("_client_selection_settings")
         client_selection_for_training_settings = client_selection_settings["client_selection_for_training_settings"]
         client_selector_for_training = client_selection_for_training_settings["client_selector_for_training"]
+        history_checker = self.get_attribute("_history_checker")
         individual_fit_metrics_history = self.get_attribute("_individual_fit_metrics_history")
         logger = self.get_attribute("_logger")
         # Wait for the initial clients to connect before starting the first round.
@@ -546,6 +528,7 @@ class FlowerServer(Strategy):
                     available_fit_clients_map,
                     phase,
                     num_fit_tasks,
+                    history_checker,
                     individual_fit_metrics_history,
                     client_selector_for_training,
                     client_selection_for_training_settings,
@@ -717,8 +700,7 @@ class FlowerServer(Strategy):
         """Aggregates the training metrics (fit_metrics).
         \nCalled by Flower after each training phase."""
         # Get the necessary attributes.
-        metrics_aggregation_settings = self.get_attribute("_metrics_aggregation_settings")
-        metrics_aggregator = metrics_aggregation_settings["metrics_aggregator"]
+        metrics_aggregator = self.get_attribute("_metrics_aggregator")
         server_id = self.get_attribute("_server_id")
         logger = self.get_attribute("_logger")
         available_clients_map = self.get_attribute("_available_clients_map")
@@ -807,6 +789,7 @@ class FlowerServer(Strategy):
         client_selection_settings = self.get_attribute("_client_selection_settings")
         client_selection_for_testing_settings = client_selection_settings["client_selection_for_testing_settings"]
         client_selector_for_testing = client_selection_for_testing_settings["client_selector_for_testing"]
+        history_checker = self.get_attribute("_history_checker")
         individual_evaluate_metrics_history = self.get_attribute("_individual_evaluate_metrics_history")
         logger = self.get_attribute("_logger")
         # Do not configure federated testing if it is not enabled.
@@ -846,6 +829,7 @@ class FlowerServer(Strategy):
                     available_evaluate_clients_map,
                     phase,
                     num_evaluate_tasks,
+                    history_checker,
                     individual_evaluate_metrics_history,
                     client_selector_for_testing,
                     client_selection_for_testing_settings,
@@ -925,8 +909,7 @@ class FlowerServer(Strategy):
         """Aggregates the testing metrics (evaluate_metrics).
         \nCalled by Flower after each testing phase."""
         # Get the necessary attributes.
-        metrics_aggregation_settings = self.get_attribute("_metrics_aggregation_settings")
-        metrics_aggregator = metrics_aggregation_settings["metrics_aggregator"]
+        metrics_aggregator = self.get_attribute("_metrics_aggregator")
         server_id = self.get_attribute("_server_id")
         logger = self.get_attribute("_logger")
         available_clients_map = self.get_attribute("_available_clients_map")

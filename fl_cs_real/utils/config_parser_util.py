@@ -411,26 +411,27 @@ def parse_config_section(config_file: Path,
     cp = ConfigParser()
     cp.optionxform = str
     cp.read(filenames=config_file, encoding="utf-8")
-    config_section = {key: value for key, value in cp[section_name].items()}
     config_section_parsed = {}
-    for key, value in config_section.items():
-        value = " ".join(value.splitlines()).replace("\'", "").replace("\"", "")
-        if is_representation_of_none_type(value):
-            config_section_parsed.update({key: cast_to_none()})
-        elif is_representation_of_bool_type(value):
-            config_section_parsed.update({key: cast_to_bool(value)})
-        elif is_representation_of_int_type(value):
-            config_section_parsed.update({key: cast_to_int(value)})
-        elif is_representation_of_float_type(value):
-            config_section_parsed.update({key: cast_to_float(value)})
-        elif is_representation_of_tuple_type(value):
-            config_section_parsed.update({key: cast_to_tuple(value)})
-        elif is_representation_of_list_type(value):
-            config_section_parsed.update({key: cast_to_list(value)})
-        elif is_representation_of_dict_type(value):
-            config_section_parsed.update({key: cast_to_dict(value)})
-        else:
-            config_section_parsed.update({key: value})
+    if cp.has_section(section_name):
+        config_section = {key: value for key, value in cp[section_name].items()}
+        for key, value in config_section.items():
+            value = " ".join(value.splitlines()).replace("\'", "").replace("\"", "")
+            if is_representation_of_none_type(value):
+                config_section_parsed.update({key: cast_to_none()})
+            elif is_representation_of_bool_type(value):
+                config_section_parsed.update({key: cast_to_bool(value)})
+            elif is_representation_of_int_type(value):
+                config_section_parsed.update({key: cast_to_int(value)})
+            elif is_representation_of_float_type(value):
+                config_section_parsed.update({key: cast_to_float(value)})
+            elif is_representation_of_tuple_type(value):
+                config_section_parsed.update({key: cast_to_tuple(value)})
+            elif is_representation_of_list_type(value):
+                config_section_parsed.update({key: cast_to_list(value)})
+            elif is_representation_of_dict_type(value):
+                config_section_parsed.update({key: cast_to_dict(value)})
+            else:
+                config_section_parsed.update({key: value})
     return config_section_parsed
 
 
