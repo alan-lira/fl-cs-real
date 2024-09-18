@@ -129,7 +129,7 @@ class PowerJoularEnergyMonitor:
     def remove_energy_consumption_files(self) -> None:
         # Get the necessary attributes.
         to_monitor_pid = self.get_attribute("_to_monitor_pid")
-        energy_consumptions_file = self.get_attribute("_energy_consumptions_file")
+        energy_consumptions_file = Path(self.get_attribute("_energy_consumptions_file")).absolute()
         # Remove the energy consumptions file.
         energy_consumptions_file.unlink(missing_ok=True)
         # Remove the auto-generated energy consumptions .csv file, if any.
@@ -148,10 +148,7 @@ class PowerJoularEnergyMonitor:
         monitoring_domains = self.get_attribute("_monitoring_domains")
         unique_monitor = self.get_attribute("_unique_monitor")
         remove_energy_consumptions_files = self.get_attribute("_remove_energy_consumptions_files")
-        energy_consumptions_file = self.get_attribute("_energy_consumptions_file")
-        # Set the energy consumptions file as the default one, if needed.
-        if not energy_consumptions_file:
-            energy_consumptions_file = Path("energy_consumptions").absolute()
+        energy_consumptions_file = Path(self.get_attribute("_energy_consumptions_file")).absolute()
         # If the energy consumptions file exists...
         if energy_consumptions_file.is_file():
             # Initialize the timestamps_consumptions dict.
@@ -212,10 +209,7 @@ class PowerJoularEnergyMonitor:
         monitoring_domains = self.get_attribute("_monitoring_domains")
         unique_monitor = self.get_attribute("_unique_monitor")
         remove_energy_consumptions_files = self.get_attribute("_remove_energy_consumptions_files")
-        energy_consumptions_file = self.get_attribute("_energy_consumptions_file")
-        # Set the energy consumptions file as the default one, if needed.
-        if not energy_consumptions_file:
-            energy_consumptions_file = Path("energy_consumptions").absolute()
+        energy_consumptions_file = Path(self.get_attribute("_energy_consumptions_file")).absolute()
         # If the energy consumptions file exists...
         if energy_consumptions_file.is_file():
             # Initialize the timestamps_consumptions dict.
