@@ -434,7 +434,9 @@ class FlowerServer(Strategy):
         # Get the clients' selection duration.
         selection_duration = perf_counter() - selection_duration_start
         # Get the selected clients.
-        selected_clients = selection["selected_clients"]
+        selected_clients = []
+        if "selected_clients" in selection:
+            selected_clients = selection["selected_clients"]
         # Update the history of selected clients.
         self._update_selected_clients_history(comm_round,
                                               phase,
