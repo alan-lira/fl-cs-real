@@ -1,7 +1,7 @@
 from logging import Logger
 from random import sample
 
-from fl_cs_real.utils.client_selector_util import schedule_tasks_to_selected_clients, sum_clients_capacities
+from fl_cs_real.utils.client_selector_util import schedule_tasks_to_selected_clients, sum_clients_max_task_capacities
 from fl_cs_real.utils.logger_util import log_message
 
 
@@ -26,16 +26,21 @@ def select_clients_using_random(comm_round: int,
     for client_key in sampled_clients_keys:
         client_map = available_clients_map[client_key]
         client_proxy = client_map["client_proxy"]
-        client_capacity = client_map["client_num_{0}ing_examples_available".format(phase)]
+        client_task_assignment_capacities_phase_key = "client_task_assignment_capacities_{0}".format(phase)
+        client_task_assignment_capacities_phase = client_map[client_task_assignment_capacities_phase_key]
+        client_max_task_capacity = max(client_map["client_task_assignment_capacities_{0}".format(phase)])
         selected_clients.append({"client_proxy": client_proxy,
-                                 "client_capacity": client_capacity,
+                                 client_task_assignment_capacities_phase_key: client_task_assignment_capacities_phase,
+                                 "client_max_task_capacity": client_max_task_capacity,
                                  "client_num_tasks_scheduled": 0})
     # Get the maximum number of tasks that can be scheduled to the selected clients.
-    selected_clients_capacities_sum = sum_clients_capacities(selected_clients, phase)
+    selected_clients_capacities_sum = sum_clients_max_task_capacities(selected_clients, phase)
     # Redefine the number of tasks to schedule, if the selected clients capacities sum is lower.
     num_tasks_to_schedule = min(num_tasks_to_schedule, selected_clients_capacities_sum)
     # Schedule the tasks to the selected clients.
-    schedule_tasks_to_selected_clients(num_tasks_to_schedule, selected_clients)
+    schedule_tasks_to_selected_clients(num_tasks_to_schedule,
+                                       selected_clients,
+                                       phase)
     # Update the selection dictionary with the selected clients for the schedule.
     selection.update({"selected_clients": selected_clients})
     # Log a 'number of clients selected' message.

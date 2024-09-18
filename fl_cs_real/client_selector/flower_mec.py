@@ -4,7 +4,7 @@ from numpy import array, inf
 from fl_cs_real.task_scheduler.mec import mec
 from fl_cs_real.utils.client_selector_util import calculate_linear_interpolation_or_extrapolation, \
     get_metric_mean_value, map_available_participating_clients, schedule_tasks_to_selected_clients, \
-    select_all_available_clients, sum_clients_capacities
+    select_all_available_clients, sum_clients_max_task_capacities
 from fl_cs_real.utils.logger_util import log_message
 
 
@@ -14,7 +14,6 @@ def select_clients_using_mec(comm_round: int,
                              available_clients_map: dict,
                              individual_metrics_history: dict,
                              history_checker: str,
-                             assignment_capacities_init_settings: dict,
                              logger: Logger) -> dict:
     # Log a 'selecting clients' message.
     message = "Selecting {0}ing clients for round {1} using MEC...".format(phase, comm_round)
@@ -27,11 +26,13 @@ def select_clients_using_mec(comm_round: int,
         # If not, this means it is the first communication round. Therefore, all available clients will be selected.
         selected_all_available_clients = select_all_available_clients(available_clients_map, phase)
         # Get the maximum number of tasks that can be scheduled to the selected clients.
-        selected_clients_capacities_sum = sum_clients_capacities(selected_all_available_clients, phase)
+        selected_clients_capacities_sum = sum_clients_max_task_capacities(selected_all_available_clients, phase)
         # Redefine the number of tasks to schedule, if the selected clients capacities sum is lower.
         num_tasks_to_schedule = min(num_tasks_to_schedule, selected_clients_capacities_sum)
         # Schedule the tasks to the selected clients.
-        schedule_tasks_to_selected_clients(num_tasks_to_schedule, selected_all_available_clients)
+        schedule_tasks_to_selected_clients(num_tasks_to_schedule,
+                                           selected_all_available_clients,
+                                           phase)
         # Append the selected clients into the selected clients list.
         selected_clients.extend(selected_all_available_clients)
         # Update the selection dictionary with the selected clients for the schedule.
@@ -53,8 +54,8 @@ def select_clients_using_mec(comm_round: int,
         # based on the number of available clients with entries in the individual metrics history.
         num_resources = len(available_participating_clients_map)
         # Get the maximum number of tasks that can be scheduled to the available participating clients.
-        available_participating_clients_capacities_sum = sum_clients_capacities(available_participating_clients_map,
-                                                                                phase)
+        available_participating_clients_capacities_sum = sum_clients_max_task_capacities(available_participating_clients_map,
+                                                                                         phase)
         # Redefine the number of tasks to schedule, if the available participating clients capacities sum is lower.
         num_tasks_to_schedule = min(num_tasks_to_schedule, available_participating_clients_capacities_sum)
         # Initialize the global lists that will be transformed to array.
@@ -64,9 +65,15 @@ def select_clients_using_mec(comm_round: int,
         energy_costs = []
         # For each available client that has entries in the individual metrics history...
         for client_key, client_values in available_participating_clients_map.items():
+            # Get his assignment capacities list.
+            assignment_capacities_client = client_values["client_task_assignment_capacities_{0}".format(phase)]
             # Initialize his costs lists, based on the number of tasks (examples) to be scheduled.
-            time_costs_client = [inf for _ in range(0, num_tasks_to_schedule+1)]
-            energy_costs_client = [inf for _ in range(0, num_tasks_to_schedule+1)]
+            time_costs_client = [inf for _ in range(0, num_tasks_to_schedule + 1)]
+            energy_costs_client = [inf for _ in range(0, num_tasks_to_schedule + 1)]
+            # Set the costs of zero tasks scheduled, allowing the data point (x=0, y=0) to be used during the
+            # estimation of his costs for the unused task assignment capacities.
+            time_costs_client[0] = 0
+            energy_costs_client[0] = 0
             # Get his individual metrics history entries...
             individual_metrics_history_entries = [list(comm_round_metrics)[0]
                                                   for key, comm_round_metrics in client_values.items()
@@ -115,83 +122,60 @@ def select_clients_using_mec(comm_round: int,
                         energy_cost += energy_nvidia_gpu_cost_mean_value
                 # Update his energy costs list for this number of examples.
                 energy_costs_client[num_examples] = energy_cost
-            # Initialize his assignment capacities list...
-            assignment_capacities_client = None
-            assignment_capacities_initializer = assignment_capacities_init_settings["assignment_capacities_initializer"]
-            if assignment_capacities_initializer == "Only_Previous_Num_Tasks_Assigned_Set":
-                # Based only on his previous round(s) participation, i.e., the set of previous numbers of tasks
-                # assigned to him.
-                previous_num_tasks_assigned = [list(comm_round_metrics)[0]["num_{0}ing_examples_used".format(phase)]
-                                               for key, comm_round_metrics in client_values.items()
-                                               if "comm_round_" in key]
-                previous_num_tasks_assigned_set = list(set(previous_num_tasks_assigned))
-                assignment_capacities_client = previous_num_tasks_assigned_set
-            elif assignment_capacities_initializer == "Custom_Range_Set_Union_Previous_Num_Tasks_Assigned_Set":
-                # Based on a custom range set (ordered in ascending order), which also includes his previous round(s)
-                # participation, i.e., the set of previous numbers of tasks assigned to him.
-                lower_bound = assignment_capacities_init_settings["lower_bound"]
-                upper_bound = assignment_capacities_init_settings["upper_bound"]
-                if upper_bound == "client_capacity":
-                    upper_bound = client_values["client_num_{0}ing_examples_available".format(phase)]
-                step = assignment_capacities_init_settings["step"]
-                custom_range = list(range(lower_bound, min(upper_bound+1, num_tasks_to_schedule+1), step))
-                previous_num_tasks_assigned = [list(comm_round_metrics)[0]["num_{0}ing_examples_used".format(phase)]
-                                               for key, comm_round_metrics in client_values.items()
-                                               if "comm_round_" in key]
-                previous_num_tasks_assigned_set = list(set(previous_num_tasks_assigned))
-                custom_range.extend(previous_num_tasks_assigned_set)
-                custom_range_set = list(set(custom_range))
-                custom_range_set_sorted = sorted(custom_range_set)
-                assignment_capacities_client = custom_range_set_sorted
-                # Set the costs of zero tasks scheduled, allowing the data point (x=0, y=0) to be used during the
-                # estimation of costs for the unknown values belonging to the custom range.
-                time_costs_client[0] = 0
-                energy_costs_client[0] = 0
-                previous_num_tasks_assigned.append(0)
-                # Estimates the costs for the unknown values via linear interpolation/extrapolation.
-                for assignment_capacity in assignment_capacities_client:
-                    if assignment_capacity not in previous_num_tasks_assigned:
-                        # Determine x1 and x2, which are two known previous numbers of tasks assigned.
-                        x1_candidates = [i for i in previous_num_tasks_assigned if i < assignment_capacity]
-                        x2_candidates = [i for i in previous_num_tasks_assigned if i > assignment_capacity]
-                        if x2_candidates:
-                            # Interpolation.
-                            x1 = x1_candidates[-1]
-                            x2 = x2_candidates[0]
-                        else:
-                            # Extrapolation.
-                            x1 = x1_candidates[-2]
-                            x2 = x1_candidates[-1]
+            # Get his set of previous numbers of tasks assigned.
+            previous_num_tasks_assigned = [list(comm_round_metrics)[0]["num_{0}ing_examples_used".format(phase)]
+                                           for key, comm_round_metrics in client_values.items()
+                                           if "comm_round_" in key]
+            previous_num_tasks_assigned.insert(0, 0)
+            # Estimate his costs for the unused task assignment capacities.
+            for assignment_capacity in assignment_capacities_client:
+                if assignment_capacity not in previous_num_tasks_assigned and \
+                   assignment_capacity <= num_tasks_to_schedule:
+                    # Determine x1 and x2, which are two known previous numbers of tasks assigned.
+                    prev_known_assignments = [i for i in previous_num_tasks_assigned if i < assignment_capacity]
+                    next_known_assignments = [i for i in previous_num_tasks_assigned if i > assignment_capacity]
+                    prev_known_assignment = None
+                    if next_known_assignments:
+                        # Interpolation.
+                        prev_known_assignment = prev_known_assignments[-1]
+                        next_known_assignment = next_known_assignments[0]
+                    else:
+                        # Extrapolation.
+                        if len(prev_known_assignments) > 1:
+                            prev_known_assignment = prev_known_assignments[-2]
+                        next_known_assignment = prev_known_assignments[-1]
+                    if prev_known_assignment != next_known_assignment:
                         # Calculate the linear interpolation/extrapolation for the time cost.
-                        y1_time = time_costs_client[x1]
-                        y2_time = time_costs_client[x2]
-                        time_cost_estimation = calculate_linear_interpolation_or_extrapolation(x1,
-                                                                                               x2,
+                        y1_time = time_costs_client[prev_known_assignment]
+                        y2_time = time_costs_client[next_known_assignment]
+                        time_cost_estimation = calculate_linear_interpolation_or_extrapolation(prev_known_assignment,
+                                                                                               next_known_assignment,
                                                                                                y1_time,
                                                                                                y2_time,
                                                                                                assignment_capacity)
                         # Calculate the linear interpolation/extrapolation for the energy cost.
-                        y1_energy = energy_costs_client[x1]
-                        y2_energy = energy_costs_client[x2]
-                        energy_cost_estimation = calculate_linear_interpolation_or_extrapolation(x1,
-                                                                                                 x2,
+                        y1_energy = energy_costs_client[prev_known_assignment]
+                        y2_energy = energy_costs_client[next_known_assignment]
+                        energy_cost_estimation = calculate_linear_interpolation_or_extrapolation(prev_known_assignment,
+                                                                                                 next_known_assignment,
                                                                                                  y1_energy,
                                                                                                  y2_energy,
                                                                                                  assignment_capacity)
                         # Update the cost lists with the estimated values.
                         time_costs_client[assignment_capacity] = time_cost_estimation
                         energy_costs_client[assignment_capacity] = energy_cost_estimation
-            # Filter his costs lists.
+            # Filter his lists.
+            filtered_assignment_capacities_client = []
             filtered_time_costs_client = []
             filtered_energy_costs_client = []
-            for index in range(0, len(time_costs_client)):
-                if time_costs_client[index] != inf:
+            for index in range(0, num_tasks_to_schedule + 1):
+                if time_costs_client[index] != inf and energy_costs_client[index] != inf:
+                    filtered_assignment_capacities_client.append(index)
                     filtered_time_costs_client.append(time_costs_client[index])
-                if energy_costs_client[index] != inf:
                     filtered_energy_costs_client.append(energy_costs_client[index])
             # Append his lists into the global lists.
             client_ids.append(client_key)
-            assignment_capacities.append(assignment_capacities_client)
+            assignment_capacities.append(filtered_assignment_capacities_client)
             time_costs.append(filtered_time_costs_client)
             energy_costs.append(filtered_energy_costs_client)
         # Convert the global lists into Numpy arrays.
@@ -219,13 +203,13 @@ def select_clients_using_mec(comm_round: int,
             client_id_str = client_ids[sel_index]
             client_map = available_participating_clients_map[client_id_str]
             client_proxy = client_map["client_proxy"]
-            client_capacity = client_map["client_num_{0}ing_examples_available".format(phase)]
+            client_max_task_capacity = max(client_map["client_task_assignment_capacities_{0}".format(phase)])
             client_num_tasks_scheduled = int(mec_schedule[sel_index])
             i_index = list(assignment_capacities[sel_index]).index(client_num_tasks_scheduled)
             client_expected_duration = time_costs[sel_index][i_index]
             client_expected_energy_consumption = energy_costs[sel_index][i_index]
             selected_clients.append({"client_proxy": client_proxy,
-                                     "client_capacity": client_capacity,
+                                     "client_max_task_capacity": client_max_task_capacity,
                                      "client_num_tasks_scheduled": client_num_tasks_scheduled,
                                      "client_expected_duration": client_expected_duration,
                                      "client_expected_energy_consumption": client_expected_energy_consumption})

@@ -1,3 +1,5 @@
+from bisect import bisect_left
+from random import sample
 from typing import Union
 
 
@@ -6,79 +8,106 @@ def select_all_available_clients(available_clients_map: dict,
     selected_clients = []
     for client_key, client_values in available_clients_map.items():
         client_proxy = client_values["client_proxy"]
-        client_capacity = client_values["client_num_{0}ing_examples_available".format(phase)]
+        client_task_assignment_capacities_phase_key = "client_task_assignment_capacities_{0}".format(phase)
+        client_task_assignment_capacities_phase = client_values[client_task_assignment_capacities_phase_key]
+        client_max_task_capacity = max(client_values["client_task_assignment_capacities_{0}".format(phase)])
         selected_clients.append({"client_proxy": client_proxy,
-                                 "client_capacity": client_capacity,
+                                 client_task_assignment_capacities_phase_key: client_task_assignment_capacities_phase,
+                                 "client_max_task_capacity": client_max_task_capacity,
                                  "client_num_tasks_scheduled": 0})
     return selected_clients
 
 
-def sum_clients_capacities(clients: Union[list, dict],
-                           phase: str) -> int:
-    clients_capacities_sum = 0
+def sum_clients_max_task_capacities(clients: Union[list, dict],
+                                    phase: str) -> int:
+    clients_max_task_capacities_sum = 0
     if isinstance(clients, list):
-        clients_capacities_sum = sum([client["client_capacity"] for client in clients])
+        clients_max_task_capacities_sum = sum([client["client_max_task_capacity"] for client in clients])
     elif isinstance(clients, dict):
-        clients_capacities_sum = sum([client_values["client_num_{0}ing_examples_available".format(phase)]
-                                      for _, client_values in clients.items()])
-    return clients_capacities_sum
+        clients_max_task_capacities_sum = sum([max(client_values["client_task_assignment_capacities_{0}".format(phase)])
+                                               for _, client_values in clients.items()])
+    return clients_max_task_capacities_sum
+
+
+def take_closest(values: list,
+                 value: int) -> int:
+    value_idx = bisect_left(values, value)
+    if value_idx == 0:
+        return values[0]
+    if value_idx == len(values):
+        return values[-1]
+    prev_idx = values[value_idx - 1]
+    next_idx = values[value_idx]
+    closest = next_idx if (next_idx - value < value - prev_idx) else prev_idx
+    return closest
 
 
 def schedule_tasks_to_selected_clients(num_tasks_to_schedule: int,
-                                       selected_clients: list) -> None:
+                                       selected_clients: list,
+                                       phase: str) -> None:
     # If there are no tasks to schedule or selected clients, end.
     if num_tasks_to_schedule == 0 or not selected_clients:
         return
+    # Schedule initially the tasks equally possible.
+    tasks_per_client = num_tasks_to_schedule // len(selected_clients)
+    # The tasks leftover will be scheduled to the first client.
+    tasks_leftover = num_tasks_to_schedule % len(selected_clients)
+    for client_idx, _ in enumerate(selected_clients):
+        selected_clients[client_idx]["client_num_tasks_scheduled"] += tasks_per_client
+    selected_clients[0]["client_num_tasks_scheduled"] += tasks_leftover
+    # Validate the initial task assignment.
+    for client_idx, _ in enumerate(selected_clients):
+        # Get the current number of tasks scheduled for client i.
+        client_num_tasks_scheduled = selected_clients[client_idx]["client_num_tasks_scheduled"]
+        # Get the task assignment capacities of client i.
+        client_task_assignment_capacities_phase_key = "client_task_assignment_capacities_{0}".format(phase)
+        client_task_assignment_capacities_phase \
+            = selected_clients[client_idx][client_task_assignment_capacities_phase_key]
+        # Set a valid task assignment for client i.
+        selected_clients[client_idx]["client_num_tasks_scheduled"] \
+            = take_closest(client_task_assignment_capacities_phase, client_num_tasks_scheduled)
     # While there are tasks left to schedule...
     while True:
-        # Get the number of tasks already scheduled.
-        num_tasks_scheduled = sum([selected_clients[sel_index]["client_num_tasks_scheduled"]
-                                   for sel_index, _ in enumerate(selected_clients)])
-        # Get the number of remaining tasks to schedule.
-        remaining_tasks_to_schedule = abs(num_tasks_scheduled - num_tasks_to_schedule)
-        # If no more tasks left to schedule, end.
-        if remaining_tasks_to_schedule == 0:
+        # Get the current number of tasks assigned.
+        num_tasks_scheduled = sum([selected_clients[client_idx]["client_num_tasks_scheduled"]
+                                   for client_idx, _ in enumerate(selected_clients)])
+        # Get the client indices that have at least one task scheduled.
+        clients_indices = [client_idx for client_idx in range(0, len(selected_clients))
+                           if selected_clients[client_idx]["client_num_tasks_scheduled"] > 0]
+        if num_tasks_scheduled == num_tasks_to_schedule and len(clients_indices) == len(selected_clients):
+            # All the tasks have been scheduled, and all clients have tasks assigned to them.
             break
-        # Get the clients with remaining capacity.
-        clients_with_remaining_capacity = [selected_clients[index] for index, _ in enumerate(selected_clients)
-                                           if selected_clients[index]["client_capacity"] -
-                                           selected_clients[index]["client_num_tasks_scheduled"] > 0]
-        num_clients_with_remaining_capacity = len(clients_with_remaining_capacity)
-        # If no more clients left with remaining capacity, end.
-        if num_clients_with_remaining_capacity == 0:
-            break
-        # If the number of remaining tasks to scheduler is lesser than the number of clients with remaining capacity...
-        if remaining_tasks_to_schedule < num_clients_with_remaining_capacity:
-            for rem_index, _ in enumerate(clients_with_remaining_capacity):
-                client_proxy = clients_with_remaining_capacity[rem_index]["client_proxy"]
-                client_num_tasks_to_schedule = 1
-                for sel_index, _ in enumerate(selected_clients):
-                    if selected_clients[sel_index]["client_proxy"] == client_proxy:
-                        client_num_tasks_scheduled_before = selected_clients[sel_index]["client_num_tasks_scheduled"]
-                        client_num_tasks_scheduled_then \
-                            = client_num_tasks_scheduled_before + client_num_tasks_to_schedule
-                        selected_clients[sel_index].update({"client_num_tasks_scheduled":
-                                                            client_num_tasks_scheduled_then})
-                remaining_tasks_to_schedule -= client_num_tasks_to_schedule
-                # If no more tasks left to schedule, end.
-                if remaining_tasks_to_schedule == 0:
-                    break
+        if num_tasks_scheduled > num_tasks_to_schedule:
+            # Get the client indices that have at least one task scheduled.
+            clients_indices = [client_idx for client_idx in range(0, len(selected_clients))
+                               if selected_clients[client_idx]["client_num_tasks_scheduled"] > 0]
+            # Randomly sample a client index.
+            client_idx_sampled = sample(clients_indices, 1)[0]
+            # Get the index of the current capacity used.
+            client_task_assignment_capacities \
+                = selected_clients[client_idx_sampled]["client_task_assignment_capacities_{0}".format(phase)]
+            client_current_num_tasks_scheduled = selected_clients[client_idx_sampled]["client_num_tasks_scheduled"]
+            cap_idx = list(client_task_assignment_capacities).index(client_current_num_tasks_scheduled)
+            if cap_idx != 0:
+                # Get the previous valid capacity of the client i.
+                cap_prev = client_task_assignment_capacities[cap_idx - 1]
+                # Set the assignment of client i to its previous valid capacity.
+                selected_clients[client_idx_sampled]["client_num_tasks_scheduled"] = cap_prev
         else:
-            # Otherwise, schedule the remaining tasks as equal as possible to the clients with remaining capacity.
-            num_tasks_per_client = remaining_tasks_to_schedule // num_clients_with_remaining_capacity
-            for rem_index, _ in enumerate(clients_with_remaining_capacity):
-                client_proxy = clients_with_remaining_capacity[rem_index]["client_proxy"]
-                client_capacity = clients_with_remaining_capacity[rem_index]["client_capacity"]
-                client_num_tasks_scheduled = clients_with_remaining_capacity[rem_index]["client_num_tasks_scheduled"]
-                client_remaining_capacity = client_capacity - client_num_tasks_scheduled
-                client_num_tasks_to_schedule = min(num_tasks_per_client, client_remaining_capacity)
-                for sel_index, _ in enumerate(selected_clients):
-                    if selected_clients[sel_index]["client_proxy"] == client_proxy:
-                        client_num_tasks_scheduled_before = selected_clients[sel_index]["client_num_tasks_scheduled"]
-                        client_num_tasks_scheduled_then \
-                            = client_num_tasks_scheduled_before + client_num_tasks_to_schedule
-                        selected_clients[sel_index].update({"client_num_tasks_scheduled":
-                                                            client_num_tasks_scheduled_then})
+            # Get the client indices that have any number of tasks scheduled.
+            clients_indices = [client_idx for client_idx in range(0, len(selected_clients))]
+            # Randomly sample a client index.
+            client_idx_sampled = sample(clients_indices, 1)[0]
+            # Get the index of the current capacity used.
+            client_task_assignment_capacities \
+                = selected_clients[client_idx_sampled]["client_task_assignment_capacities_{0}".format(phase)]
+            client_current_num_tasks_scheduled = selected_clients[client_idx_sampled]["client_num_tasks_scheduled"]
+            cap_idx = list(client_task_assignment_capacities).index(client_current_num_tasks_scheduled)
+            if cap_idx != len(client_task_assignment_capacities) - 1:
+                # Get the next valid capacity of the client i.
+                cap_next = client_task_assignment_capacities[cap_idx + 1]
+                # Set the assignment of client i to its next valid capacity.
+                selected_clients[client_idx_sampled]["client_num_tasks_scheduled"] = cap_next
 
 
 def map_available_participating_clients(comm_rounds: list,
@@ -104,6 +133,10 @@ def map_available_participating_clients(comm_rounds: list,
                         = available_clients_map[client_id_str]["client_num_training_examples_available"]
                     client_num_testing_examples_available \
                         = available_clients_map[client_id_str]["client_num_testing_examples_available"]
+                    client_task_assignment_capacities_train \
+                        = available_clients_map[client_id_str]["client_task_assignment_capacities_train"]
+                    client_task_assignment_capacities_test \
+                        = available_clients_map[client_id_str]["client_task_assignment_capacities_test"]
                     client_metrics = participating_client_dict.values()
                     # Verify if the available participating client has been mapped yet...
                     if client_id_str not in available_participating_clients_map:
@@ -111,6 +144,8 @@ def map_available_participating_clients(comm_rounds: list,
                         client_map = {"client_proxy": client_proxy,
                                       "client_num_training_examples_available": client_num_training_examples_available,
                                       "client_num_testing_examples_available": client_num_testing_examples_available,
+                                      "client_task_assignment_capacities_train": client_task_assignment_capacities_train,
+                                      "client_task_assignment_capacities_test": client_task_assignment_capacities_test,
                                       comm_round_key: client_metrics}
                         available_participating_clients_map.update({client_id_str: client_map})
                     else:
