@@ -105,13 +105,15 @@ class TrainingMeasurementsCallback(Callback):
                     unique_monitor = energy_monitor["_unique_monitor"]
                     report_consumptions_per_timestamp = energy_monitor["_report_consumptions_per_timestamp"]
                     remove_energy_consumptions_files = energy_monitor["_remove_energy_consumptions_files"]
+                    energy_consumptions_file = energy_monitor["_energy_consumptions_file"]
                     pj_unique = PowerJoularEnergyMonitor(env_variables,
                                                          monitoring_domains,
                                                          unit,
                                                          process_monitoring,
                                                          unique_monitor,
                                                          report_consumptions_per_timestamp,
-                                                         remove_energy_consumptions_files)
+                                                         remove_energy_consumptions_files,
+                                                         energy_consumptions_file)
                     training_energy_consumptions = pj_unique.get_energy_consumptions(energy_monitor_tag,
                                                                                      training_start_timestamp,
                                                                                      training_end_timestamp)
@@ -205,13 +207,15 @@ class TestingMeasurementsCallback(Callback):
                     unique_monitor = energy_monitor["_unique_monitor"]
                     report_consumptions_per_timestamp = energy_monitor["_report_consumptions_per_timestamp"]
                     remove_energy_consumptions_files = energy_monitor["_remove_energy_consumptions_files"]
+                    energy_consumptions_file = energy_monitor["_energy_consumptions_file"]
                     pj_unique = PowerJoularEnergyMonitor(env_variables,
                                                          monitoring_domains,
                                                          unit,
                                                          process_monitoring,
                                                          unique_monitor,
                                                          report_consumptions_per_timestamp,
-                                                         remove_energy_consumptions_files)
+                                                         remove_energy_consumptions_files,
+                                                         energy_consumptions_file)
                     testing_energy_consumptions = pj_unique.get_energy_consumptions(energy_monitor_tag,
                                                                                     testing_start_timestamp,
                                                                                     testing_end_timestamp)

@@ -233,7 +233,7 @@ class FlowerClientLauncher:
                 unique_monitor = energy_monitor_settings["unique_monitor"]
                 report_consumptions_per_timestamp = energy_monitor_settings["report_consumptions_per_timestamp"]
                 remove_energy_consumptions_files = energy_monitor_settings["remove_energy_consumptions_files"]
-                powerjoular_energy_consumptions_file = energy_monitor_settings["powerjoular_energy_consumptions_file"]
+                energy_consumptions_file = energy_monitor_settings["energy_consumptions_file"]
                 energy_monitor = PowerJoularEnergyMonitor(env_variables,
                                                           monitoring_domains,
                                                           unit,
@@ -241,7 +241,7 @@ class FlowerClientLauncher:
                                                           unique_monitor,
                                                           report_consumptions_per_timestamp,
                                                           remove_energy_consumptions_files,
-                                                          powerjoular_energy_consumptions_file)
+                                                          energy_consumptions_file)
         # Return the energy monitor.
         return energy_monitor
 
