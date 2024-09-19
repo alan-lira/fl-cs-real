@@ -432,9 +432,8 @@ class FlowerClientLauncher:
                                       flower_client,
                                       max_message_length_in_bytes,
                                       ssl_certificates)
-            # Stop the unique PowerJoular monitoring process and remove the unique energy consumptions file.
+            # Stop the unique PowerJoular monitoring process.
             energy_monitor.stop()
-            energy_monitor.remove_energy_consumption_files()
         else:
             # Instantiate the flower client.
             flower_client = self._instantiate_flower_client(client_id, model, metrics_names, x_train, y_train,

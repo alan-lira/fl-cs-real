@@ -6,7 +6,8 @@ number_of_provided_arguments=$#
 # Set the required arguments array.
 required_arguments_array=("Number of Clients to Launch [Integer]"
                           "Client Config File [Path]"
-                          "Client Implementation [String]")
+                          "Client Implementation [String]"
+                          "Client Dataset Root Folder [Path]")
 number_of_required_arguments=${#required_arguments_array[@]}
 
 # Set the optional arguments array.
@@ -34,6 +35,7 @@ fi
 num_clients=${1}
 client_config_file=${2}
 client_implementation=${3}
+client_dataset_root_folder=${4}
 
 # Get the script file.
 script_file="$(basename "$(test -L "$0" && readlink "$0" || echo "$0")")"
@@ -48,10 +50,7 @@ start_time=$(date +%s)
 for ((client_idx = 0; client_idx < num_clients; client_idx++)); do
 
   # Set the dataset settings for the current client.
-  dataset_name="CIFAR-10"
-  dataset_num_partitions=$num_clients
-  dataset_partition_mode="most_possibly_balanced"
-  dataset_root_folder=$dataset_name'/'$dataset_num_partitions'_'$dataset_partition_mode'_partitions/partition_'$client_idx
+  dataset_root_folder=$client_dataset_root_folder'/partition_'$client_idx
 
   # Copy the base client config file for the current client.
   client_idx_config_file=${client_config_file/".cfg"/"_$client_idx.cfg"}
@@ -88,8 +87,8 @@ wait
 # Remove the clients config temporary files.
 for ((client_idx = 0; client_idx < num_clients; client_idx++)); do
   client_idx_config_file=${client_config_file/".cfg"/"_$client_idx.cfg"}
-  rm "$client_idx_config_file"
-  rm "$client_idx_config_file""-e"
+  rm -f "$client_idx_config_file"
+  rm -f "$client_idx_config_file""-e"
 done
 
 # Exit.

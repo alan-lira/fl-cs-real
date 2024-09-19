@@ -126,7 +126,7 @@ class PowerJoularEnergyMonitor:
         # Return the line_energy_consumptions dict.
         return line_energy_consumptions
 
-    def remove_energy_consumption_files(self) -> None:
+    def _remove_energy_consumption_files(self) -> None:
         # Get the necessary attributes.
         to_monitor_pid = self.get_attribute("_to_monitor_pid")
         energy_consumptions_file = Path(self.get_attribute("_energy_consumptions_file")).absolute()
@@ -138,19 +138,22 @@ class PowerJoularEnergyMonitor:
                                                 + "-{0}.csv".format(to_monitor_pid)).absolute()
             energy_consumptions_csv_file.unlink(missing_ok=True)
 
-    def _get_energy_consumptions_per_timestamp(self,
-                                               monitoring_tag: str,
-                                               start_timestamp: datetime,
-                                               end_timestamp: datetime) -> dict:
-        # Initialize the energy consumptions dictionary.
-        energy_consumptions = {}
+    def get_energy_consumptions(self,
+                                monitoring_tag: str,
+                                start_timestamp: datetime,
+                                end_timestamp: datetime) -> dict:
         # Get the necessary attributes.
         monitoring_domains = self.get_attribute("_monitoring_domains")
         unique_monitor = self.get_attribute("_unique_monitor")
+        report_consumptions_per_timestamp = self.get_attribute("_report_consumptions_per_timestamp")
         remove_energy_consumptions_files = self.get_attribute("_remove_energy_consumptions_files")
         energy_consumptions_file = Path(self.get_attribute("_energy_consumptions_file")).absolute()
+        # Initialize the energy consumptions dictionary.
+        energy_consumptions = {}
         # If the energy consumptions file exists...
         if energy_consumptions_file.is_file():
+            # Wait for one second before reading the energy consumptions file.
+            sleep(1)
             # Initialize the timestamps_consumptions dict.
             timestamps_consumptions = {}
             # Read the energy consumptions file.
@@ -176,106 +179,44 @@ class PowerJoularEnergyMonitor:
                 # Iterate through the list of monitoring domains for the current timestamp.
                 for monitoring_domain in monitoring_domains:
                     if monitoring_domain == "Total":
-                        # Add the Total energy consumptions to the energy_consumptions dict.
-                        energy_consumption_key = monitoring_tag + "_total_{0}".format(timestamp)
-                        energy_consumption_value = timestamp_consumptions["total_energy"]
+                        if report_consumptions_per_timestamp:
+                            # Add the Total energy consumptions to the energy_consumptions dict.
+                            energy_consumption_key = monitoring_tag + "_total_{0}".format(timestamp)
+                            energy_consumption_value = timestamp_consumptions["total_energy"]
+                        else:
+                            # Add the Total energy consumptions sums to the energy_consumptions dict.
+                            energy_consumption_key = monitoring_tag + "_total"
+                            energy_consumption_value = sum([timestamp_consumptions["total_energy"]
+                                                            for _, timestamp_consumptions in
+                                                            timestamps_consumptions.items()])
                         energy_consumptions.update({energy_consumption_key: energy_consumption_value})
                     elif monitoring_domain == "CPU":
-                        # Add the CPU energy consumptions to the energy_consumptions dict.
-                        energy_consumption_key = monitoring_tag + "_cpu_{0}".format(timestamp)
-                        energy_consumption_value = timestamp_consumptions["energy_cpu"]
+                        if report_consumptions_per_timestamp:
+                            # Add the CPU energy consumptions to the energy_consumptions dict.
+                            energy_consumption_key = monitoring_tag + "_cpu_{0}".format(timestamp)
+                            energy_consumption_value = timestamp_consumptions["energy_cpu"]
+                        else:
+                            # Add the CPU energy consumptions sums to the energy_consumptions dict.
+                            energy_consumption_key = monitoring_tag + "_cpu"
+                            energy_consumption_value = sum([timestamp_consumptions["energy_cpu"]
+                                                            for _, timestamp_consumptions in
+                                                            timestamps_consumptions.items()])
                         energy_consumptions.update({energy_consumption_key: energy_consumption_value})
                     elif monitoring_domain == "NVIDIA_GPU":
-                        # Add the NVIDIA GPU energy consumptions to the energy_consumptions dict.
-                        energy_consumption_key = monitoring_tag + "_nvidia_gpu_{0}".format(timestamp)
-                        energy_consumption_value = timestamp_consumptions["energy_nvidia_gpu"]
+                        if report_consumptions_per_timestamp:
+                            # Add the NVIDIA GPU energy consumptions to the energy_consumptions dict.
+                            energy_consumption_key = monitoring_tag + "_nvidia_gpu_{0}".format(timestamp)
+                            energy_consumption_value = timestamp_consumptions["energy_nvidia_gpu"]
+                        else:
+                            # Add the NVIDIA GPU energy consumptions sums to the energy_consumptions dict.
+                            energy_consumption_key = monitoring_tag + "_nvidia_gpu"
+                            energy_consumption_value = sum([timestamp_consumptions["energy_nvidia_gpu"]
+                                                            for _, timestamp_consumptions in
+                                                            timestamps_consumptions.items()])
                         energy_consumptions.update({energy_consumption_key: energy_consumption_value})
-            # Verify if the energy consumptions files are set to be removed.
-            if remove_energy_consumptions_files:
-                # Verify if files were generated by multiple monitoring processes.
-                if not unique_monitor:
-                    # If so, remove the energy consumption files.
-                    self.remove_energy_consumption_files()
-        # Return the energy consumptions dictionary.
-        return energy_consumptions
-
-    def _get_energy_consumptions_sums(self,
-                                      monitoring_tag: str,
-                                      start_timestamp: datetime,
-                                      end_timestamp: datetime) -> dict:
-        # Initialize the energy consumptions dictionary.
-        energy_consumptions = {}
-        # Get the necessary attributes.
-        monitoring_domains = self.get_attribute("_monitoring_domains")
-        unique_monitor = self.get_attribute("_unique_monitor")
-        remove_energy_consumptions_files = self.get_attribute("_remove_energy_consumptions_files")
-        energy_consumptions_file = Path(self.get_attribute("_energy_consumptions_file")).absolute()
-        # If the energy consumptions file exists...
-        if energy_consumptions_file.is_file():
-            # Initialize the timestamps_consumptions dict.
-            timestamps_consumptions = {}
-            # Read the energy consumptions file.
-            with open(energy_consumptions_file, mode="r") as file:
-                # Skip the header line.
-                next(file)
-                # Iterate through the timestamp lines.
-                for line in file:
-                    # Get the energy consumptions for the current timestamp line.
-                    line_energy_consumptions = self._get_line_energy_consumptions(line)
-                    # Update the timestamps_consumptions dict.
-                    if not unique_monitor:
-                        timestamps_consumptions.update(line_energy_consumptions)
-                    else:
-                        timestamp = next(iter(line_energy_consumptions))
-                        timestamp = parser.parse(timestamp).replace(tzinfo=None)
-                        if start_timestamp.replace(microsecond=0) <= timestamp <= end_timestamp:
-                            timestamps_consumptions.update(line_energy_consumptions)
-                        if timestamp > end_timestamp:
-                            break
-            # Iterate through the list of monitoring domains.
-            for monitoring_domain in monitoring_domains:
-                if monitoring_domain == "Total":
-                    # Add the Total energy consumptions sums to the energy_consumptions dict.
-                    energy_consumption_key = monitoring_tag + "_total"
-                    energy_consumption_value = sum([timestamp_consumptions["total_energy"]
-                                                    for _, timestamp_consumptions in timestamps_consumptions.items()])
-                    energy_consumptions.update({energy_consumption_key: energy_consumption_value})
-                elif monitoring_domain == "CPU":
-                    # Add the CPU energy consumptions sums to the energy_consumptions dict.
-                    energy_consumption_key = monitoring_tag + "_cpu"
-                    energy_consumption_value = sum([timestamp_consumptions["energy_cpu"]
-                                                    for _, timestamp_consumptions in timestamps_consumptions.items()])
-                    energy_consumptions.update({energy_consumption_key: energy_consumption_value})
-                elif monitoring_domain == "NVIDIA_GPU":
-                    # Add the NVIDIA GPU energy consumptions sums to the energy_consumptions dict.
-                    energy_consumption_key = monitoring_tag + "_nvidia_gpu"
-                    energy_consumption_value = sum([timestamp_consumptions["energy_nvidia_gpu"]
-                                                    for _, timestamp_consumptions in timestamps_consumptions.items()])
-                    energy_consumptions.update({energy_consumption_key: energy_consumption_value})
-            # Verify if the energy consumptions files are set to be removed.
-            if remove_energy_consumptions_files:
-                # Verify if files were generated by multiple monitoring processes.
-                if not unique_monitor:
-                    # If so, remove the energy consumption files.
-                    self.remove_energy_consumption_files()
-        # Return the energy consumptions dictionary.
-        return energy_consumptions
-
-    def get_energy_consumptions(self,
-                                monitoring_tag: str,
-                                start_timestamp: datetime,
-                                end_timestamp: datetime) -> dict:
-        # Get the necessary attributes.
-        report_consumptions_per_timestamp = self.get_attribute("_report_consumptions_per_timestamp")
-        # Wait for one second before reading the energy consumptions file.
-        sleep(1)
-        if report_consumptions_per_timestamp:
-            energy_consumptions = self._get_energy_consumptions_per_timestamp(monitoring_tag,
-                                                                              start_timestamp,
-                                                                              end_timestamp)
-        else:
-            energy_consumptions = self._get_energy_consumptions_sums(monitoring_tag,
-                                                                     start_timestamp,
-                                                                     end_timestamp)
+        # Verify if the energy consumptions files are set to be removed.
+        if remove_energy_consumptions_files:
+            # If so, remove the energy consumption files.
+            self._remove_energy_consumption_files()
         # Return the energy consumptions dictionary.
         return energy_consumptions
