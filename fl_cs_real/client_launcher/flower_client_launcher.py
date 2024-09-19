@@ -1,3 +1,4 @@
+from grpc._channel import _MultiThreadedRendezvous
 from keras.applications import MobileNetV2
 from keras.losses import Loss, SparseCategoricalCrossentropy
 from keras.metrics import Metric, SparseCategoricalAccuracy
@@ -5,7 +6,9 @@ from keras.models import Model
 from keras.optimizers import Optimizer, SGD
 from logging import Logger
 from pathlib import Path
-from time import perf_counter
+from random import uniform
+from time import perf_counter, sleep
+from traceback import format_exc
 from typing import Optional
 
 from flwr.client import Client, start_client
@@ -158,6 +161,14 @@ class FlowerClientLauncher:
         # Return the maximum message length in bytes.
         return max_message_length_in_bytes
 
+    def _get_connection_retries_settings(self) -> tuple:
+        # Get the necessary attributes.
+        grpc_settings = self.get_attribute("_grpc_settings")
+        max_connection_retries = grpc_settings["max_connection_retries"]
+        max_backoff_in_seconds = grpc_settings["max_backoff_in_seconds"]
+        # Return the maximum connection retries and maximum backoff in seconds.
+        return max_connection_retries, max_backoff_in_seconds
+
     def _load_dataset(self) -> tuple:
         # Start the dataset loading duration timer.
         dataset_loading_duration_start = perf_counter()
@@ -226,7 +237,6 @@ class FlowerClientLauncher:
                 unit = energy_monitor_settings["unit"]
                 energy_monitor = PyJoulesEnergyMonitor(monitoring_domains, unit)
             elif energy_monitor_name == "PowerJoular":
-                env_variables = energy_monitor_settings["env_variables"]
                 monitoring_domains = energy_monitor_settings["monitoring_domains"]
                 unit = energy_monitor_settings["unit"]
                 process_monitoring = energy_monitor_settings["process_monitoring"]
@@ -234,8 +244,7 @@ class FlowerClientLauncher:
                 report_consumptions_per_timestamp = energy_monitor_settings["report_consumptions_per_timestamp"]
                 remove_energy_consumptions_files = energy_monitor_settings["remove_energy_consumptions_files"]
                 energy_consumptions_file = energy_monitor_settings["energy_consumptions_file"]
-                energy_monitor = PowerJoularEnergyMonitor(env_variables,
-                                                          monitoring_domains,
+                energy_monitor = PowerJoularEnergyMonitor(monitoring_domains,
                                                           unit,
                                                           process_monitoring,
                                                           unique_monitor,
@@ -375,15 +384,36 @@ class FlowerClientLauncher:
         return flower_client
 
     @staticmethod
-    def _start_flower_client(server_address: str,
+    def _start_flower_client(client_id: int,
+                             server_address: str,
                              client: Client,
                              grpc_max_message_length: int,
-                             root_certificates: Optional[tuple[bytes, bytes, bytes]]) -> None:
+                             root_certificates: Optional[tuple[bytes, bytes, bytes]],
+                             max_connection_retries: int,
+                             max_backoff_in_seconds: float,
+                             logger: Logger) -> None:
         # Start the flower client.
-        start_client(server_address=server_address,
-                     client=client,
-                     grpc_max_message_length=grpc_max_message_length,
-                     root_certificates=root_certificates)
+        current_try = 1
+        while True:
+            try:
+                start_client(server_address=server_address,
+                             client=client,
+                             grpc_max_message_length=grpc_max_message_length,
+                             root_certificates=root_certificates)
+                break
+            except _MultiThreadedRendezvous:
+                traceback_exception_str = format_exc()
+                if current_try == max_connection_retries:
+                    raise traceback_exception_str
+                random_second_fraction = round(uniform(0, 1), 2)
+                wait_time = min(((2 ** current_try) + random_second_fraction), max_backoff_in_seconds)
+                if "grpc_status:14" in traceback_exception_str:
+                    message = ("[Client {0}] Could not connect to the Server ({1})! "
+                               "Retrying in {2} seconds (retries left: {3})...") \
+                              .format(client_id, server_address, wait_time, max_connection_retries - current_try)
+                    log_message(logger, message, "INFO")
+                sleep(wait_time)
+                current_try += 1
 
     def launch_client(self) -> None:
         # Get the necessary attributes.
@@ -397,6 +427,8 @@ class FlowerClientLauncher:
         flower_server_address = self._get_flower_server_address()
         # Get the maximum message length in bytes.
         max_message_length_in_bytes = self._get_max_message_length_in_bytes()
+        # Get the settings for connection retries to the server.
+        max_connection_retries, max_backoff_in_seconds = self._get_connection_retries_settings()
         # Load the dataset (x_train, y_train, x_test, and y_test).
         x_train, y_train, x_test, y_test = self._load_dataset()
         # Get the task assignment capacities.
@@ -428,10 +460,14 @@ class FlowerClientLauncher:
                                                             powerjoular_unique_attributes, daemon_settings,
                                                             affinity_settings, logger)
             # Start the flower client.
-            self._start_flower_client(flower_server_address,
+            self._start_flower_client(client_id,
+                                      flower_server_address,
                                       flower_client,
                                       max_message_length_in_bytes,
-                                      ssl_certificates)
+                                      ssl_certificates,
+                                      max_connection_retries,
+                                      max_backoff_in_seconds,
+                                      logger)
             # Stop the unique PowerJoular monitoring process.
             energy_monitor.stop()
         else:
@@ -441,9 +477,13 @@ class FlowerClientLauncher:
                                                             task_assignment_capacities_test, energy_monitor,
                                                             daemon_settings, affinity_settings, logger)
             # Start the flower client.
-            self._start_flower_client(flower_server_address,
+            self._start_flower_client(client_id,
+                                      flower_server_address,
                                       flower_client,
                                       max_message_length_in_bytes,
-                                      ssl_certificates)
+                                      ssl_certificates,
+                                      max_connection_retries,
+                                      max_backoff_in_seconds,
+                                      logger)
         # End.
         exit(0)

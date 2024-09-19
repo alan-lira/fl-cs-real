@@ -98,7 +98,6 @@ class TrainingMeasurementsCallback(Callback):
             elif isinstance(energy_monitor, list):
                 energy_monitor = dict(energy_monitor)
                 if energy_monitor["_energy_monitor"] == "PowerJoular_Unique":
-                    env_variables = energy_monitor["_env_variables"]
                     monitoring_domains = energy_monitor["_monitoring_domains"]
                     unit = energy_monitor["_unit"]
                     process_monitoring = energy_monitor["_process_monitoring"]
@@ -106,8 +105,7 @@ class TrainingMeasurementsCallback(Callback):
                     report_consumptions_per_timestamp = energy_monitor["_report_consumptions_per_timestamp"]
                     remove_energy_consumptions_files = energy_monitor["_remove_energy_consumptions_files"]
                     energy_consumptions_file = energy_monitor["_energy_consumptions_file"]
-                    pj_unique = PowerJoularEnergyMonitor(env_variables,
-                                                         monitoring_domains,
+                    pj_unique = PowerJoularEnergyMonitor(monitoring_domains,
                                                          unit,
                                                          process_monitoring,
                                                          unique_monitor,
@@ -200,7 +198,6 @@ class TestingMeasurementsCallback(Callback):
             elif isinstance(energy_monitor, list):
                 energy_monitor = dict(energy_monitor)
                 if energy_monitor["_energy_monitor"] == "PowerJoular_Unique":
-                    env_variables = energy_monitor["_env_variables"]
                     monitoring_domains = energy_monitor["_monitoring_domains"]
                     unit = energy_monitor["_unit"]
                     process_monitoring = energy_monitor["_process_monitoring"]
@@ -208,8 +205,7 @@ class TestingMeasurementsCallback(Callback):
                     report_consumptions_per_timestamp = energy_monitor["_report_consumptions_per_timestamp"]
                     remove_energy_consumptions_files = energy_monitor["_remove_energy_consumptions_files"]
                     energy_consumptions_file = energy_monitor["_energy_consumptions_file"]
-                    pj_unique = PowerJoularEnergyMonitor(env_variables,
-                                                         monitoring_domains,
+                    pj_unique = PowerJoularEnergyMonitor(monitoring_domains,
                                                          unit,
                                                          process_monitoring,
                                                          unique_monitor,
