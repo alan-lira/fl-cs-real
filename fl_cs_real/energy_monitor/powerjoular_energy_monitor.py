@@ -1,9 +1,10 @@
 from datetime import datetime
 from dateutil import parser
-from os import getenv
+from os import getenv, getpgid, killpg
 from pathlib import Path
 from psutil import AccessDenied, NoSuchProcess, process_iter, ZombieProcess
 from random import randint
+from signal import SIGTERM
 from subprocess import Popen, PIPE, TimeoutExpired
 from time import sleep
 from typing import Optional
@@ -86,7 +87,8 @@ class PowerJoularEnergyMonitor:
                                                    stdout=None,
                                                    stderr=None,
                                                    universal_newlines=True,
-                                                   shell=False)
+                                                   shell=False,
+                                                   start_new_session=True)
             # Communicate the password, but do not wait for the process completion.
             try:
                 communicate_input = "{0}\n".format(pw)
@@ -102,8 +104,7 @@ class PowerJoularEnergyMonitor:
         powerjoular_monitoring_process = self.get_attribute("_powerjoular_monitoring_process")
         if powerjoular_monitoring_process:
             # Kill the PowerJoular monitoring process.
-            powerjoular_monitoring_process.kill()
-            _, _ = powerjoular_monitoring_process.communicate()
+            killpg(getpgid(powerjoular_monitoring_process.pid), SIGTERM)
 
     @staticmethod
     def _get_line_energy_consumptions(line: str) -> dict:
