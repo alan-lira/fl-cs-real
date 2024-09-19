@@ -12,7 +12,6 @@ from typing import Optional
 class PowerJoularEnergyMonitor:
 
     def __init__(self,
-                 env_variables: dict,
                  monitoring_domains: list,
                  unit: str,
                  process_monitoring: bool,
@@ -21,7 +20,6 @@ class PowerJoularEnergyMonitor:
                  remove_energy_consumptions_files: bool,
                  energy_consumptions_file: Path) -> None:
         # Initialize the attributes.
-        self._env_variables = env_variables
         self._monitoring_domains = monitoring_domains
         self._unit = unit
         self._process_monitoring = process_monitoring
@@ -59,7 +57,6 @@ class PowerJoularEnergyMonitor:
     def start(self,
               to_monitor_pid: Optional[int] = None) -> None:
         # Get the necessary attributes.
-        env_variables = self.get_attribute("_env_variables")
         process_monitoring = self.get_attribute("_process_monitoring")
         unique_monitor = self.get_attribute("_unique_monitor")
         energy_consumptions_file = Path(self.get_attribute("_energy_consumptions_file")).absolute()
@@ -74,7 +71,7 @@ class PowerJoularEnergyMonitor:
         # If not, verify if the single monitoring process has not been launched yet.
         if not unique_monitor or (unique_monitor and not powerjoular_process_is_already_running):
             # Load the password from the environment variable.
-            pw = getenv(env_variables["pw"])
+            pw = getenv("POWERJOULAR_PW")
             # Set the to-monitor process id.
             self._set_attribute("_to_monitor_pid", to_monitor_pid)
             # Define the PowerJoular monitoring command.
@@ -106,6 +103,7 @@ class PowerJoularEnergyMonitor:
         if powerjoular_monitoring_process:
             # Kill the PowerJoular monitoring process.
             powerjoular_monitoring_process.kill()
+            _, _ = powerjoular_monitoring_process.communicate()
 
     @staticmethod
     def _get_line_energy_consumptions(line: str) -> dict:
