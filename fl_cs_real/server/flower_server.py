@@ -98,7 +98,7 @@ class FlowerServer(Strategy):
                                     client_num_testing_examples_available_property: "?",
                                     client_task_assignment_capacities_train_property: "?",
                                     client_task_assignment_capacities_test_property: "?"})
-            client_prompted = client_proxy.get_properties(gpi, timeout=9999)
+            client_prompted = client_proxy.get_properties(gpi, timeout=None)
             client_id = client_prompted.properties[client_id_property]
             client_hostname = client_prompted.properties[client_hostname_property]
             client_num_cpus = client_prompted.properties[client_num_cpus_property]
