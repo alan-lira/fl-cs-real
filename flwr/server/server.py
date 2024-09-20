@@ -394,7 +394,7 @@ def _handle_finished_future_after_fit(
     client_id_prompt_start = timeit.default_timer()
     client_id_property = "client_id"
     gpi = GetPropertiesIns({client_id_property: "?"})
-    client_prompted = result[0].get_properties(gpi, timeout=9999)
+    client_prompted = result[0].get_properties(gpi, timeout=None)
     client_id = client_prompted.properties[client_id_property]
     client_id_prompt_duration = timeit.default_timer() - client_id_prompt_start
     elapsed_time += client_id_prompt_duration
@@ -467,7 +467,7 @@ def _handle_finished_future_after_evaluate(
     client_id_prompt_start = timeit.default_timer()
     client_id_property = "client_id"
     gpi = GetPropertiesIns({client_id_property: "?"})
-    client_prompted = result[0].get_properties(gpi, timeout=9999)
+    client_prompted = result[0].get_properties(gpi, timeout=None)
     client_id = client_prompted.properties[client_id_property]
     client_id_prompt_duration = timeit.default_timer() - client_id_prompt_start
     elapsed_time += client_id_prompt_duration
