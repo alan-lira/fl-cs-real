@@ -103,8 +103,11 @@ class PowerJoularEnergyMonitor:
         # Get the necessary attributes.
         powerjoular_monitoring_process = self.get_attribute("_powerjoular_monitoring_process")
         if powerjoular_monitoring_process:
-            # Kill the PowerJoular monitoring process.
-            killpg(getpgid(powerjoular_monitoring_process.pid), SIGTERM)
+            try:
+                # Kill the PowerJoular monitoring process.
+                killpg(getpgid(powerjoular_monitoring_process.pid), SIGTERM)
+            except ProcessLookupError:
+                pass
 
     @staticmethod
     def _get_line_energy_consumptions(line: str) -> dict:
