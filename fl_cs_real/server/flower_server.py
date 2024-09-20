@@ -363,6 +363,8 @@ class FlowerServer(Strategy):
                 deadline_in_seconds = client_selector_settings["fit_deadline_in_seconds"]
             elif phase == "test":
                 deadline_in_seconds = client_selector_settings["evaluate_deadline_in_seconds"]
+            if deadline_in_seconds == "infinity":
+                deadline_in_seconds = inf
             candidate_clients_fraction = client_selector_settings["candidate_clients_fraction"]
             selection = select_clients_using_ecmtc(comm_round,
                                                    phase,
@@ -400,6 +402,8 @@ class FlowerServer(Strategy):
                 deadline_in_seconds = client_selector_settings["fit_deadline_in_seconds"]
             elif phase == "test":
                 deadline_in_seconds = client_selector_settings["evaluate_deadline_in_seconds"]
+            if deadline_in_seconds == "infinity":
+                deadline_in_seconds = inf
             objectives_weights_parameter = client_selector_settings["objectives_weights_parameter"]
             selection = select_clients_using_elastic_adapted(comm_round,
                                                              phase,
@@ -417,9 +421,11 @@ class FlowerServer(Strategy):
                 deadline_in_seconds = client_selector_settings["fit_deadline_in_seconds"]
             elif phase == "test":
                 deadline_in_seconds = client_selector_settings["evaluate_deadline_in_seconds"]
+            if deadline_in_seconds == "infinity":
+                deadline_in_seconds = inf
             accuracy_lower_bound = client_selector_settings["accuracy_lower_bound"]
             total_bandwidth_in_hertz = client_selector_settings["total_bandwidth_in_hertz"]
-            if total_bandwidth_in_hertz == "inf":
+            if total_bandwidth_in_hertz == "infinity":
                 total_bandwidth_in_hertz = inf
             selection = select_clients_using_fedaecs_adapted(comm_round,
                                                              phase,
@@ -484,6 +490,8 @@ class FlowerServer(Strategy):
             wait_for_initial_clients = fl_settings["wait_for_initial_clients"]
             num_clients_to_wait = wait_for_initial_clients["num_clients_to_wait"]
             waiting_timeout_in_seconds = wait_for_initial_clients["waiting_timeout_in_seconds"]
+            if waiting_timeout_in_seconds == "infinity":
+                waiting_timeout_in_seconds = None
             client_manager.wait_for(num_clients_to_wait, waiting_timeout_in_seconds)
         # Do not configure federated training if it is not enabled.
         if not enable_training:

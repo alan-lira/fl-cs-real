@@ -288,6 +288,9 @@ class FlowerServerLauncher:
 
     def _generate_selected_fit_clients_history_output_file(self) -> None:
         # Get the necessary attributes.
+        server_strategy_settings = self.get_attribute("_server_strategy_settings")
+        client_selection_settings = server_strategy_settings["client_selection"]
+        client_selection_for_training_settings = client_selection_settings["client_selection_for_training_settings"]
         server_strategy = self.get_attribute("_server_strategy")
         selected_fit_clients_history = server_strategy.get_attribute("_selected_fit_clients_history")
         output_settings = self.get_attribute("_output_settings")
@@ -318,6 +321,11 @@ class FlowerServerLauncher:
         with open(file=selected_fit_clients_history_file, mode="a", encoding="utf-8") as file:
             for comm_round_key, comm_round_values in selected_fit_clients_history.items():
                 client_selector = comm_round_values["client_selector"]
+                training_deadline_key = "fit_deadline_in_seconds"
+                if training_deadline_key in client_selection_for_training_settings:
+                    training_deadline_value = client_selection_for_training_settings[training_deadline_key]
+                    if training_deadline_value != "infinity":
+                        client_selector = client_selector + "_D{0}".format(training_deadline_value)
                 selection_duration = comm_round_values["selection_duration"]
                 num_tasks = comm_round_values["num_tasks"]
                 num_available_clients = comm_round_values["num_available_clients"]
@@ -335,6 +343,9 @@ class FlowerServerLauncher:
 
     def _generate_individual_fit_metrics_history_output_file(self) -> None:
         # Get the necessary attributes.
+        server_strategy_settings = self.get_attribute("_server_strategy_settings")
+        client_selection_settings = server_strategy_settings["client_selection"]
+        client_selection_for_training_settings = client_selection_settings["client_selection_for_training_settings"]
         server_strategy = self.get_attribute("_server_strategy")
         selected_fit_clients_history = server_strategy.get_attribute("_selected_fit_clients_history")
         individual_fit_metrics_history = server_strategy.get_attribute("_individual_fit_metrics_history")
@@ -376,6 +387,11 @@ class FlowerServerLauncher:
         with open(file=individual_fit_metrics_history_file, mode="a", encoding="utf-8") as file:
             for comm_round_key, comm_round_values in individual_fit_metrics_history.items():
                 client_selector = comm_round_values["client_selector"]
+                training_deadline_key = "fit_deadline_in_seconds"
+                if training_deadline_key in client_selection_for_training_settings:
+                    training_deadline_value = client_selection_for_training_settings[training_deadline_key]
+                    if training_deadline_value != "infinity":
+                        client_selector = client_selector + "_D{0}".format(training_deadline_value)
                 num_tasks = comm_round_values["num_tasks"]
                 num_available_clients = comm_round_values["num_available_clients"]
                 clients_metrics_dicts = comm_round_values["clients_metrics_dicts"]
@@ -412,6 +428,9 @@ class FlowerServerLauncher:
 
     def _generate_aggregated_fit_metrics_history_output_file(self) -> None:
         # Get the necessary attributes.
+        server_strategy_settings = self.get_attribute("_server_strategy_settings")
+        client_selection_settings = server_strategy_settings["client_selection"]
+        client_selection_for_training_settings = client_selection_settings["client_selection_for_training_settings"]
         server_strategy = self.get_attribute("_server_strategy")
         aggregated_fit_metrics_history = server_strategy.get_attribute("_aggregated_fit_metrics_history")
         output_settings = self.get_attribute("_output_settings")
@@ -447,6 +466,11 @@ class FlowerServerLauncher:
         with open(file=aggregated_fit_metrics_history_file, mode="a", encoding="utf-8") as file:
             for comm_round, comm_round_values in aggregated_fit_metrics_history.items():
                 client_selector = comm_round_values["client_selector"]
+                training_deadline_key = "fit_deadline_in_seconds"
+                if training_deadline_key in client_selection_for_training_settings:
+                    training_deadline_value = client_selection_for_training_settings[training_deadline_key]
+                    if training_deadline_value != "infinity":
+                        client_selector = client_selector + "_D{0}".format(training_deadline_value)
                 metrics_aggregator = comm_round_values["metrics_aggregator"]
                 num_tasks = comm_round_values["num_tasks"]
                 num_available_clients = comm_round_values["num_available_clients"]
@@ -468,6 +492,9 @@ class FlowerServerLauncher:
 
     def _generate_fit_selection_performance_history_output_file(self) -> None:
         # Get the necessary attributes.
+        server_strategy_settings = self.get_attribute("_server_strategy_settings")
+        client_selection_settings = server_strategy_settings["client_selection"]
+        client_selection_for_training_settings = client_selection_settings["client_selection_for_training_settings"]
         server_strategy = self.get_attribute("_server_strategy")
         fit_selection_performance_history = server_strategy.get_attribute("_fit_selection_performance_history")
         output_settings = self.get_attribute("_output_settings")
@@ -501,6 +528,11 @@ class FlowerServerLauncher:
         with open(file=fit_selection_performance_history_file, mode="a", encoding="utf-8") as file:
             for comm_round_key, comm_round_values in fit_selection_performance_history.items():
                 client_selector = comm_round_values["client_selector"]
+                training_deadline_key = "fit_deadline_in_seconds"
+                if training_deadline_key in client_selection_for_training_settings:
+                    training_deadline_value = client_selection_for_training_settings[training_deadline_key]
+                    if training_deadline_value != "infinity":
+                        client_selector = client_selector + "_D{0}".format(training_deadline_value)
                 num_tasks = comm_round_values["num_tasks"]
                 expected_makespan = comm_round_values["expected_makespan"]
                 actual_makespan = comm_round_values["actual_makespan"]
@@ -525,11 +557,13 @@ class FlowerServerLauncher:
         server_strategy_settings = self.get_attribute("_server_strategy_settings")
         client_selection_settings = server_strategy_settings["client_selection"]
         client_selection_for_training_settings = client_selection_settings["client_selection_for_training_settings"]
-        client_selector_for_training = client_selection_for_training_settings["client_selector_for_training"]
+        client_selection_for_testing_settings = client_selection_settings["client_selection_for_testing_settings"]
         server_strategy = self.get_attribute("_server_strategy")
         selected_evaluate_clients_history = server_strategy.get_attribute("_selected_evaluate_clients_history")
         output_settings = self.get_attribute("_output_settings")
         remove_output_files = output_settings["remove_output_files"]
+        client_selector_name_to_output_on_testing_history_files \
+            = output_settings["client_selector_name_to_output_on_testing_history_files"]
         selected_evaluate_clients_history_file = \
             Path(output_settings["selected_evaluate_clients_history_file"]).absolute()
         # Remove the history output file (if it exists and if removing is enabled).
@@ -556,7 +590,29 @@ class FlowerServerLauncher:
         # Write the history data lines to the output file.
         with open(file=selected_evaluate_clients_history_file, mode="a", encoding="utf-8") as file:
             for comm_round_key, comm_round_values in selected_evaluate_clients_history.items():
-                client_selector = "{0} ({1})".format(comm_round_values["client_selector"], client_selector_for_training)
+                client_selector_name_to_output = None
+                client_selector_for_training = client_selection_for_training_settings["client_selector_for_training"]
+                training_deadline_key = "fit_deadline_in_seconds"
+                if training_deadline_key in client_selection_for_training_settings:
+                    training_deadline_value = client_selection_for_training_settings[training_deadline_key]
+                    if training_deadline_value != "infinity":
+                        client_selector_for_training = client_selector_for_training + \
+                                                       "_D{0}".format(training_deadline_value)
+                client_selector_for_testing = comm_round_values["client_selector"]
+                testing_deadline_key = "evaluate_deadline_in_seconds"
+                if testing_deadline_key in client_selection_for_testing_settings:
+                    testing_deadline_value = client_selection_for_testing_settings[testing_deadline_key]
+                    if testing_deadline_value != "infinity":
+                        client_selector_for_testing = client_selector_for_testing + \
+                                                       "_D{0}".format(testing_deadline_value)
+                match client_selector_name_to_output_on_testing_history_files:
+                    case "only_from_training_phase":
+                        client_selector_name_to_output = client_selector_for_training
+                    case "only_from_testing_phase":
+                        client_selector_name_to_output = client_selector_for_testing
+                    case "from_both_phases":
+                        client_selector_name_to_output = "{0} ({1})".format(client_selector_for_testing,
+                                                                            client_selector_for_training)
                 selection_duration = comm_round_values["selection_duration"]
                 num_tasks = comm_round_values["num_tasks"]
                 num_available_clients = comm_round_values["num_available_clients"]
@@ -564,7 +620,7 @@ class FlowerServerLauncher:
                 selected_clients = comm_round_values["selected_clients"]
                 data_line = "{0},{1},{2},{3},{4},{5},{6}\n" \
                             .format(comm_round_key,
-                                    client_selector,
+                                    client_selector_name_to_output,
                                     selection_duration,
                                     num_tasks,
                                     num_available_clients,
@@ -574,11 +630,17 @@ class FlowerServerLauncher:
 
     def _generate_individual_evaluate_metrics_history_output_file(self) -> None:
         # Get the necessary attributes.
+        server_strategy_settings = self.get_attribute("_server_strategy_settings")
+        client_selection_settings = server_strategy_settings["client_selection"]
+        client_selection_for_training_settings = client_selection_settings["client_selection_for_training_settings"]
+        client_selection_for_testing_settings = client_selection_settings["client_selection_for_testing_settings"]
         server_strategy = self.get_attribute("_server_strategy")
         selected_evaluate_clients_history = server_strategy.get_attribute("_selected_evaluate_clients_history")
         individual_evaluate_metrics_history = server_strategy.get_attribute("_individual_evaluate_metrics_history")
         output_settings = self.get_attribute("_output_settings")
         remove_output_files = output_settings["remove_output_files"]
+        client_selector_name_to_output_on_testing_history_files \
+            = output_settings["client_selector_name_to_output_on_testing_history_files"]
         individual_evaluate_metrics_history_file \
             = Path(output_settings["individual_evaluate_metrics_history_file"]).absolute()
         # Remove the history output file (if it exists and if removing is enabled).
@@ -615,7 +677,29 @@ class FlowerServerLauncher:
         # Write the history data lines to the output file.
         with open(file=individual_evaluate_metrics_history_file, mode="a", encoding="utf-8") as file:
             for comm_round_key, comm_round_values in individual_evaluate_metrics_history.items():
-                client_selector = comm_round_values["client_selector"]
+                client_selector_name_to_output = None
+                client_selector_for_training = client_selection_for_training_settings["client_selector_for_training"]
+                training_deadline_key = "fit_deadline_in_seconds"
+                if training_deadline_key in client_selection_for_training_settings:
+                    training_deadline_value = client_selection_for_training_settings[training_deadline_key]
+                    if training_deadline_value != "infinity":
+                        client_selector_for_training = client_selector_for_training + \
+                                                       "_D{0}".format(training_deadline_value)
+                client_selector_for_testing = comm_round_values["client_selector"]
+                testing_deadline_key = "evaluate_deadline_in_seconds"
+                if testing_deadline_key in client_selection_for_testing_settings:
+                    testing_deadline_value = client_selection_for_testing_settings[testing_deadline_key]
+                    if testing_deadline_value != "infinity":
+                        client_selector_for_testing = client_selector_for_testing + \
+                                                       "_D{0}".format(testing_deadline_value)
+                match client_selector_name_to_output_on_testing_history_files:
+                    case "only_from_training_phase":
+                        client_selector_name_to_output = client_selector_for_training
+                    case "only_from_testing_phase":
+                        client_selector_name_to_output = client_selector_for_testing
+                    case "from_both_phases":
+                        client_selector_name_to_output = "{0} ({1})".format(client_selector_for_testing,
+                                                                            client_selector_for_training)
                 num_tasks = comm_round_values["num_tasks"]
                 num_available_clients = comm_round_values["num_available_clients"]
                 clients_metrics_dicts = comm_round_values["clients_metrics_dicts"]
@@ -640,7 +724,7 @@ class FlowerServerLauncher:
                         evaluate_metrics_values.append(evaluate_metric_value)
                     data_line = "{0},{1},{2},{3},{4},{5},{6},{7},{8}\n" \
                                 .format(comm_round_key,
-                                        client_selector,
+                                        client_selector_name_to_output,
                                         num_tasks,
                                         num_available_clients,
                                         client_id_str,
@@ -655,11 +739,13 @@ class FlowerServerLauncher:
         server_strategy_settings = self.get_attribute("_server_strategy_settings")
         client_selection_settings = server_strategy_settings["client_selection"]
         client_selection_for_training_settings = client_selection_settings["client_selection_for_training_settings"]
-        client_selector_for_training = client_selection_for_training_settings["client_selector_for_training"]
+        client_selection_for_testing_settings = client_selection_settings["client_selection_for_testing_settings"]
         server_strategy = self.get_attribute("_server_strategy")
         aggregated_evaluate_metrics_history = server_strategy.get_attribute("_aggregated_evaluate_metrics_history")
         output_settings = self.get_attribute("_output_settings")
         remove_output_files = output_settings["remove_output_files"]
+        client_selector_name_to_output_on_testing_history_files \
+            = output_settings["client_selector_name_to_output_on_testing_history_files"]
         aggregated_evaluate_metrics_history_file = \
             Path(output_settings["aggregated_evaluate_metrics_history_file"]).absolute()
         # Remove the history output file (if it exists and if removing is enabled).
@@ -691,7 +777,29 @@ class FlowerServerLauncher:
         # Write the history data lines to the output file.
         with open(file=aggregated_evaluate_metrics_history_file, mode="a", encoding="utf-8") as file:
             for comm_round, comm_round_values in aggregated_evaluate_metrics_history.items():
-                client_selector = "{0} ({1})".format(comm_round_values["client_selector"], client_selector_for_training)
+                client_selector_name_to_output = None
+                client_selector_for_training = client_selection_for_training_settings["client_selector_for_training"]
+                training_deadline_key = "fit_deadline_in_seconds"
+                if training_deadline_key in client_selection_for_training_settings:
+                    training_deadline_value = client_selection_for_training_settings[training_deadline_key]
+                    if training_deadline_value != "infinity":
+                        client_selector_for_training = client_selector_for_training + \
+                                                       "_D{0}".format(training_deadline_value)
+                client_selector_for_testing = comm_round_values["client_selector"]
+                testing_deadline_key = "evaluate_deadline_in_seconds"
+                if testing_deadline_key in client_selection_for_testing_settings:
+                    testing_deadline_value = client_selection_for_testing_settings[testing_deadline_key]
+                    if testing_deadline_value != "infinity":
+                        client_selector_for_testing = client_selector_for_testing + \
+                                                       "_D{0}".format(testing_deadline_value)
+                match client_selector_name_to_output_on_testing_history_files:
+                    case "only_from_training_phase":
+                        client_selector_name_to_output = client_selector_for_training
+                    case "only_from_testing_phase":
+                        client_selector_name_to_output = client_selector_for_testing
+                    case "from_both_phases":
+                        client_selector_name_to_output = "{0} ({1})".format(client_selector_for_testing,
+                                                                            client_selector_for_training)
                 metrics_aggregator = comm_round_values["metrics_aggregator"]
                 num_tasks = comm_round_values["num_tasks"]
                 num_available_clients = comm_round_values["num_available_clients"]
@@ -704,7 +812,7 @@ class FlowerServerLauncher:
                     evaluate_metrics_values.append(evaluate_metric_value)
                 data_line = "{0},{1},{2},{3},{4},{5}\n" \
                             .format(comm_round,
-                                    client_selector,
+                                    client_selector_name_to_output,
                                     metrics_aggregator,
                                     num_tasks,
                                     num_available_clients,
@@ -716,12 +824,14 @@ class FlowerServerLauncher:
         server_strategy_settings = self.get_attribute("_server_strategy_settings")
         client_selection_settings = server_strategy_settings["client_selection"]
         client_selection_for_training_settings = client_selection_settings["client_selection_for_training_settings"]
-        client_selector_for_training = client_selection_for_training_settings["client_selector_for_training"]
+        client_selection_for_testing_settings = client_selection_settings["client_selection_for_testing_settings"]
         server_strategy = self.get_attribute("_server_strategy")
         evaluate_selection_performance_history \
             = server_strategy.get_attribute("_evaluate_selection_performance_history")
         output_settings = self.get_attribute("_output_settings")
         remove_output_files = output_settings["remove_output_files"]
+        client_selector_name_to_output_on_testing_history_files \
+            = output_settings["client_selector_name_to_output_on_testing_history_files"]
         evaluate_selection_performance_history_file \
             = Path(output_settings["evaluate_selection_performance_history_file"]).absolute()
         # Remove the history output file (if it exists and if removing is enabled).
@@ -750,7 +860,29 @@ class FlowerServerLauncher:
         # Write the history data lines to the output file.
         with open(file=evaluate_selection_performance_history_file, mode="a", encoding="utf-8") as file:
             for comm_round_key, comm_round_values in evaluate_selection_performance_history.items():
-                client_selector = "{0} ({1})".format(comm_round_values["client_selector"], client_selector_for_training)
+                client_selector_name_to_output = None
+                client_selector_for_training = client_selection_for_training_settings["client_selector_for_training"]
+                training_deadline_key = "fit_deadline_in_seconds"
+                if training_deadline_key in client_selection_for_training_settings:
+                    training_deadline_value = client_selection_for_training_settings[training_deadline_key]
+                    if training_deadline_value != "infinity":
+                        client_selector_for_training = client_selector_for_training + \
+                                                       "_D{0}".format(training_deadline_value)
+                client_selector_for_testing = comm_round_values["client_selector"]
+                testing_deadline_key = "evaluate_deadline_in_seconds"
+                if testing_deadline_key in client_selection_for_testing_settings:
+                    testing_deadline_value = client_selection_for_testing_settings[testing_deadline_key]
+                    if testing_deadline_value != "infinity":
+                        client_selector_for_testing = client_selector_for_testing + \
+                                                       "_D{0}".format(testing_deadline_value)
+                match client_selector_name_to_output_on_testing_history_files:
+                    case "only_from_training_phase":
+                        client_selector_name_to_output = client_selector_for_training
+                    case "only_from_testing_phase":
+                        client_selector_name_to_output = client_selector_for_testing
+                    case "from_both_phases":
+                        client_selector_name_to_output = "{0} ({1})".format(client_selector_for_testing,
+                                                                            client_selector_for_training)
                 num_tasks = comm_round_values["num_tasks"]
                 expected_makespan = comm_round_values["expected_makespan"]
                 actual_makespan = comm_round_values["actual_makespan"]
@@ -760,7 +892,7 @@ class FlowerServerLauncher:
                 actual_accuracy = comm_round_values["actual_accuracy"]
                 data_line = "{0},{1},{2},{3},{4},{5},{6},{7},{8}\n" \
                             .format(comm_round_key,
-                                    client_selector,
+                                    client_selector_name_to_output,
                                     num_tasks,
                                     expected_makespan,
                                     actual_makespan,
@@ -775,6 +907,8 @@ class FlowerServerLauncher:
         fl_settings = self.get_attribute("_fl_settings")
         num_rounds = fl_settings["num_rounds"]
         round_timeout_in_seconds = fl_settings["round_timeout_in_seconds"]
+        if round_timeout_in_seconds == "infinity":
+            round_timeout_in_seconds = None
         enable_training = fl_settings["enable_training"]
         enable_testing = fl_settings["enable_testing"]
         # Get the Secure Socket Layer (SSL) certificates (SSL-enabled secure connection).
