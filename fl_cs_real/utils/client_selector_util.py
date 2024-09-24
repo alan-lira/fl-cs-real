@@ -154,31 +154,11 @@ def map_available_participating_clients(comm_rounds: list,
     return available_participating_clients_map
 
 
-def get_metric_mean_value(individual_metrics_history: dict,
-                          client_key: str,
-                          num_examples_key: str,
-                          num_examples_used: int,
-                          metric_key: str) -> float:
-    metric_mean_value = 0
-    metric_values = []
-    for comm_round_key, individual_metrics_entry_comm_round in individual_metrics_history.items():
-        for participating_client_dict in individual_metrics_entry_comm_round["clients_metrics_dicts"]:
-            if client_key in participating_client_dict:
-                comm_round_num_examples_used = participating_client_dict[client_key][num_examples_key]
-                if comm_round_num_examples_used == num_examples_used:
-                    metric_value = participating_client_dict[client_key][metric_key]
-                    if metric_value > 0:
-                        metric_values.append(metric_value)
-    if metric_values:
-        metric_mean_value = sum(metric_values) / len(metric_values)
-    return metric_mean_value
-
-
-def calculate_linear_interpolation_or_extrapolation(x1: float,
-                                                    x2: float,
-                                                    y1: float,
-                                                    y2: float,
-                                                    x: float) -> float:
+def calculate_linear_interpolation_or_extrapolation(x1: int | float,
+                                                    x2: int | float,
+                                                    y1: int | float,
+                                                    y2: int | float,
+                                                    x: int | float) -> int | float:
     # Calculate the slope m of the line.
     m = (y2 - y1) / (x2 - x1)
     # Calculate the value of y using the line equation.

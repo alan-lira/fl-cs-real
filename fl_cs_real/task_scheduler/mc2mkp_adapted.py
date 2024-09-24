@@ -35,9 +35,10 @@ def mc2mkp_adapted(tasks: int,
     I = zeros(shape=(resources, tasks+1), dtype=int)
     # Solutions for Z_1
     for j in assignment_capacities[0]:
-        j_index = list(assignment_capacities[0]).index(j)
-        K[0][j] = cost[0][j_index]
-        I[0][j] = j
+        if j <= tasks:
+            j_index = list(assignment_capacities[0]).index(j)
+            K[0][j] = cost[0][j_index]
+            I[0][j] = j
     # Solutions for Z_i
     for i in range(1, resources):
         # All possible values for x_i
