@@ -1,10 +1,11 @@
 from logging import Logger
-from numpy import array, inf
+from numpy import array
 from random import sample
+from statistics import mean
 
 from fl_cs_real.task_scheduler.ecmtc import ecmtc
 from fl_cs_real.utils.client_selector_util import calculate_linear_interpolation_or_extrapolation, \
-    get_metric_mean_value, map_available_participating_clients, schedule_tasks_to_selected_clients, \
+    map_available_participating_clients, schedule_tasks_to_selected_clients, \
     select_all_available_clients, sum_clients_max_task_capacities
 from fl_cs_real.utils.logger_util import log_message
 
@@ -80,13 +81,14 @@ def select_clients_using_ecmtc(comm_round: int,
         for client_key, client_values in available_participating_clients_map.items():
             # Get his assignment capacities list.
             assignment_capacities_client = client_values["client_task_assignment_capacities_{0}".format(phase)]
-            # Initialize his costs lists, based on the number of tasks (examples) to be scheduled.
-            time_costs_client = [inf for _ in range(0, num_tasks_to_schedule + 1)]
-            energy_costs_client = [inf for _ in range(0, num_tasks_to_schedule + 1)]
-            # Set the costs of zero tasks scheduled, allowing the data point (x=0, y=0) to be used during the
-            # estimation of his costs for the unused task assignment capacities.
-            time_costs_client[0] = 0
-            energy_costs_client[0] = 0
+            # Initialize his costs lists, based on his assignment capacities.
+            time_costs_client = [0] * len(assignment_capacities_client)
+            energy_costs_client = [0] * len(assignment_capacities_client)
+            # Set the costs of zero tasks scheduled, if needed, allowing the data point (x=0, y=0) to be used
+            # during the estimation of his costs for the unused task assignment capacities.
+            if 0 not in assignment_capacities_client:
+                time_costs_client.insert(0, 0)
+                energy_costs_client.insert(0, 0)
             # Get his individual metrics history entries...
             individual_metrics_history_entries = [list(comm_round_metrics)[0]
                                                   for key, comm_round_metrics in client_values.items()
@@ -95,102 +97,111 @@ def select_clients_using_ecmtc(comm_round: int,
                 # Get the number of examples used by him.
                 num_examples_key = "num_{0}ing_examples_used".format(phase)
                 num_examples = individual_metrics_history_entry[num_examples_key]
+                num_examples_idx = assignment_capacities_client.index(num_examples)
                 # Get the time spent by him (if available).
                 time_key = "{0}ing_elapsed_time".format(phase)
                 if time_key in individual_metrics_history_entry:
                     # Update his time costs list for this number of examples.
                     time_cost = individual_metrics_history_entry[time_key]
-                    time_costs_client[num_examples] = time_cost
-                # Initialize the energy cost with the zero value, so different energy costs can be summed up.
+                    if not isinstance(time_costs_client[num_examples_idx], list):
+                        time_costs_client[num_examples_idx] = [time_cost]
+                    else:
+                        time_costs_client[num_examples_idx].append(time_cost)
+                # Initialize the energy cost with the zero value, so energy costs can be summed up.
                 energy_cost = 0
                 # Get the energy consumed by his CPU (if available).
                 energy_cpu_key = "{0}ing_energy_cpu".format(phase)
                 if energy_cpu_key in individual_metrics_history_entry:
                     energy_cpu_cost = individual_metrics_history_entry[energy_cpu_key]
-                    # If the CPU energy cost is a valid value (higher than 0), take it.
-                    if energy_cpu_cost > 0:
-                        energy_cost += energy_cpu_cost
-                    # Otherwise, take the mean of the CPU energy costs for this number of examples, if available.
-                    else:
-                        energy_cpu_cost_mean_value = get_metric_mean_value(individual_metrics_history,
-                                                                           client_key,
-                                                                           num_examples_key,
-                                                                           num_examples,
-                                                                           energy_cpu_key)
-                        energy_cost += energy_cpu_cost_mean_value
+                    energy_cost += energy_cpu_cost
                 # Get the energy consumed by his NVIDIA GPU (if available).
                 energy_nvidia_gpu_key = "{0}ing_energy_nvidia_gpu".format(phase)
                 if energy_nvidia_gpu_key in individual_metrics_history_entry:
                     energy_nvidia_gpu_cost = individual_metrics_history_entry[energy_nvidia_gpu_key]
-                    # If the NVIDIA GPU energy cost is a valid value (higher than 0), take it.
-                    if energy_nvidia_gpu_cost > 0:
-                        energy_cost += energy_nvidia_gpu_cost
-                    # Otherwise, take the mean of the NVIDIA GPU energy costs for this number of examples, if available.
-                    else:
-                        energy_nvidia_gpu_cost_mean_value = get_metric_mean_value(individual_metrics_history,
-                                                                                  client_key,
-                                                                                  num_examples_key,
-                                                                                  num_examples,
-                                                                                  energy_nvidia_gpu_key)
-                        energy_cost += energy_nvidia_gpu_cost_mean_value
+                    energy_cost += energy_nvidia_gpu_cost
                 # Update his energy costs list for this number of examples.
-                energy_costs_client[num_examples] = energy_cost
-            # Get his set of previous numbers of tasks assigned.
-            previous_num_tasks_assigned = [list(comm_round_metrics)[0]["num_{0}ing_examples_used".format(phase)]
-                                           for key, comm_round_metrics in client_values.items()
-                                           if "comm_round_" in key]
-            previous_num_tasks_assigned.insert(0, 0)
-            # Estimate his costs for the unused task assignment capacities.
-            for assignment_capacity in assignment_capacities_client:
-                if assignment_capacity not in previous_num_tasks_assigned and \
-                   assignment_capacity <= num_tasks_to_schedule:
-                    # Determine x1 and x2, which are two known previous numbers of tasks assigned.
-                    prev_known_assignments = [i for i in previous_num_tasks_assigned if i < assignment_capacity]
-                    next_known_assignments = [i for i in previous_num_tasks_assigned if i > assignment_capacity]
-                    prev_known_assignment = None
-                    if next_known_assignments:
-                        # Interpolation.
-                        prev_known_assignment = prev_known_assignments[-1]
-                        next_known_assignment = next_known_assignments[0]
-                    else:
-                        # Extrapolation.
-                        if len(prev_known_assignments) > 1:
-                            prev_known_assignment = prev_known_assignments[-2]
-                        next_known_assignment = prev_known_assignments[-1]
-                    if prev_known_assignment != next_known_assignment:
-                        # Calculate the linear interpolation/extrapolation for the time cost.
-                        y1_time = time_costs_client[prev_known_assignment]
-                        y2_time = time_costs_client[next_known_assignment]
-                        time_cost_estimation = calculate_linear_interpolation_or_extrapolation(prev_known_assignment,
-                                                                                               next_known_assignment,
-                                                                                               y1_time,
-                                                                                               y2_time,
-                                                                                               assignment_capacity)
-                        # Calculate the linear interpolation/extrapolation for the energy cost.
-                        y1_energy = energy_costs_client[prev_known_assignment]
-                        y2_energy = energy_costs_client[next_known_assignment]
-                        energy_cost_estimation = calculate_linear_interpolation_or_extrapolation(prev_known_assignment,
-                                                                                                 next_known_assignment,
-                                                                                                 y1_energy,
-                                                                                                 y2_energy,
-                                                                                                 assignment_capacity)
-                        # Update the cost lists with the estimated values.
-                        time_costs_client[assignment_capacity] = time_cost_estimation
-                        energy_costs_client[assignment_capacity] = energy_cost_estimation
-            # Filter his lists.
-            filtered_assignment_capacities_client = []
-            filtered_time_costs_client = []
-            filtered_energy_costs_client = []
-            for index in range(0, num_tasks_to_schedule + 1):
-                if time_costs_client[index] != inf and energy_costs_client[index] != inf:
-                    filtered_assignment_capacities_client.append(index)
-                    filtered_time_costs_client.append(time_costs_client[index])
-                    filtered_energy_costs_client.append(energy_costs_client[index])
+                if not isinstance(energy_costs_client[num_examples_idx], list):
+                    energy_costs_client[num_examples_idx] = [energy_cost]
+                else:
+                    energy_costs_client[num_examples_idx].append(energy_cost)
+            # Calculate the averages of his historical costs per number of tasks.
+            for idx, _ in enumerate(assignment_capacities_client):
+                time_cost_client_idx = time_costs_client[idx]
+                if isinstance(time_cost_client_idx, list):
+                    time_costs_client[idx] = mean(time_cost_client_idx)
+                energy_cost_client_idx = energy_costs_client[idx]
+                if isinstance(energy_cost_client_idx, list):
+                    energy_costs_client[idx] = mean(energy_cost_client_idx)
+            # Estimate his costs for the unused task assignment capacities:
+            # 1. Time costs.
+            unknown_time_costs_indices = [idx for idx in range(1, len(time_costs_client))
+                                          if time_costs_client[idx] == 0]
+            known_time_costs_indices = [idx for idx in range(0, len(time_costs_client))
+                                        if idx not in unknown_time_costs_indices]
+            for _, unknown_idx in enumerate(unknown_time_costs_indices):
+                prev_known_indices = [known_idx for known_idx in known_time_costs_indices if known_idx < unknown_idx]
+                next_known_indices = [known_idx for known_idx in known_time_costs_indices if known_idx > unknown_idx]
+                prev_known_idx = None
+                if next_known_indices:
+                    # Interpolation.
+                    prev_known_idx = prev_known_indices[-1]
+                    next_known_idx = next_known_indices[0]
+                else:
+                    # Extrapolation.
+                    if len(prev_known_indices) > 1:
+                        prev_known_idx = prev_known_indices[-2]
+                    next_known_idx = prev_known_indices[-1]
+                if prev_known_idx is not None:
+                    # Estimate the unknown time cost via linear interpolation/extrapolation.
+                    prev_known_x_i = assignment_capacities_client[prev_known_idx]
+                    next_known_x_i = assignment_capacities_client[next_known_idx]
+                    prev_known_time_cost = time_costs_client[prev_known_idx]
+                    next_known_time_cost = time_costs_client[next_known_idx]
+                    x_i_to_estimate = assignment_capacities_client[unknown_idx]
+                    if prev_known_x_i < next_known_x_i and prev_known_time_cost < next_known_time_cost:
+                        estimated_time_cost = calculate_linear_interpolation_or_extrapolation(prev_known_x_i,
+                                                                                              next_known_x_i,
+                                                                                              prev_known_time_cost,
+                                                                                              next_known_time_cost,
+                                                                                              x_i_to_estimate)
+                        time_costs_client[unknown_idx] = estimated_time_cost
+            # 2. Energy costs.
+            unknown_energy_costs_indices = [idx for idx in range(1, len(energy_costs_client))
+                                            if energy_costs_client[idx] == 0]
+            known_energy_costs_indices = [idx for idx in range(0, len(energy_costs_client))
+                                          if idx not in unknown_energy_costs_indices]
+            for _, unknown_idx in enumerate(unknown_energy_costs_indices):
+                prev_known_indices = [known_idx for known_idx in known_energy_costs_indices if known_idx < unknown_idx]
+                next_known_indices = [known_idx for known_idx in known_energy_costs_indices if known_idx > unknown_idx]
+                prev_known_idx = None
+                if next_known_indices:
+                    # Interpolation.
+                    prev_known_idx = prev_known_indices[-1]
+                    next_known_idx = next_known_indices[0]
+                else:
+                    # Extrapolation.
+                    if len(prev_known_indices) > 1:
+                        prev_known_idx = prev_known_indices[-2]
+                    next_known_idx = prev_known_indices[-1]
+                if prev_known_idx is not None:
+                    # Estimate the unknown energy cost via linear interpolation/extrapolation.
+                    prev_known_x_i = assignment_capacities_client[prev_known_idx]
+                    next_known_x_i = assignment_capacities_client[next_known_idx]
+                    prev_known_energy_cost = energy_costs_client[prev_known_idx]
+                    next_known_energy_cost = energy_costs_client[next_known_idx]
+                    x_i_to_estimate = assignment_capacities_client[unknown_idx]
+                    if prev_known_x_i < next_known_x_i and prev_known_energy_cost < next_known_energy_cost:
+                        estimated_energy_cost = calculate_linear_interpolation_or_extrapolation(prev_known_x_i,
+                                                                                                next_known_x_i,
+                                                                                                prev_known_energy_cost,
+                                                                                                next_known_energy_cost,
+                                                                                                x_i_to_estimate)
+                        energy_costs_client[unknown_idx] = estimated_energy_cost
             # Append his lists into the global lists.
             client_ids.append(client_key)
-            assignment_capacities.append(filtered_assignment_capacities_client)
-            time_costs.append(filtered_time_costs_client)
-            energy_costs.append(filtered_energy_costs_client)
+            assignment_capacities.append(assignment_capacities_client)
+            time_costs.append(time_costs_client)
+            energy_costs.append(energy_costs_client)
         # Convert the global lists into Numpy arrays.
         assignment_capacities = array(assignment_capacities, dtype=object)
         time_costs = array(time_costs, dtype=object)
