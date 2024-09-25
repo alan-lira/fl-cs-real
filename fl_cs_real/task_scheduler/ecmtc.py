@@ -30,13 +30,13 @@ def ecmtc(num_resources: int,
     optimal_schedule : ndarray(shape=(num_resources), int), minimal_energy_consumption : float, minimal_makespan : float
         Optimal schedule (X*), minimal energy consumption (ΣE), and minimal makespan (C_max)
     """
-    # (I) Filtering: only assignments that respect the time limit (D) and the number of tasks to schedule.
+    # (I) Filtering: only assignments that respect the number of tasks to schedule (T) and the time limit (D).
     assignment_capacities_filtered = []
     for i in range(0, num_resources):
         assignment_capacities_i = []
         for j in assignment_capacities[i]:
             j_index = list(assignment_capacities[i]).index(j)
-            if time_costs[i][j_index] <= time_limit and j <= num_tasks:
+            if j <= num_tasks and time_costs[i][j_index] <= time_limit:
                 assignment_capacities_i.append(j)
         assignment_capacities_filtered.append(assignment_capacities_i)
     # (II) Initialization: minimal costs and partial solutions matrices.

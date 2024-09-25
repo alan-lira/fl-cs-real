@@ -39,7 +39,7 @@ server_implementation=${3}
 script_file="$(basename "$(test -L "$0" && readlink "$0" || echo "$0")")"
 
 # Script started message.
-echo "The '$script_file' script has started!"
+echo "$(date +%F_%T) $script_file INFO: The '$script_file' script has started!"
 
 # Get the start time.
 start_time=$(date +%s)
@@ -48,14 +48,14 @@ start_time=$(date +%s)
 python3 main.py launch_server --id "$server_id" --config-file "$server_config_file" --implementation "$server_implementation" &
 
 # Print the server launched notice.
-echo "Launched the Server!"
+echo "$(date +%F_%T) $script_file INFO: Launched the Server!"
 
 # Get the end time.
 end_time=$(date +%s)
 
 # Script ended message.
-echo "The '$script_file' script has ended successfully!"
-echo "Elapsed time: $((end_time - start_time)) seconds."
+echo "$(date +%F_%T) $script_file INFO: The '$script_file' script has ended successfully!"
+echo "$(date +%F_%T) $script_file INFO: Elapsed time: $((end_time - start_time)) seconds."
 
 # Wait for the completion of the server execution.
 wait
