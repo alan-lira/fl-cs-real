@@ -41,7 +41,7 @@ client_dataset_root_folder=${4}
 script_file="$(basename "$(test -L "$0" && readlink "$0" || echo "$0")")"
 
 # Script started message.
-echo "The '$script_file' script has started!"
+echo "$(date +%F_%T) $script_file INFO: The '$script_file' script has started!"
 
 # Get the start time.
 start_time=$(date +%s)
@@ -69,17 +69,17 @@ done
 
 # Print the number of clients launched.
 if [ "$num_clients" -eq 0 ] || [ "$num_clients" -gt 1 ]; then
-  echo "Launched $num_clients Clients!"
+  echo "$(date +%F_%T) $script_file INFO: Launched $num_clients Clients!"
 else
-  echo "Launched $num_clients Client!"
+  echo "$(date +%F_%T) $script_file INFO: Launched $num_clients Client!"
 fi
 
 # Get the end time.
 end_time=$(date +%s)
 
 # Script ended message.
-echo "The '$script_file' script has ended successfully!"
-echo "Elapsed time: $((end_time - start_time)) seconds."
+echo "$(date +%F_%T) $script_file INFO: The '$script_file' script has ended successfully!"
+echo "$(date +%F_%T) $script_file INFO: Elapsed time: $((end_time - start_time)) seconds."
 
 # Wait for the completion of the clients execution.
 wait
