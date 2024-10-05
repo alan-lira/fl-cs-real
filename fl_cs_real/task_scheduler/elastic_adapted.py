@@ -9,6 +9,7 @@ def calculate_ni_adapted(α: float,
 
 def elastic_adapted(I: int,
                     A: ndarray,
+                    A_skd: ndarray,
                     t: ndarray,
                     E: ndarray,
                     τ: float,
@@ -17,20 +18,22 @@ def elastic_adapted(I: int,
     # 1. We considered that clients do not share a wireless channel, so they can upload their model
     #    without having to wait for the channel availability. In other words, ∀i ∈ I, t_wait_i = 0.
     # 2. The algorithm receives a previously generated array of task assignment capacities (A),
-    #    such that the i-th client can process exactly Ai tasks.
-    # 3. The algorithm receives a previously generated array of time costs (t), such that ti = t_comp_i + t_up_i.
-    # 4. The algorithm receives a previously generated array of energy costs (E), such that Ei = E_comp_i + E_up_i.
+    #    such that the i-th client can process a list of A_i tasks.
+    # 3. The algorithm receives a previously generated array of tasks scheduled (A_skd),
+    #    such that the i-th client will process exactly A_skd_i tasks.
+    # 4. The algorithm receives a previously generated array of time costs (t), such that ti = t_comp_i + t_up_i.
+    # 5. The algorithm receives a previously generated array of energy costs (E), such that Ei = E_comp_i + E_up_i.
 
     # ∀i ∈ I, compute ηi.
     idx = []
     n = []
     for i in range(I):
         idx.append(i)
-        if A[i] == 0:
+        if A_skd[i] == 0:
             ni = inf
         else:
-            Ai_index = list(A).index(A[i])
-            ni = calculate_ni_adapted(α, float(E[i][Ai_index]))
+            A_skd_i_index = list(A[i]).index(A_skd[i])
+            ni = calculate_ni_adapted(α, float(E[i][A_skd_i_index]))
         n.append(ni)
     # Sort all the clients in increasing order based on ηi.
     # Denote I′ as the set of sorted clients.
@@ -49,13 +52,13 @@ def elastic_adapted(I: int,
             if x[index] == 1:
                 idxj = idx[index]
                 idx_j.append(idxj)
-                Ai_index = list(A).index(A[index])
-                tj = t[index][Ai_index]
+                A_skd_i_index = list(A[index]).index(A_skd[index])
+                tj = t[index][A_skd_i_index]
                 t_j.append(tj)
         sorted_t_j, sorted_J = map(list, zip(*sorted(zip(t_j, idx_j), reverse=False)))
         for index, _ in enumerate(sorted_J):
             idxj = idx_j[index]
-            if sorted_t_j[index] > τ or A[idxj] == 0:
+            if sorted_t_j[index] > τ or A_skd[idxj] == 0:
                 x[idxj] = 0
                 break
     # Organize the solution.
@@ -66,7 +69,7 @@ def elastic_adapted(I: int,
         if x[index] == 1:
             j = idx[index]  # Display the selected clients in ascending order.
             # j = sorted_idx[index]  # Display the selected clients sorted by n.
-            j_num_tasks_assigned = A[j]
+            j_num_tasks_assigned = A_skd[j]
             tasks_assignment[index] = j_num_tasks_assigned
             selected_clients.append(j)
     return x, tasks_assignment, selected_clients

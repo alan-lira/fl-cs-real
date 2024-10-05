@@ -67,9 +67,9 @@ def select_clients_using_elastic_adapted(comm_round: int,
         schedule_tasks_to_selected_clients(num_tasks_to_schedule,
                                            selected_all_available_participating_clients,
                                            phase)
-        single_assignment_capacities = [available_participating_client["client_num_tasks_scheduled"]
-                                        for available_participating_client in
-                                        selected_all_available_participating_clients]
+        tasks_scheduled = [selected_available_participating_client["client_num_tasks_scheduled"]
+                           for selected_available_participating_client in
+                           selected_all_available_participating_clients]
         # Initialize the global lists that will be transformed to array.
         client_ids = []
         assignment_capacities = []
@@ -201,13 +201,15 @@ def select_clients_using_elastic_adapted(comm_round: int,
             time_costs.append(time_costs_client)
             energy_costs.append(energy_costs_client)
         # Convert the global lists into Numpy arrays.
-        single_assignment_capacities = array(single_assignment_capacities, dtype=object)
+        assignment_capacities = array(assignment_capacities, dtype=object)
+        tasks_scheduled = array(tasks_scheduled, dtype=object)
         time_costs = array(time_costs, dtype=object)
         energy_costs = array(energy_costs, dtype=object)
         # Execute the ELASTIC adapted algorithm.
         _, elastic_schedule, elastic_selected_clients_indices \
             = elastic_adapted(num_resources,
-                              single_assignment_capacities,
+                              assignment_capacities,
+                              tasks_scheduled,
                               time_costs,
                               energy_costs,
                               deadline_in_seconds,
