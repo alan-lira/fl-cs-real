@@ -195,6 +195,8 @@ class ResultAnalyzer:
         alpha = plotting_settings["alpha"]
         size = plotting_settings["size"]
         line_sizes = plotting_settings["line_sizes"]
+        legend_location = plotting_settings["legend_location"]
+        legend_num_columns = plotting_settings["legend_num_columns"]
         # Plot the 'plotting_df' dataframe into the figure.
         ax = lineplot(data=plotting_df,
                       x=x_data,
@@ -210,7 +212,13 @@ class ResultAnalyzer:
                       sizes=line_sizes)
         # Fix the legend handles and labels.
         handles, labels = ax.get_legend_handles_labels()
-        ax.legend(handles=handles, labels=labels)
+        ax_position = ax.get_position()
+        ax.set_position([ax_position.x0, ax_position.y0, ax_position.width, ax_position.height * 0.85])
+        ax.legend(handles=handles,
+                  labels=labels,
+                  loc=legend_location,
+                  bbox_to_anchor=(0.5, 1.25),
+                  ncol=legend_num_columns)
 
     def _save_figure(self,
                      plotting_settings: dict,
@@ -1031,7 +1039,7 @@ class ResultAnalyzer:
                             if y_label == "Auto":
                                 y_scale_new = None
                                 plotting_settings["y_scale"] = y_scale_new
-                                y_label_new = "{0} ({1})".format("Sum of CPU energy consumption", "J")
+                                y_label_new = "{0} ({1})".format("Energy consumption", "J")
                                 plotting_settings["y_label"] = y_label_new
                         # If the current metric name equals to 'mean_num_training_examples_used'...
                         elif metric_name == "mean_num_training_examples_used":
@@ -1342,7 +1350,7 @@ class ResultAnalyzer:
                             if y_label == "Auto":
                                 y_scale_new = None
                                 plotting_settings["y_scale"] = y_scale_new
-                                y_label_new = "{0} ({1})".format("Sum of CPU energy consumption", "J")
+                                y_label_new = "{0} ({1})".format("Energy consumption", "J")
                                 plotting_settings["y_label"] = y_label_new
                         # If the current metric name equals to 'mean_num_testing_examples_used'...
                         elif metric_name == "mean_num_testing_examples_used":
