@@ -168,3 +168,4 @@ logging/
 
 # Ignore all output files.
 output/
+output_simulation/
