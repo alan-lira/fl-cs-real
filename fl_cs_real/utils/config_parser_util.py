@@ -396,6 +396,23 @@ def cast_to_dict(value: str) -> dict:
     return resulting_dict
 
 
+def get_all_section_names(config_file: Path) -> list:
+    """
+    Gets all section names from a config file.
+
+    Args:
+        config_file (Path): the config file.
+
+    Returns:
+        list: the list of section names.
+    """
+    cp = ConfigParser()
+    cp.optionxform = str
+    cp.read(filenames=config_file, encoding="utf-8")
+    section_names = cp.sections()
+    return section_names
+
+
 def parse_config_section(config_file: Path,
                          section_name: str) -> dict:
     """

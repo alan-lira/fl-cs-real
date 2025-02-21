@@ -7,6 +7,7 @@ from time import perf_counter
 from fl_cs_real.client_launcher.flower_client_launcher import FlowerClientLauncher
 from fl_cs_real.result_analyzer.result_analyzer import ResultAnalyzer
 from fl_cs_real.server_launcher.flower_server_launcher import FlowerServerLauncher
+from fl_cs_real.simulator.simulator import Simulator
 from fl_cs_real.utils.logger_util import load_logger, log_message
 from fl_cs_real.utils.setup_tools_util import get_version
 
@@ -15,6 +16,7 @@ __BASE_PATH = Path(__file__).parent.resolve()
 __VERSION_FILE = __BASE_PATH.joinpath("VERSION")
 __FLOWER_CLIENT_CONFIG_FILE = __BASE_PATH.joinpath("client/config/flower_client.cfg")
 __FLOWER_SERVER_CONFIG_FILE = __BASE_PATH.joinpath("server/config/flower_server.cfg")
+__SIMULATOR_CONFIG_FILE = __BASE_PATH.joinpath("simulator/config/simulator.cfg")
 __RESULT_ANALYZER_CONFIG_FILE = __BASE_PATH.joinpath("result_analyzer/config/results_analyzer.cfg")
 
 # List of implemented tools.
@@ -22,6 +24,7 @@ __AVAILABLE_TOOLS = [{"name": "FL-CS-Real",
                       "description": "",
                       "actions": [{"launch_server": "launches a FL server instance"},
                                   {"launch_client": "launches a FL client instance"},
+                                  {"run_simulation": "runs a FL simulation"},
                                   {"analyze_results": "analyzes the results"}]}]
 
 
@@ -140,6 +143,11 @@ def main() -> None:
                         type=Path,
                         required=True,
                         help=SUPPRESS)
+    elif "run_simulation" in argv:
+        ap.add_argument("--config-file",
+                        type=Path,
+                        required=True,
+                        help=SUPPRESS)
     elif "analyze_results" in argv:
         ap.add_argument("--config-file",
                         type=Path,
@@ -170,6 +178,12 @@ def main() -> None:
         if implementation == "flower":
             fc = FlowerClientLauncher(id_, config_file)
             fc.launch_client()
+    elif action == "run_simulation":
+        config_file = Path(parsed_args.config_file)
+        # Verify if the user-provided config file is valid.
+        _verify_if_config_file_is_valid(config_file)
+        s = Simulator(config_file)
+        s.simulate()
     elif action == "analyze_results":
         config_file = Path(parsed_args.config_file)
         # Verify if the user-provided config file is valid.

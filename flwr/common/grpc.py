@@ -1,4 +1,4 @@
-# Copyright 2020 Flower Labs GmbH. All Rights Reserved.
+# Copyright 2022 Flower Labs GmbH. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,8 @@
 """Utility functions for gRPC."""
 
 
-from logging import INFO
+from collections.abc import Sequence
+from logging import DEBUG
 from typing import Optional
 
 import grpc
@@ -30,6 +31,7 @@ def create_channel(
     insecure: bool,
     root_certificates: Optional[bytes] = None,
     max_message_length: int = GRPC_MAX_MESSAGE_LENGTH,
+    interceptors: Optional[Sequence[grpc.UnaryUnaryClientInterceptor]] = None,
 ) -> grpc.Channel:
     """Create a gRPC channel, either secure or insecure."""
     # Check for conflicting parameters
@@ -49,12 +51,18 @@ def create_channel(
 
     if insecure:
         channel = grpc.insecure_channel(server_address, options=channel_options)
-        log(INFO, "Opened insecure gRPC connection (no certificates were passed)")
+        log(DEBUG, "Opened insecure gRPC connection (no certificates were passed)")
     else:
-        ssl_channel_credentials = grpc.ssl_channel_credentials(root_certificates)
+        try:
+            ssl_channel_credentials = grpc.ssl_channel_credentials(root_certificates)
+        except Exception as e:
+            raise ValueError(f"Failed to create SSL channel credentials: {e}") from e
         channel = grpc.secure_channel(
             server_address, ssl_channel_credentials, options=channel_options
         )
-        log(INFO, "Opened secure gRPC connection using certificates")
+        log(DEBUG, "Opened secure gRPC connection using certificates")
+
+    if interceptors is not None:
+        channel = grpc.intercept_channel(channel, interceptors)
 
     return channel

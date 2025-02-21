@@ -16,6 +16,18 @@
 
 
 from .bulyan import Bulyan as Bulyan
+from .dp_adaptive_clipping import (
+    DifferentialPrivacyClientSideAdaptiveClipping as DifferentialPrivacyClientSideAdaptiveClipping,
+)
+from .dp_adaptive_clipping import (
+    DifferentialPrivacyServerSideAdaptiveClipping as DifferentialPrivacyServerSideAdaptiveClipping,
+)
+from .dp_fixed_clipping import (
+    DifferentialPrivacyClientSideFixedClipping as DifferentialPrivacyClientSideFixedClipping,
+)
+from .dp_fixed_clipping import (
+    DifferentialPrivacyServerSideFixedClipping as DifferentialPrivacyServerSideFixedClipping,
+)
 from .dpfedavg_adaptive import DPFedAvgAdaptive as DPFedAvgAdaptive
 from .dpfedavg_fixed import DPFedAvgFixed as DPFedAvgFixed
 from .fault_tolerant_fedavg import FaultTolerantFedAvg as FaultTolerantFedAvg
@@ -37,24 +49,28 @@ from .qfedavg import QFedAvg as QFedAvg
 from .strategy import Strategy as Strategy
 
 __all__ = [
+    "Bulyan",
+    "DPFedAvgAdaptive",
+    "DPFedAvgFixed",
+    "DifferentialPrivacyClientSideAdaptiveClipping",
+    "DifferentialPrivacyClientSideFixedClipping",
+    "DifferentialPrivacyServerSideAdaptiveClipping",
+    "DifferentialPrivacyServerSideFixedClipping",
     "FaultTolerantFedAvg",
     "FedAdagrad",
     "FedAdam",
     "FedAvg",
-    "FedXgbNnAvg",
-    "FedXgbBagging",
-    "FedXgbCyclic",
     "FedAvgAndroid",
     "FedAvgM",
+    "FedMedian",
     "FedOpt",
     "FedProx",
-    "FedYogi",
-    "QFedAvg",
-    "FedMedian",
     "FedTrimmedAvg",
+    "FedXgbBagging",
+    "FedXgbCyclic",
+    "FedXgbNnAvg",
+    "FedYogi",
     "Krum",
-    "Bulyan",
-    "DPFedAvgAdaptive",
-    "DPFedAvgFixed",
+    "QFedAvg",
     "Strategy",
 ]

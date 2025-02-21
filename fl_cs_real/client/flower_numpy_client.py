@@ -5,9 +5,9 @@ from keras.saving import load_model, save_model
 from logging import Logger
 from multiprocessing import Process, Queue, set_start_method
 from numpy.random import randint
-from os import getpid
+from os import environ, getpid
 from pathlib import Path
-from psutil import cpu_count
+from psutil import cpu_count, cpu_freq
 from socket import gethostname
 from time import perf_counter, process_time
 
@@ -18,6 +18,7 @@ from fl_cs_real.energy_monitor.pyjoules_energy_monitor import PyJoulesEnergyMoni
 from fl_cs_real.utils.logger_util import log_message
 from fl_cs_real.utils.platform_util import get_system
 
+environ["TF_CPP_MIN_LOG_LEVEL"] = "3" # Make TensorFlow log less verbose.
 
 class TrainingMeasurementsCallback(Callback):
 
@@ -234,6 +235,9 @@ class FlowerNumpyClient(NumPyClient):
                  energy_monitor: any,
                  daemon_settings: dict,
                  affinity_settings: dict,
+                 device_emulation_settings: dict,
+                 simulation_resources_settings: dict | None,
+                 root_output_folder: Path | None,
                  logger: Logger) -> None:
         # Initialize the attributes.
         self._client_id = id_
@@ -248,6 +252,9 @@ class FlowerNumpyClient(NumPyClient):
         self._energy_monitor = energy_monitor
         self._daemon_settings = daemon_settings
         self._affinity_settings = affinity_settings
+        self._device_emulation_settings = device_emulation_settings
+        self._simulation_resources_settings = simulation_resources_settings
+        self._root_output_folder = root_output_folder
         self._logger = logger
         self._model_file = None
         self._training_measurements_callback = TrainingMeasurementsCallback(energy_monitor)
@@ -255,6 +262,8 @@ class FlowerNumpyClient(NumPyClient):
         self._hostname = gethostname()
         self._num_cpus = cpu_count(logical=True)
         self._cpu_cores_list = list(range(0, cpu_count(logical=True)))
+        self._remaining_battery_energy_in_joules = None
+        self._load_remaining_battery_energy_in_joules()
         # Set the starting method of daemon processes.
         self._set_starting_method_of_daemon_processes()
         # Set the list of CPU cores to be used by the client (Linux only).
@@ -275,9 +284,10 @@ class FlowerNumpyClient(NumPyClient):
         client_id = self.get_attribute("_client_id")
         daemon_settings = self.get_attribute("_daemon_settings")
         enable_daemon_mode = daemon_settings["enable_daemon_mode"]
+        root_output_folder = self.get_attribute("_root_output_folder")
         if enable_daemon_mode:
             # Set the local model file path.
-            model_file = Path("output/models/flower_client_{0}.keras".format(client_id)).absolute()
+            model_file = Path(root_output_folder).joinpath("models/client_{0}.keras".format(client_id)).absolute()
             model_file.parent.mkdir(exist_ok=True, parents=True)
             self._set_attribute("_model_file", model_file)
             # Dump the local model to file.
@@ -286,6 +296,37 @@ class FlowerNumpyClient(NumPyClient):
         else:
             # Set the local model.
             self._set_attribute("_model", model)
+
+    def _load_remaining_battery_energy_in_joules(self) -> None:
+        # Get the necessary attributes.
+        client_id = self.get_attribute("_client_id")
+        device_emulation_settings = self.get_attribute("_device_emulation_settings")
+        root_output_folder = self.get_attribute("_root_output_folder")
+        remaining_battery_energy_temp_file_name = "remaining_battery_energy/client_{0}.txt".format(client_id)
+        remaining_battery_energy_temp_file = Path(root_output_folder).joinpath(remaining_battery_energy_temp_file_name).absolute()
+        remaining_battery_energy_temp_file.parent.mkdir(exist_ok=True, parents=True)
+        if remaining_battery_energy_temp_file.exists():
+            with open(remaining_battery_energy_temp_file, mode="r", encoding="utf-8") as temp_file:
+                remaining_battery_energy_in_joules = float(temp_file.readlines()[-1].strip())
+        else:
+            remaining_battery_energy_in_joules = float(device_emulation_settings["battery_stored_energy_in_joules"])
+            with open(file=remaining_battery_energy_temp_file, mode="a", encoding="utf-8") as temp_file:
+                temp_file.write("{0}\n".format(remaining_battery_energy_in_joules))
+        self._remaining_battery_energy_in_joules = remaining_battery_energy_in_joules
+
+    def _save_remaining_battery_energy_in_joules(self,
+                                                 consumed_energy_in_joules: float) -> None:
+        # Get the necessary attributes.
+        client_id = self.get_attribute("_client_id")
+        root_output_folder = self.get_attribute("_root_output_folder")
+        remaining_battery_energy_temp_file_name = "remaining_battery_energy/client_{0}.txt".format(client_id)
+        remaining_battery_energy_temp_file = Path(root_output_folder).joinpath(remaining_battery_energy_temp_file_name).absolute()
+        with open(remaining_battery_energy_temp_file, mode="r", encoding="utf-8") as temp_file:
+            remaining_battery_energy_in_joules = float(temp_file.readlines()[-1].strip())
+        remaining_battery_energy_in_joules = max(0.0, remaining_battery_energy_in_joules - consumed_energy_in_joules)
+        with open(file=remaining_battery_energy_temp_file, mode="a", encoding="utf-8") as temp_file:
+            temp_file.write("{0}\n".format(remaining_battery_energy_in_joules))
+        self._remaining_battery_energy_in_joules = remaining_battery_energy_in_joules
 
     def _set_starting_method_of_daemon_processes(self) -> None:
         # Get the necessary attributes.
@@ -342,7 +383,7 @@ class FlowerNumpyClient(NumPyClient):
                       .format(client_id,
                               num_cpus,
                               ",".join([str(cpu_core_id) for cpu_core_id in affinity_list]))
-            log_message(logger, message, "INFO")
+            log_message(logger, message, "DEBUG")
 
     def _load_model(self) -> Model:
         # Get the necessary attributes.
@@ -396,6 +437,27 @@ class FlowerNumpyClient(NumPyClient):
         # Return the current parameters (weights) of the local model requested by the server.
         return local_model_parameters
 
+    def _estimate_cpu_energy_consumption(self,
+                                         elapsed_time: float) -> float:
+        # Example of values: cpu_voltage = 1.2 V; cpu_frequency = 0.8 GHz; cpu_capacitance = 0.00000001 F.
+        # Get the necessary attributes.
+        device_emulation_settings = self.get_attribute("_device_emulation_settings")
+        cpu_voltage_in_volts = device_emulation_settings["cpu_voltage_in_volts"]
+        cpu_frequency_in_gigahertz = device_emulation_settings["cpu_frequency_in_gigahertz"]
+        cpu_capacitance_in_farads = device_emulation_settings["cpu_capacitance_in_farads"]
+        cpu_frequency_in_hertz = cpu_frequency_in_gigahertz * pow(10, 9)
+        cpu_dynamic_power_consumption = cpu_capacitance_in_farads * pow(cpu_voltage_in_volts, 2) * cpu_frequency_in_hertz
+        cpu_energy_consumption = cpu_dynamic_power_consumption * elapsed_time
+        return cpu_energy_consumption
+
+    def _estimate_cpu_energy_consumption_v2(self,
+                                            elapsed_time: float) -> float:
+        # Get the necessary attributes.
+        device_emulation_settings = self.get_attribute("_device_emulation_settings")
+        average_power_consumption_in_watts = device_emulation_settings["average_power_consumption_in_watts"]
+        cpu_energy_consumption = average_power_consumption_in_watts * elapsed_time
+        return cpu_energy_consumption
+
     @staticmethod
     def _get_slice_indices(num_examples_available: int,
                            num_examples_to_use: int) -> list:
@@ -412,8 +474,8 @@ class FlowerNumpyClient(NumPyClient):
 
     def _train_model(self,
                      global_parameters: NDArrays,
-                     x_train_sliced: NDArray,
-                     y_train_sliced: NDArray,
+                     x_train: NDArray,
+                     y_train: NDArray,
                      fit_config: dict,
                      fit_queue: Queue) -> None:
         # Get the necessary attributes.
@@ -423,8 +485,8 @@ class FlowerNumpyClient(NumPyClient):
         # Update the parameters (weights) of the local model with those received from the server (global parameters).
         model.set_weights(global_parameters)
         # Train the local model using the local training dataset slice.
-        history = model.fit(x=x_train_sliced,
-                            y=y_train_sliced,
+        history = model.fit(x=x_train,
+                            y=y_train,
                             shuffle=fit_config["shuffle"],
                             batch_size=fit_config["batch_size"],
                             initial_epoch=fit_config["initial_epoch"],
@@ -460,6 +522,7 @@ class FlowerNumpyClient(NumPyClient):
         y_train = self.get_attribute("_y_train")
         daemon_settings = self.get_attribute("_daemon_settings")
         enable_daemon_mode = daemon_settings["enable_daemon_mode"]
+        simulation_resources_settings = self.get_attribute("_simulation_resources_settings")
         logger = self.get_attribute("_logger")
         # Initialize the training metrics dictionary.
         training_metrics = {}
@@ -527,6 +590,36 @@ class FlowerNumpyClient(NumPyClient):
             training_metrics.update({training_metric_name: history[training_metric_name][-1]})
         # Add the number of training examples used to the training metrics.
         training_metrics.update({"num_training_examples_used": num_training_examples_to_use})
+        # Estimate the training time and energy consumption (if in simulation mode).
+        if simulation_resources_settings:
+            # Get the number of CPUs used for the simulation.
+            simulation_num_cpus = simulation_resources_settings["simulation_num_cpus"]
+            # Estimate the workload (number of CPU cycles) based on the real CPU frequency.
+            real_cpu_frequency_in_mhz = cpu_freq(percpu=False).current
+            real_cpu_cycles_per_second = real_cpu_frequency_in_mhz * pow(10, 6)
+            workload_estimated_num_cpu_cycles = training_elapsed_time * real_cpu_cycles_per_second
+            # Emulate the CPU speed based on the emulated CPU frequency.
+            device_emulation_settings = self.get_attribute("_device_emulation_settings")
+            emulated_num_cpu_cores = device_emulation_settings["num_cpu_cores"]
+            emulated_cpu_frequency_in_ghz = device_emulation_settings["cpu_frequency_in_gigahertz"]
+            emulated_cpu_cycles_per_second = emulated_cpu_frequency_in_ghz * pow(10, 9)
+            # Estimate the elapsed time based on the emulated CPU clock and the workload's estimated number of cycles.
+            estimated_training_time = workload_estimated_num_cpu_cycles / emulated_cpu_cycles_per_second
+            # Adjust the estimated time based on the CPU ratio.
+            estimated_training_time = estimated_training_time * (simulation_num_cpus / emulated_num_cpu_cores)
+            # Append the emulated device name to the training metrics.
+            training_metrics.update({"emulated_device_name": device_emulation_settings["device_name"]})
+            # Update the training time metrics.
+            training_elapsed_time = estimated_training_time
+            training_cpu_time = estimated_training_time * emulated_num_cpu_cores
+            training_metrics.update({"training_elapsed_time": training_elapsed_time,
+                                     "training_cpu_time": training_cpu_time})
+            # Estimate the training energy cpu and add to the training metrics.
+            estimated_training_energy_cpu = self._estimate_cpu_energy_consumption_v2(training_elapsed_time)
+            # Update the training energy metrics.
+            training_metrics.update({"training_energy_cpu": estimated_training_energy_cpu})
+            # Save the remaining battery energy.
+            self._save_remaining_battery_energy_in_joules(estimated_training_energy_cpu)
         # Set the logger.
         self._set_attribute("_logger", logger)
         # Log the model training duration.
@@ -538,8 +631,8 @@ class FlowerNumpyClient(NumPyClient):
 
     def _test_model(self,
                     global_parameters: NDArrays,
-                    x_test_sliced: NDArray,
-                    y_test_sliced: NDArray,
+                    x_test: NDArray,
+                    y_test: NDArray,
                     evaluate_config: dict,
                     evaluate_queue: Queue) -> None:
         # Get the necessary attributes.
@@ -549,8 +642,8 @@ class FlowerNumpyClient(NumPyClient):
         # Update the parameters (weights) of the local model with those received from the server (global parameters).
         model.set_weights(global_parameters)
         # Test the local model using the local testing dataset slice.
-        history = model.evaluate(x=x_test_sliced,
-                                 y=y_test_sliced,
+        history = model.evaluate(x=x_test,
+                                 y=y_test,
                                  batch_size=evaluate_config["batch_size"],
                                  steps=evaluate_config["steps"],
                                  verbose=evaluate_config["verbose"],
@@ -581,6 +674,7 @@ class FlowerNumpyClient(NumPyClient):
         y_test = self.get_attribute("_y_test")
         daemon_settings = self.get_attribute("_daemon_settings")
         enable_daemon_mode = daemon_settings["enable_daemon_mode"]
+        simulation_resources_settings = self.get_attribute("_simulation_resources_settings")
         logger = self.get_attribute("_logger")
         # Initialize the testing metrics dictionary.
         testing_metrics = {}
@@ -640,7 +734,7 @@ class FlowerNumpyClient(NumPyClient):
         # Add the model testing energy consumptions to the testing metrics.
         testing_metrics = testing_metrics | testing_energy_consumptions
         # Get a copy of the model's list of metrics names.
-        metrics_names_copy = self.get_attribute("_metrics_names").copy()
+        metrics_names_copy = list(self.get_attribute("_metrics_names")).copy()
         # Add the loss metric name at index 0 (from index 1 onward the values are disposed by ordered metrics names).
         metrics_names_copy.insert(0, "loss")
         # Store the testing metrics.
@@ -648,6 +742,33 @@ class FlowerNumpyClient(NumPyClient):
             testing_metrics.update({metric_name: history[index]})
         # Add the number of testing examples used to the testing metrics.
         testing_metrics.update({"num_testing_examples_used": num_testing_examples_to_use})
+        # Estimate the testing time and energy consumption (if in simulation mode).
+        if simulation_resources_settings:
+            # Get the number of CPUs used for the simulation.
+            simulation_num_cpus = simulation_resources_settings["simulation_num_cpus"]
+            # Estimate the workload (number of CPU cycles) based on the real CPU frequency.
+            real_cpu_frequency_in_mhz = cpu_freq(percpu=False).current
+            real_cpu_cycles_per_second = real_cpu_frequency_in_mhz * pow(10, 6)
+            workload_estimated_num_cpu_cycles = testing_elapsed_time * real_cpu_cycles_per_second
+            # Emulate the CPU speed based on the emulated CPU frequency.
+            device_emulation_settings = self.get_attribute("_device_emulation_settings")
+            emulated_cpu_frequency_in_ghz = device_emulation_settings["cpu_frequency_in_gigahertz"]
+            emulated_cpu_cycles_per_second = emulated_cpu_frequency_in_ghz * pow(10, 9)
+            # Estimate the elapsed time based on the emulated CPU clock and the workload's estimated number of cycles.
+            estimated_testing_time = workload_estimated_num_cpu_cycles / emulated_cpu_cycles_per_second
+            # Append the emulated device name to the testing metrics.
+            testing_metrics.update({"emulated_device_name": device_emulation_settings["device_name"]})
+            # Update the testing time metrics.
+            testing_elapsed_time = estimated_testing_time
+            testing_cpu_time = estimated_testing_time * simulation_num_cpus
+            testing_metrics.update({"testing_elapsed_time": testing_elapsed_time,
+                                    "testing_cpu_time": testing_cpu_time})
+            # Estimate the testing energy cpu and add to the testing metrics.
+            estimated_testing_energy_cpu = self._estimate_cpu_energy_consumption_v2(testing_elapsed_time)
+            # Update the testing energy metrics.
+            testing_metrics.update({"testing_energy_cpu": estimated_testing_energy_cpu})
+            # Save the remaining battery energy.
+            self._save_remaining_battery_energy_in_joules(estimated_testing_energy_cpu)
         # Get the loss value.
         loss = testing_metrics["loss"]
         # Set the logger.

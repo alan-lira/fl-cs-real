@@ -2,6 +2,7 @@ from copy import deepcopy
 from dateutil import parser
 from logging import Logger
 from numpy import inf
+from pathlib import Path
 from threading import Thread
 from time import perf_counter, sleep
 from typing import Dict, List, Optional, Tuple, Union
@@ -34,6 +35,7 @@ class FlowerServer(Strategy):
                  server_strategy_settings: dict,
                  fit_config: dict,
                  evaluate_config: dict,
+                 output_settings: dict,
                  initial_parameters: Optional[NDArrays],
                  logger: Logger) -> None:
         # Initialize the attributes.
@@ -43,6 +45,7 @@ class FlowerServer(Strategy):
         self._server_strategy_settings = server_strategy_settings
         self._fit_config = fit_config
         self._evaluate_config = evaluate_config
+        self._output_settings = output_settings
         self._initial_parameters = initial_parameters
         self._logger = logger
         self._fit_pairs_repository = {}
@@ -98,7 +101,7 @@ class FlowerServer(Strategy):
                                     client_num_testing_examples_available_property: "?",
                                     client_task_assignment_capacities_train_property: "?",
                                     client_task_assignment_capacities_test_property: "?"})
-            client_prompted = client_proxy.get_properties(gpi, timeout=None)
+            client_prompted = client_proxy.get_properties(gpi, timeout=None, group_id=None)
             client_id = client_prompted.properties[client_id_property]
             client_hostname = client_prompted.properties[client_hostname_property]
             client_num_cpus = client_prompted.properties[client_num_cpus_property]
@@ -180,6 +183,7 @@ class FlowerServer(Strategy):
                                  "selection_duration": selection_duration,
                                  "num_tasks": num_tasks_to_schedule,
                                  "num_available_clients": num_available_clients,
+                                 "available_clients": available_clients_ids,
                                  "num_selected_clients": num_selected_clients,
                                  "selected_clients": selected_clients_ids,
                                  "expected_durations": expected_durations,
@@ -248,10 +252,14 @@ class FlowerServer(Strategy):
             time_key = "{0}ing_elapsed_time".format(phase)
             energy_cpu_key = "{0}ing_energy_cpu".format(phase)
             energy_nvidia_gpu_key = "{0}ing_energy_nvidia_gpu".format(phase)
-            accuracy_key = "_accuracy"
+            accuracy_key = "accuracy"
             num_examples_key = "num_{0}ing_examples_used".format(phase)
+            sum_accuracy_product = 0
             for client_metrics_dict in clients_metrics_dicts:
                 for client_id_str, client_metrics in client_metrics_dict.items():
+                    num_examples_used = 0
+                    if num_examples_key in client_metrics:
+                        num_examples_used = client_metrics[num_examples_key]
                     for metric_key, _ in client_metrics.items():
                         if time_key in metric_key:
                             training_elapsed_time = client_metrics[metric_key]
@@ -265,9 +273,6 @@ class FlowerServer(Strategy):
                             actual_energy_consumption += training_energy_nvidia_gpu
                         if accuracy_key in metric_key:
                             accuracy = client_metrics[metric_key]
-                            num_examples_used = 0
-                            if num_examples_key in client_metrics:
-                                num_examples_used = client_metrics[num_examples_key]
                             sum_accuracy_product += num_examples_used * accuracy
                             sum_num_examples_used += num_examples_used
             actual_accuracy = sum_accuracy_product / sum_num_examples_used
@@ -298,7 +303,8 @@ class FlowerServer(Strategy):
         # Replace None values to 'None' (necessary workaround on Flower).
         config = {k: ("None" if v is None else v) for k, v in config.items()}
         # Log the current configuration.
-        message = "[Server {0} | Round {1}] Current {2}ing config: {3}".format(server_id, comm_round, phase, config)
+        message = "[Server {0} | Round {1}] Current {2}ing config: {3}" \
+                  .format(server_id, comm_round, phase, config)
         log_message(logger, message, "DEBUG")
         # Return the configuration.
         return config
@@ -465,7 +471,11 @@ class FlowerServer(Strategy):
             if "client_num_tasks_scheduled" in selected_client:
                 num_examples_to_use = selected_client["client_num_tasks_scheduled"]
                 selected_client_config.update({"num_{0}ing_examples_to_use".format(phase): num_examples_to_use})
-            selected_client_instructions = FitIns(parameters, selected_client_config)
+            selected_client_instructions = None
+            if phase == "train":
+                selected_client_instructions = FitIns(parameters, selected_client_config)
+            elif phase == "test":
+                selected_client_instructions = EvaluateIns(parameters, selected_client_config)
             phase_pairs.append((selected_client_proxy, selected_client_instructions))
         # Update the repository of phase pairs.
         self._update_pairs_repository(comm_round, phase, phase_pairs)
@@ -644,22 +654,38 @@ class FlowerServer(Strategy):
         for hostname in hostnames:
             self._calculate_energy_timestamp_metrics_of_client_hostname(metrics, phase, hostname)
 
-    def _update_individual_fit_metrics_history(self,
-                                               comm_round: int,
-                                               fit_metrics: list[tuple[int, Metrics]]) -> None:
-        individual_fit_metrics_history = self.get_attribute("_individual_fit_metrics_history")
+    def _update_individual_metrics_history(self,
+                                           comm_round: int,
+                                           phase: str,
+                                           metrics: list[tuple[int, Metrics]]) -> None:
+        selected_clients_history_attribute = None
+        individual_metrics_history_attribute = None
+        client_selection_for_phase_settings_key = None
+        client_selector_key = None
+        if phase == "train":
+            selected_clients_history_attribute = "_selected_fit_clients_history"
+            individual_metrics_history_attribute = "_individual_fit_metrics_history"
+            client_selection_for_phase_settings_key = "client_selection_for_training_settings"
+            client_selector_key = "client_selector_for_training"
+        elif phase == "test":
+            selected_clients_history_attribute = "_selected_evaluate_clients_history"
+            individual_metrics_history_attribute = "_individual_evaluate_metrics_history"
+            client_selection_for_phase_settings_key = "client_selection_for_testing_settings"
+            client_selector_key = "client_selector_for_testing"
+        individual_metrics_history = self.get_attribute(individual_metrics_history_attribute)
         comm_round_key = "comm_round_{0}".format(comm_round)
-        if comm_round_key not in individual_fit_metrics_history:
+        comm_round_values = None
+        if comm_round_key not in individual_metrics_history:
             server_strategy_settings = self.get_attribute("_server_strategy_settings")
             client_selection_settings = server_strategy_settings["client_selection"]
-            client_selection_for_training_settings = client_selection_settings["client_selection_for_training_settings"]
-            client_selector_for_training = client_selection_for_training_settings["client_selector_for_training"]
-            selected_fit_clients_history = self.get_attribute("_selected_fit_clients_history")
-            num_tasks = selected_fit_clients_history[comm_round_key]["num_tasks"]
-            num_available_clients = selected_fit_clients_history[comm_round_key]["num_available_clients"]
-            fit_clients_metrics = []
-            for metric_tuple in fit_metrics:
-                client_metrics = metric_tuple[1]
+            client_selection_for_phase_settings = client_selection_settings[client_selection_for_phase_settings_key]
+            client_selector_for_phase = client_selection_for_phase_settings[client_selector_key]
+            selected_clients_history = self.get_attribute(selected_clients_history_attribute)
+            num_tasks = selected_clients_history[comm_round_key]["num_tasks"]
+            num_available_clients = selected_clients_history[comm_round_key]["num_available_clients"]
+            clients_metrics_dicts = []
+            for metric_tuple in metrics:
+                client_metrics = dict(metric_tuple[1])
                 client_id = client_metrics["client_id"]
                 client_id_str = "client_{0}".format(client_id)
                 client_metrics_copy = client_metrics.copy()
@@ -667,14 +693,14 @@ class FlowerServer(Strategy):
                 client_metrics_copy["hostname"] = client_metrics_copy.pop("client_hostname")
                 client_metrics_copy["num_cpus"] = client_metrics_copy.pop("client_num_cpus")
                 client_metrics_copy["cpu_cores_list"] = client_metrics_copy.pop("client_cpu_cores_list")
-                fit_clients_metrics.append({client_id_str: client_metrics_copy})
-            comm_round_values = {"client_selector": client_selector_for_training,
+                clients_metrics_dicts.append({client_id_str: client_metrics_copy})
+            comm_round_values = {"client_selector": client_selector_for_phase,
                                  "num_tasks": num_tasks,
                                  "num_available_clients": num_available_clients,
-                                 "clients_metrics_dicts": fit_clients_metrics}
-            comm_round_individual_fit_metrics = {comm_round_key: comm_round_values}
-            individual_fit_metrics_history.update(comm_round_individual_fit_metrics)
-            self._set_attribute("_individual_fit_metrics_history", individual_fit_metrics_history)
+                                 "clients_metrics_dicts": clients_metrics_dicts}
+            comm_round_individual_metrics = {comm_round_key: comm_round_values}
+            individual_metrics_history.update(comm_round_individual_metrics)
+            self._set_attribute(individual_metrics_history_attribute, individual_metrics_history)
 
     @staticmethod
     def _remove_undesired_metrics(metrics_tuples: list[tuple[int, Metrics]],
@@ -686,28 +712,43 @@ class FlowerServer(Strategy):
                     del client_metrics[undesired_metric]
         return metrics_tuples
 
-    def _update_aggregated_fit_metrics_history(self,
-                                               comm_round: int,
-                                               metrics_aggregator: str,
-                                               aggregated_fit_metrics: dict) -> None:
-        aggregated_fit_metrics_history = self.get_attribute("_aggregated_fit_metrics_history")
+    def _update_aggregated_metrics_history(self,
+                                           comm_round: int,
+                                           phase: str,
+                                           metrics_aggregator: str,
+                                           aggregated_metrics: dict) -> None:
+        selected_clients_history_attribute = None
+        aggregated_metrics_history_attribute = None
+        client_selection_for_phase_settings_key = None
+        client_selector_key = None
+        if phase == "train":
+            selected_clients_history_attribute = "_selected_fit_clients_history"
+            aggregated_metrics_history_attribute = "_aggregated_fit_metrics_history"
+            client_selection_for_phase_settings_key = "client_selection_for_training_settings"
+            client_selector_key = "client_selector_for_training"
+        elif phase == "test":
+            selected_clients_history_attribute = "_selected_evaluate_clients_history"
+            aggregated_metrics_history_attribute = "_aggregated_evaluate_metrics_history"
+            client_selection_for_phase_settings_key = "client_selection_for_testing_settings"
+            client_selector_key = "client_selector_for_testing"
+        aggregated_metrics_history = self.get_attribute(aggregated_metrics_history_attribute)
         comm_round_key = "comm_round_{0}".format(comm_round)
-        if comm_round_key not in aggregated_fit_metrics_history:
+        if comm_round_key not in aggregated_metrics_history:
             server_strategy_settings = self.get_attribute("_server_strategy_settings")
             client_selection_settings = server_strategy_settings["client_selection"]
-            client_selection_for_training_settings = client_selection_settings["client_selection_for_training_settings"]
-            client_selector_for_training = client_selection_for_training_settings["client_selector_for_training"]
-            selected_fit_clients_history = self.get_attribute("_selected_fit_clients_history")
-            num_tasks = selected_fit_clients_history[comm_round_key]["num_tasks"]
-            num_available_clients = selected_fit_clients_history[comm_round_key]["num_available_clients"]
-            comm_round_values = {"client_selector": client_selector_for_training,
+            client_selection_for_phase_settings = client_selection_settings[client_selection_for_phase_settings_key]
+            client_selector_for_phase = client_selection_for_phase_settings[client_selector_key]
+            selected_clients_history = self.get_attribute(selected_clients_history_attribute)
+            num_tasks = selected_clients_history[comm_round_key]["num_tasks"]
+            num_available_clients = selected_clients_history[comm_round_key]["num_available_clients"]
+            comm_round_values = {"client_selector": client_selector_for_phase,
                                  "metrics_aggregator": metrics_aggregator,
                                  "num_tasks": num_tasks,
                                  "num_available_clients": num_available_clients,
-                                 "aggregated_metrics": aggregated_fit_metrics}
-            comm_round_aggregated_fit_metrics = {comm_round_key: comm_round_values}
-            aggregated_fit_metrics_history.update(comm_round_aggregated_fit_metrics)
-            self._set_attribute("_aggregated_fit_metrics_history", aggregated_fit_metrics_history)
+                                 "aggregated_metrics": aggregated_metrics}
+            comm_round_aggregated_metrics = {comm_round_key: comm_round_values}
+            aggregated_metrics_history.update(comm_round_aggregated_metrics)
+            self._set_attribute(aggregated_metrics_history_attribute, aggregated_metrics_history)
 
     def _aggregate_fit_metrics(self,
                                comm_round: int,
@@ -736,12 +777,12 @@ class FlowerServer(Strategy):
         # Calculate the energy timestamp metrics.
         self._calculate_energy_timestamp_metrics(fit_metrics, phase)
         # Update the individual training metrics history.
-        self._update_individual_fit_metrics_history(comm_round, fit_metrics)
+        self._update_individual_metrics_history(comm_round, phase, fit_metrics)
         # Update the history of training selection's performance (actual metrics values).
         self._update_selection_performance_history(comm_round, phase)
         # Remove the undesired metrics, if any.
         undesired_metrics = ["client_id", "client_hostname", "client_num_cpus", "client_cpu_cores_list",
-                             "training_start_timestamp", "training_end_timestamp"]
+                             "training_start_timestamp", "training_end_timestamp", "emulated_device_name"]
         fit_metrics = self._remove_undesired_metrics(fit_metrics, undesired_metrics)
         # Initialize the aggregated training metrics dictionary (aggregated_fit_metrics).
         aggregated_fit_metrics = {}
@@ -749,7 +790,7 @@ class FlowerServer(Strategy):
         if metrics_aggregator == "Weighted_Average":
             aggregated_fit_metrics = aggregate_metrics_by_weighted_average(fit_metrics)
         # Update the aggregated training metrics history.
-        self._update_aggregated_fit_metrics_history(comm_round, metrics_aggregator, aggregated_fit_metrics)
+        self._update_aggregated_metrics_history(comm_round, phase, metrics_aggregator, aggregated_fit_metrics)
         # Get the number of participating clients.
         num_participating_clients = len(fit_metrics)
         num_participating_clients_str = "".join([str(num_participating_clients),
@@ -761,6 +802,512 @@ class FlowerServer(Strategy):
         log_message(logger, message, "DEBUG")
         # Return the aggregated training metrics (aggregated_fit_metrics).
         return aggregated_fit_metrics
+
+    def _initialize_history_output_files(self,
+                                         phase: str) -> None:
+        # Get the necessary attributes.
+        output_settings = self.get_attribute("_output_settings")
+        remove_output_files = output_settings["remove_output_files"]
+        phase_substrings = []
+        if phase == "train":
+            phase_substrings = ["fit", "train"]
+        elif phase == "test":
+            phase_substrings = ["evaluate", "test"]
+        output_files_phase = [{k: v} for k, v in output_settings.items()
+                              if any(substring in k for substring in phase_substrings)]
+        # Remove the history output files, if removing is enabled.
+        if remove_output_files:
+            for output_file_dict in output_files_phase:
+                history_output_file_key = next(iter(output_file_dict))
+                history_output_file = Path(output_file_dict[history_output_file_key]).absolute()
+                history_output_file.unlink(missing_ok=True)
+        # Write the header line to the history output files (if not exist yet).
+        for output_file_dict in output_files_phase:
+            history_output_file_key = next(iter(output_file_dict))
+            history_output_file = Path(output_file_dict[history_output_file_key]).absolute()
+            history_attribute = "_" + str(history_output_file_key).replace("_file", "")
+            # Create the parents directories of the history output files (if not exist yet).
+            history_output_file.parent.mkdir(exist_ok=True, parents=True)
+            header_line = None
+            match history_output_file_key:
+                case "selected_fit_clients_history_file":
+                    header_line = ("{0},{1},{2},{3},{4},{5},{6},{7}\n"
+                                   .format("comm_round",
+                                           "client_selector",
+                                           "selection_duration",
+                                           "num_tasks",
+                                           "num_available_clients",
+                                           "available_clients",
+                                           "num_selected_clients",
+                                           "selected_clients"))
+                case "individual_fit_metrics_history_file":
+                    # Get the ordered set of fit metrics names.
+                    fit_metrics_names = []
+                    individual_fit_metrics_history = self.get_attribute(history_attribute)
+                    for _, comm_round_values in individual_fit_metrics_history.items():
+                        clients_metrics_dicts = comm_round_values["clients_metrics_dicts"]
+                        for client_metrics_dict in clients_metrics_dicts:
+                            client_metrics = list(client_metrics_dict.values())[0]
+                            fit_metrics_names.extend(client_metrics.keys())
+                    fit_metrics_names = sorted(set(fit_metrics_names))
+                    header_line = ("{0},{1},{2},{3},{4},{5},{6},{7},{8}\n"
+                                   .format("comm_round",
+                                           "client_selector",
+                                           "num_tasks",
+                                           "num_available_clients",
+                                           "client_id",
+                                           "client_expected_duration",
+                                           "client_expected_energy_consumption",
+                                           "client_expected_accuracy",
+                                           ",".join(fit_metrics_names)))
+                case "aggregated_fit_metrics_history_file":
+                    # Get the ordered set of fit metrics names.
+                    fit_metrics_names = []
+                    aggregated_fit_metrics_history = self.get_attribute(history_attribute)
+                    for _, comm_round_values in aggregated_fit_metrics_history.items():
+                        aggregated_metrics = comm_round_values["aggregated_metrics"]
+                        fit_metrics_names.extend(aggregated_metrics.keys())
+                    fit_metrics_names = sorted(set(fit_metrics_names))
+                    header_line = ("{0},{1},{2},{3},{4},{5}\n"
+                                   .format("comm_round",
+                                           "client_selector",
+                                           "metrics_aggregator",
+                                           "num_tasks",
+                                           "num_available_clients",
+                                           ",".join(fit_metrics_names)))
+                case "fit_selection_performance_history_file":
+                    header_line = ("{0},{1},{2},{3},{4},{5},{6},{7},{8}\n"
+                                   .format("comm_round",
+                                           "client_selector",
+                                           "num_tasks",
+                                           "expected_makespan",
+                                           "actual_makespan",
+                                           "expected_energy_consumption",
+                                           "actual_energy_consumption",
+                                           "expected_accuracy",
+                                           "actual_accuracy"))
+                case "selected_evaluate_clients_history_file":
+                    header_line = ("{0},{1},{2},{3},{4},{5},{6},{7}\n"
+                                   .format("comm_round",
+                                           "client_selector",
+                                           "selection_duration",
+                                           "num_tasks",
+                                           "num_available_clients",
+                                           "available_clients",
+                                           "num_selected_clients",
+                                           "selected_clients"))
+                case "individual_evaluate_metrics_history_file":
+                    # Get the ordered set of evaluate metrics names.
+                    evaluate_metrics_names = []
+                    individual_evaluate_metrics_history = self.get_attribute(history_attribute)
+                    for _, comm_round_values in individual_evaluate_metrics_history.items():
+                        clients_metrics_dicts = comm_round_values["clients_metrics_dicts"]
+                        for client_metrics_dict in clients_metrics_dicts:
+                            client_metrics = list(client_metrics_dict.values())[0]
+                            evaluate_metrics_names.extend(client_metrics.keys())
+                    evaluate_metrics_names = sorted(set(evaluate_metrics_names))
+                    header_line = ("{0},{1},{2},{3},{4},{5},{6},{7},{8}\n"
+                                   .format("comm_round",
+                                           "client_selector",
+                                           "num_tasks",
+                                           "num_available_clients",
+                                           "client_id",
+                                           "client_expected_duration",
+                                           "client_expected_energy_consumption",
+                                           "client_expected_accuracy",
+                                           ",".join(evaluate_metrics_names)))
+                case "aggregated_evaluate_metrics_history_file":
+                    # Get the ordered set of evaluate metrics names.
+                    evaluate_metrics_names = []
+                    aggregated_evaluate_metrics_history = self.get_attribute(history_attribute)
+                    for _, comm_round_values in aggregated_evaluate_metrics_history.items():
+                        aggregated_metrics = comm_round_values["aggregated_metrics"]
+                        evaluate_metrics_names.extend(aggregated_metrics.keys())
+                    evaluate_metrics_names = sorted(set(evaluate_metrics_names))
+                    header_line = ("{0},{1},{2},{3},{4},{5}\n"
+                                   .format("comm_round",
+                                           "client_selector",
+                                           "metrics_aggregator",
+                                           "num_tasks",
+                                           "num_available_clients",
+                                           ",".join(evaluate_metrics_names)))
+                case "evaluate_selection_performance_history_file":
+                    header_line = ("{0},{1},{2},{3},{4},{5},{6},{7},{8}\n"
+                                   .format("comm_round",
+                                           "client_selector",
+                                           "num_tasks",
+                                           "expected_makespan",
+                                           "actual_makespan",
+                                           "expected_energy_consumption",
+                                           "actual_energy_consumption",
+                                           "expected_accuracy",
+                                           "actual_accuracy"))
+            if not history_output_file.exists() and header_line:
+                with open(file=history_output_file, mode="a", encoding="utf-8") as file:
+                    file.write(header_line)
+
+    def _append_round_data_to_history_files(self,
+                                            comm_round: int,
+                                            phase: str) -> None:
+        # Get the necessary attributes.
+        output_settings = self.get_attribute("_output_settings")
+        client_selector_name_to_output_on_testing_history_files \
+            = output_settings["client_selector_name_to_output_on_testing_history_files"]
+        server_strategy_settings = self.get_attribute("_server_strategy_settings")
+        client_selection_settings = server_strategy_settings["client_selection"]
+        client_selection_for_training_settings = client_selection_settings["client_selection_for_training_settings"]
+        client_selector_for_training = client_selection_for_training_settings["client_selector_for_training"]
+        client_selection_for_testing_settings = client_selection_settings["client_selection_for_testing_settings"]
+        client_selector_for_testing = client_selection_for_testing_settings["client_selector_for_testing"]
+        comm_round_key = "comm_round_{0}".format(comm_round)
+        phase_substrings = []
+        if phase == "train":
+            phase_substrings = ["fit", "train"]
+        elif phase == "test":
+            phase_substrings = ["evaluate", "test"]
+        output_files_phase = [{k: v} for k, v in output_settings.items()
+                              if any(substring in k for substring in phase_substrings)]
+        # Write the data line to the history output files.
+        for output_file_dict in output_files_phase:
+            history_output_file_key = next(iter(output_file_dict))
+            history_output_file = Path(output_file_dict[history_output_file_key]).absolute()
+            history_attribute = "_" + str(history_output_file_key).replace("_file", "")
+            data_lines = []
+            match history_output_file_key:
+                case "selected_fit_clients_history_file":
+                    selected_fit_clients_history = self.get_attribute(history_attribute)
+                    comm_round_values = selected_fit_clients_history[comm_round_key]
+                    client_selector = comm_round_values["client_selector"]
+                    training_deadline_key = "fit_deadline_in_seconds"
+                    if training_deadline_key in client_selection_for_training_settings:
+                        training_deadline_value = client_selection_for_training_settings[training_deadline_key]
+                        if training_deadline_value != "infinity":
+                            client_selector = client_selector + "_D{0}".format(training_deadline_value)
+                    selection_duration = comm_round_values["selection_duration"]
+                    num_tasks = comm_round_values["num_tasks"]
+                    num_available_clients = comm_round_values["num_available_clients"]
+                    available_clients = comm_round_values["available_clients"]
+                    num_selected_clients = comm_round_values["num_selected_clients"]
+                    selected_clients = comm_round_values["selected_clients"]
+                    data_line = ("{0},{1},{2},{3},{4},{5},{6},{7}\n"
+                                 .format(comm_round_key,
+                                         client_selector,
+                                         selection_duration,
+                                         num_tasks,
+                                         num_available_clients,
+                                         "|".join(available_clients) if available_clients else None,
+                                         num_selected_clients,
+                                         "|".join(selected_clients) if selected_clients else None))
+                    data_lines.append(data_line)
+                case "individual_fit_metrics_history_file":
+                    individual_fit_metrics_history = self.get_attribute(history_attribute)
+                    comm_round_values = individual_fit_metrics_history[comm_round_key]
+                    selected_fit_clients_history = self.get_attribute("_selected_fit_clients_history")
+                    fit_metrics_names = []
+                    clients_metrics_dicts = comm_round_values["clients_metrics_dicts"]
+                    for client_metrics_dict in clients_metrics_dicts:
+                        client_metrics = list(client_metrics_dict.values())[0]
+                        fit_metrics_names.extend(client_metrics.keys())
+                    fit_metrics_names = sorted(set(fit_metrics_names))
+                    client_selector = comm_round_values["client_selector"]
+                    training_deadline_key = "fit_deadline_in_seconds"
+                    if training_deadline_key in client_selection_for_training_settings:
+                        training_deadline_value = client_selection_for_training_settings[training_deadline_key]
+                        if training_deadline_value != "infinity":
+                            client_selector = client_selector + "_D{0}".format(training_deadline_value)
+                    num_tasks = comm_round_values["num_tasks"]
+                    num_available_clients = comm_round_values["num_available_clients"]
+                    clients_metrics_dicts = comm_round_values["clients_metrics_dicts"]
+                    clients_metrics_dicts = sorted(clients_metrics_dicts, key=lambda x: list(x.keys()))
+                    selected_clients = list(selected_fit_clients_history[comm_round_key]["selected_clients"])
+                    expected_durations = list(selected_fit_clients_history[comm_round_key]["expected_durations"])
+                    expected_energy_consumptions \
+                        = list(selected_fit_clients_history[comm_round_key]["expected_energy_consumptions"])
+                    expected_accuracies = list(selected_fit_clients_history[comm_round_key]["expected_accuracies"])
+                    for client_metrics_dict in clients_metrics_dicts:
+                        client_id_str = list(client_metrics_dict.keys())[0]
+                        client_id_str_index = selected_clients.index(client_id_str)
+                        client_expected_duration = expected_durations[client_id_str_index]
+                        client_expected_energy_consumption = expected_energy_consumptions[client_id_str_index]
+                        client_expected_accuracy = expected_accuracies[client_id_str_index]
+                        client_metrics = list(client_metrics_dict.values())[0]
+                        fit_metrics_values = []
+                        for fit_metric_name in fit_metrics_names:
+                            fit_metric_value = "N/A"
+                            if fit_metric_name in client_metrics:
+                                fit_metric_value = str(client_metrics[fit_metric_name])
+                            fit_metrics_values.append(fit_metric_value)
+                        data_line = ("{0},{1},{2},{3},{4},{5},{6},{7},{8}\n"
+                                     .format(comm_round_key,
+                                             client_selector,
+                                             num_tasks,
+                                             num_available_clients,
+                                             client_id_str,
+                                             client_expected_duration,
+                                             client_expected_energy_consumption,
+                                             client_expected_accuracy,
+                                             ",".join(fit_metrics_values)))
+                        data_lines.append(data_line)
+                case "aggregated_fit_metrics_history_file":
+                    aggregated_fit_metrics_history = self.get_attribute(history_attribute)
+                    comm_round_values = aggregated_fit_metrics_history[comm_round_key]
+                    fit_metrics_names = []
+                    aggregated_metrics = comm_round_values["aggregated_metrics"]
+                    fit_metrics_names.extend(aggregated_metrics.keys())
+                    fit_metrics_names = sorted(set(fit_metrics_names))
+                    client_selector = comm_round_values["client_selector"]
+                    training_deadline_key = "fit_deadline_in_seconds"
+                    if training_deadline_key in client_selection_for_training_settings:
+                        training_deadline_value = client_selection_for_training_settings[training_deadline_key]
+                        if training_deadline_value != "infinity":
+                            client_selector = client_selector + "_D{0}".format(training_deadline_value)
+                    metrics_aggregator = comm_round_values["metrics_aggregator"]
+                    num_tasks = comm_round_values["num_tasks"]
+                    num_available_clients = comm_round_values["num_available_clients"]
+                    aggregated_metrics = comm_round_values["aggregated_metrics"]
+                    fit_metrics_values = []
+                    for fit_metric_name in fit_metrics_names:
+                        fit_metric_value = "N/A"
+                        if fit_metric_name in aggregated_metrics:
+                            fit_metric_value = str(aggregated_metrics[fit_metric_name])
+                        fit_metrics_values.append(fit_metric_value)
+                    data_line = ("{0},{1},{2},{3},{4},{5}\n"
+                                 .format(comm_round_key,
+                                         client_selector,
+                                         metrics_aggregator,
+                                         num_tasks,
+                                         num_available_clients,
+                                         ",".join(fit_metrics_values)))
+                    data_lines.append(data_line)
+                case "fit_selection_performance_history_file":
+                    fit_selection_performance_history = self.get_attribute(history_attribute)
+                    comm_round_values = fit_selection_performance_history[comm_round_key]
+                    client_selector = comm_round_values["client_selector"]
+                    training_deadline_key = "fit_deadline_in_seconds"
+                    if training_deadline_key in client_selection_for_training_settings:
+                        training_deadline_value = client_selection_for_training_settings[training_deadline_key]
+                        if training_deadline_value != "infinity":
+                            client_selector = client_selector + "_D{0}".format(training_deadline_value)
+                    num_tasks = comm_round_values["num_tasks"]
+                    expected_makespan = comm_round_values["expected_makespan"]
+                    actual_makespan = comm_round_values["actual_makespan"]
+                    expected_energy_consumption = comm_round_values["expected_energy_consumption"]
+                    actual_energy_consumption = comm_round_values["actual_energy_consumption"]
+                    expected_accuracy = comm_round_values["expected_accuracy"]
+                    actual_accuracy = comm_round_values["actual_accuracy"]
+                    data_line = ("{0},{1},{2},{3},{4},{5},{6},{7},{8}\n"
+                                 .format(comm_round_key,
+                                         client_selector,
+                                         num_tasks,
+                                         expected_makespan,
+                                         actual_makespan,
+                                         expected_energy_consumption,
+                                         actual_energy_consumption,
+                                         expected_accuracy,
+                                         actual_accuracy))
+                    data_lines.append(data_line)
+                case "selected_evaluate_clients_history_file":
+                    selected_evaluate_clients_history = self.get_attribute(history_attribute)
+                    comm_round_values = selected_evaluate_clients_history[comm_round_key]
+                    client_selector_name_to_output = None
+                    training_deadline_key = "fit_deadline_in_seconds"
+                    if training_deadline_key in client_selection_for_training_settings:
+                        training_deadline_value = client_selection_for_training_settings[training_deadline_key]
+                        if training_deadline_value != "infinity":
+                            client_selector_for_training = client_selector_for_training + \
+                                                           "_D{0}".format(training_deadline_value)
+                    client_selector_for_testing = comm_round_values["client_selector"]
+                    testing_deadline_key = "evaluate_deadline_in_seconds"
+                    if testing_deadline_key in client_selection_for_testing_settings:
+                        testing_deadline_value = client_selection_for_testing_settings[testing_deadline_key]
+                        if testing_deadline_value != "infinity":
+                            client_selector_for_testing = client_selector_for_testing + \
+                                                           "_D{0}".format(testing_deadline_value)
+                    match client_selector_name_to_output_on_testing_history_files:
+                        case "only_from_training_phase":
+                            client_selector_name_to_output = client_selector_for_training
+                        case "only_from_testing_phase":
+                            client_selector_name_to_output = client_selector_for_testing
+                        case "from_both_phases":
+                            client_selector_name_to_output = "{0} ({1})".format(client_selector_for_testing,
+                                                                                client_selector_for_training)
+                    selection_duration = comm_round_values["selection_duration"]
+                    num_tasks = comm_round_values["num_tasks"]
+                    num_available_clients = comm_round_values["num_available_clients"]
+                    available_clients = comm_round_values["available_clients"]
+                    num_selected_clients = comm_round_values["num_selected_clients"]
+                    selected_clients = comm_round_values["selected_clients"]
+                    data_line = ("{0},{1},{2},{3},{4},{5},{6},{7}\n"
+                                 .format(comm_round_key,
+                                         client_selector_name_to_output,
+                                         selection_duration,
+                                         num_tasks,
+                                         num_available_clients,
+                                         "|".join(available_clients) if available_clients else None,
+                                         num_selected_clients,
+                                         "|".join(selected_clients) if selected_clients else None))
+                    data_lines.append(data_line)
+                case "individual_evaluate_metrics_history_file":
+                    individual_evaluate_metrics_history = self.get_attribute(history_attribute)
+                    comm_round_values = individual_evaluate_metrics_history[comm_round_key]
+                    selected_evaluate_clients_history = self.get_attribute("_selected_evaluate_clients_history")
+                    evaluate_metrics_names = []
+                    clients_metrics_dicts = comm_round_values["clients_metrics_dicts"]
+                    for client_metrics_dict in clients_metrics_dicts:
+                        client_metrics = list(client_metrics_dict.values())[0]
+                        evaluate_metrics_names.extend(client_metrics.keys())
+                    evaluate_metrics_names = sorted(set(evaluate_metrics_names))
+                    client_selector_name_to_output = None
+                    client_selector_for_training = client_selection_for_training_settings["client_selector_for_training"]
+                    training_deadline_key = "fit_deadline_in_seconds"
+                    if training_deadline_key in client_selection_for_training_settings:
+                        training_deadline_value = client_selection_for_training_settings[training_deadline_key]
+                        if training_deadline_value != "infinity":
+                            client_selector_for_training = client_selector_for_training + \
+                                                           "_D{0}".format(training_deadline_value)
+                    client_selector_for_testing = comm_round_values["client_selector"]
+                    testing_deadline_key = "evaluate_deadline_in_seconds"
+                    if testing_deadline_key in client_selection_for_testing_settings:
+                        testing_deadline_value = client_selection_for_testing_settings[testing_deadline_key]
+                        if testing_deadline_value != "infinity":
+                            client_selector_for_testing = client_selector_for_testing + \
+                                                           "_D{0}".format(testing_deadline_value)
+                    match client_selector_name_to_output_on_testing_history_files:
+                        case "only_from_training_phase":
+                            client_selector_name_to_output = client_selector_for_training
+                        case "only_from_testing_phase":
+                            client_selector_name_to_output = client_selector_for_testing
+                        case "from_both_phases":
+                            client_selector_name_to_output = "{0} ({1})".format(client_selector_for_testing,
+                                                                                client_selector_for_training)
+                    num_tasks = comm_round_values["num_tasks"]
+                    num_available_clients = comm_round_values["num_available_clients"]
+                    clients_metrics_dicts = comm_round_values["clients_metrics_dicts"]
+                    clients_metrics_dicts = sorted(clients_metrics_dicts, key=lambda x: list(x.keys()))
+                    selected_clients = list(selected_evaluate_clients_history[comm_round_key]["selected_clients"])
+                    expected_durations = list(selected_evaluate_clients_history[comm_round_key]["expected_durations"])
+                    expected_energy_consumptions \
+                        = list(selected_evaluate_clients_history[comm_round_key]["expected_energy_consumptions"])
+                    expected_accuracies = list(selected_evaluate_clients_history[comm_round_key]["expected_accuracies"])
+                    for client_metrics_dict in clients_metrics_dicts:
+                        client_id_str = list(client_metrics_dict.keys())[0]
+                        client_id_str_index = selected_clients.index(client_id_str)
+                        client_expected_duration = expected_durations[client_id_str_index]
+                        client_expected_energy_consumption = expected_energy_consumptions[client_id_str_index]
+                        client_expected_accuracy = expected_accuracies[client_id_str_index]
+                        client_metrics = list(client_metrics_dict.values())[0]
+                        evaluate_metrics_values = []
+                        for evaluate_metric_name in evaluate_metrics_names:
+                            evaluate_metric_value = "N/A"
+                            if evaluate_metric_name in client_metrics:
+                                evaluate_metric_value = str(client_metrics[evaluate_metric_name])
+                            evaluate_metrics_values.append(evaluate_metric_value)
+                        data_line = ("{0},{1},{2},{3},{4},{5},{6},{7},{8}\n"
+                                     .format(comm_round_key,
+                                             client_selector_name_to_output,
+                                             num_tasks,
+                                             num_available_clients,
+                                             client_id_str,
+                                             client_expected_duration,
+                                             client_expected_energy_consumption,
+                                             client_expected_accuracy,
+                                             ",".join(evaluate_metrics_values)))
+                        data_lines.append(data_line)
+                case "aggregated_evaluate_metrics_history_file":
+                    aggregated_evaluate_metrics_history = self.get_attribute(history_attribute)
+                    comm_round_values = aggregated_evaluate_metrics_history[comm_round_key]
+                    evaluate_metrics_names = []
+                    aggregated_metrics = comm_round_values["aggregated_metrics"]
+                    evaluate_metrics_names.extend(aggregated_metrics.keys())
+                    evaluate_metrics_names = sorted(set(evaluate_metrics_names))
+                    client_selector_name_to_output = None
+                    client_selector_for_training = client_selection_for_training_settings["client_selector_for_training"]
+                    training_deadline_key = "fit_deadline_in_seconds"
+                    if training_deadline_key in client_selection_for_training_settings:
+                        training_deadline_value = client_selection_for_training_settings[training_deadline_key]
+                        if training_deadline_value != "infinity":
+                            client_selector_for_training = client_selector_for_training + \
+                                                           "_D{0}".format(training_deadline_value)
+                    client_selector_for_testing = comm_round_values["client_selector"]
+                    testing_deadline_key = "evaluate_deadline_in_seconds"
+                    if testing_deadline_key in client_selection_for_testing_settings:
+                        testing_deadline_value = client_selection_for_testing_settings[testing_deadline_key]
+                        if testing_deadline_value != "infinity":
+                            client_selector_for_testing = client_selector_for_testing + \
+                                                           "_D{0}".format(testing_deadline_value)
+                    match client_selector_name_to_output_on_testing_history_files:
+                        case "only_from_training_phase":
+                            client_selector_name_to_output = client_selector_for_training
+                        case "only_from_testing_phase":
+                            client_selector_name_to_output = client_selector_for_testing
+                        case "from_both_phases":
+                            client_selector_name_to_output = "{0} ({1})".format(client_selector_for_testing,
+                                                                                client_selector_for_training)
+                    metrics_aggregator = comm_round_values["metrics_aggregator"]
+                    num_tasks = comm_round_values["num_tasks"]
+                    num_available_clients = comm_round_values["num_available_clients"]
+                    aggregated_metrics = comm_round_values["aggregated_metrics"]
+                    evaluate_metrics_values = []
+                    for evaluate_metric_name in evaluate_metrics_names:
+                        evaluate_metric_value = "N/A"
+                        if evaluate_metric_name in aggregated_metrics:
+                            evaluate_metric_value = str(aggregated_metrics[evaluate_metric_name])
+                        evaluate_metrics_values.append(evaluate_metric_value)
+                    data_line = ("{0},{1},{2},{3},{4},{5}\n"
+                                 .format(comm_round_key,
+                                         client_selector_name_to_output,
+                                         metrics_aggregator,
+                                         num_tasks,
+                                         num_available_clients,
+                                         ",".join(evaluate_metrics_values)))
+                    data_lines.append(data_line)
+                case "evaluate_selection_performance_history_file":
+                    evaluate_selection_performance_history = self.get_attribute(history_attribute)
+                    comm_round_values = evaluate_selection_performance_history[comm_round_key]
+                    client_selector_name_to_output = None
+                    client_selector_for_training = client_selection_for_training_settings["client_selector_for_training"]
+                    training_deadline_key = "fit_deadline_in_seconds"
+                    if training_deadline_key in client_selection_for_training_settings:
+                        training_deadline_value = client_selection_for_training_settings[training_deadline_key]
+                        if training_deadline_value != "infinity":
+                            client_selector_for_training = client_selector_for_training + \
+                                                           "_D{0}".format(training_deadline_value)
+                    client_selector_for_testing = comm_round_values["client_selector"]
+                    testing_deadline_key = "evaluate_deadline_in_seconds"
+                    if testing_deadline_key in client_selection_for_testing_settings:
+                        testing_deadline_value = client_selection_for_testing_settings[testing_deadline_key]
+                        if testing_deadline_value != "infinity":
+                            client_selector_for_testing = client_selector_for_testing + \
+                                                           "_D{0}".format(testing_deadline_value)
+                    match client_selector_name_to_output_on_testing_history_files:
+                        case "only_from_training_phase":
+                            client_selector_name_to_output = client_selector_for_training
+                        case "only_from_testing_phase":
+                            client_selector_name_to_output = client_selector_for_testing
+                        case "from_both_phases":
+                            client_selector_name_to_output = "{0} ({1})".format(client_selector_for_testing,
+                                                                                client_selector_for_training)
+                    num_tasks = comm_round_values["num_tasks"]
+                    expected_makespan = comm_round_values["expected_makespan"]
+                    actual_makespan = comm_round_values["actual_makespan"]
+                    expected_energy_consumption = comm_round_values["expected_energy_consumption"]
+                    actual_energy_consumption = comm_round_values["actual_energy_consumption"]
+                    expected_accuracy = comm_round_values["expected_accuracy"]
+                    actual_accuracy = comm_round_values["actual_accuracy"]
+                    data_line = ("{0},{1},{2},{3},{4},{5},{6},{7},{8}\n"
+                                 .format(comm_round_key,
+                                         client_selector_name_to_output,
+                                         num_tasks,
+                                         expected_makespan,
+                                         actual_makespan,
+                                         expected_energy_consumption,
+                                         actual_energy_consumption,
+                                         expected_accuracy,
+                                         actual_accuracy))
+                    data_lines.append(data_line)
+            if history_output_file.exists() and data_lines:
+                with open(file=history_output_file, mode="a", encoding="utf-8") as file:
+                    file.writelines(data_lines)
 
     def aggregate_fit(self,
                       server_round: int,
@@ -787,6 +1334,13 @@ class FlowerServer(Strategy):
         # Aggregate the training metrics.
         fit_metrics = [(result.num_examples, result.metrics) for _, result in results]
         aggregated_fit_metrics = self._aggregate_fit_metrics(server_round, fit_metrics)
+        # Set the phase value.
+        phase = "train"
+        # Initialize the training history files after finishing the first round, if needed.
+        if server_round == 1:
+            self._initialize_history_output_files(phase)
+        # Append the communication round data to the training history files.
+        self._append_round_data_to_history_files(server_round, phase)
         # Return the aggregated model parameters and aggregated training metrics.
         return aggregated_model_parameters, aggregated_fit_metrics
 
@@ -874,61 +1428,6 @@ class FlowerServer(Strategy):
         # Return the list of (evaluate_client_proxy, evaluate_client_instructions) pairs.
         return evaluate_pairs
 
-    def _update_individual_evaluate_metrics_history(self,
-                                                    comm_round: int,
-                                                    evaluate_metrics: list[tuple[int, Metrics]]) -> None:
-        individual_evaluate_metrics_history = self.get_attribute("_individual_evaluate_metrics_history")
-        comm_round_key = "comm_round_{0}".format(comm_round)
-        if comm_round_key not in individual_evaluate_metrics_history:
-            server_strategy_settings = self.get_attribute("_server_strategy_settings")
-            client_selection_settings = server_strategy_settings["client_selection"]
-            client_selection_for_testing_settings = client_selection_settings["client_selection_for_testing_settings"]
-            client_selector_for_testing = client_selection_for_testing_settings["client_selector_for_testing"]
-            selected_evaluate_clients_history = self.get_attribute("_selected_evaluate_clients_history")
-            num_tasks = selected_evaluate_clients_history[comm_round_key]["num_tasks"]
-            num_available_clients = selected_evaluate_clients_history[comm_round_key]["num_available_clients"]
-            evaluate_clients_metrics = []
-            for metric_tuple in evaluate_metrics:
-                client_metrics = metric_tuple[1]
-                client_id = client_metrics["client_id"]
-                client_id_str = "client_{0}".format(client_id)
-                client_metrics_copy = client_metrics.copy()
-                client_metrics_copy.pop("client_id")
-                client_metrics_copy["hostname"] = client_metrics_copy.pop("client_hostname")
-                client_metrics_copy["num_cpus"] = client_metrics_copy.pop("client_num_cpus")
-                client_metrics_copy["cpu_cores_list"] = client_metrics_copy.pop("client_cpu_cores_list")
-                evaluate_clients_metrics.append({client_id_str: client_metrics_copy})
-            comm_round_values = {"client_selector": client_selector_for_testing,
-                                 "num_tasks": num_tasks,
-                                 "num_available_clients": num_available_clients,
-                                 "clients_metrics_dicts": evaluate_clients_metrics}
-            comm_round_individual_evaluate_metrics = {comm_round_key: comm_round_values}
-            individual_evaluate_metrics_history.update(comm_round_individual_evaluate_metrics)
-            self._set_attribute("_individual_evaluate_metrics_history", individual_evaluate_metrics_history)
-
-    def _update_aggregated_evaluate_metrics_history(self,
-                                                    comm_round: int,
-                                                    metrics_aggregator: str,
-                                                    aggregated_evaluate_metrics: dict) -> None:
-        aggregated_evaluate_metrics_history = self.get_attribute("_aggregated_evaluate_metrics_history")
-        comm_round_key = "comm_round_{0}".format(comm_round)
-        if comm_round_key not in aggregated_evaluate_metrics_history:
-            server_strategy_settings = self.get_attribute("_server_strategy_settings")
-            client_selection_settings = server_strategy_settings["client_selection"]
-            client_selection_for_testing_settings = client_selection_settings["client_selection_for_testing_settings"]
-            client_selector_for_testing = client_selection_for_testing_settings["client_selector_for_testing"]
-            selected_evaluate_clients_history = self.get_attribute("_selected_evaluate_clients_history")
-            num_tasks = selected_evaluate_clients_history[comm_round_key]["num_tasks"]
-            num_available_clients = selected_evaluate_clients_history[comm_round_key]["num_available_clients"]
-            comm_round_values = {"client_selector": client_selector_for_testing,
-                                 "metrics_aggregator": metrics_aggregator,
-                                 "num_tasks": num_tasks,
-                                 "num_available_clients": num_available_clients,
-                                 "aggregated_metrics": aggregated_evaluate_metrics}
-            comm_round_aggregated_evaluate_metrics = {comm_round_key: comm_round_values}
-            aggregated_evaluate_metrics_history.update(comm_round_aggregated_evaluate_metrics)
-            self._set_attribute("_aggregated_evaluate_metrics_history", aggregated_evaluate_metrics_history)
-
     def _aggregate_evaluate_metrics(self,
                                     comm_round: int,
                                     evaluate_metrics: list[tuple[int, Metrics]]) -> Optional[Metrics]:
@@ -956,12 +1455,12 @@ class FlowerServer(Strategy):
         # Calculate the energy timestamp metrics.
         self._calculate_energy_timestamp_metrics(evaluate_metrics, phase)
         # Update the individual testing metrics history.
-        self._update_individual_evaluate_metrics_history(comm_round, evaluate_metrics)
+        self._update_individual_metrics_history(comm_round, phase, evaluate_metrics)
         # Update the history of testing selection's performance (actual metrics values).
         self._update_selection_performance_history(comm_round, phase)
         # Remove the undesired metrics, if any.
         undesired_metrics = ["client_id", "client_hostname", "client_num_cpus", "client_cpu_cores_list",
-                             "testing_start_timestamp", "testing_end_timestamp"]
+                             "testing_start_timestamp", "testing_end_timestamp", "emulated_device_name"]
         evaluate_metrics = self._remove_undesired_metrics(evaluate_metrics, undesired_metrics)
         # Initialize the aggregated testing metrics dictionary (aggregated_evaluate_metrics).
         aggregated_evaluate_metrics = {}
@@ -969,7 +1468,7 @@ class FlowerServer(Strategy):
         if metrics_aggregator == "Weighted_Average":
             aggregated_evaluate_metrics = aggregate_metrics_by_weighted_average(evaluate_metrics)
         # Update the aggregated testing metrics history.
-        self._update_aggregated_evaluate_metrics_history(comm_round, metrics_aggregator, aggregated_evaluate_metrics)
+        self._update_aggregated_metrics_history(comm_round, phase, metrics_aggregator, aggregated_evaluate_metrics)
         # Get the number of participating clients.
         num_participating_clients = len(evaluate_metrics)
         num_participating_clients_str = "".join([str(num_participating_clients),
@@ -1006,6 +1505,13 @@ class FlowerServer(Strategy):
         # Aggregate the testing metrics.
         evaluate_metrics = [(result.num_examples, result.metrics) for _, result in results]
         aggregated_evaluate_metrics = self._aggregate_evaluate_metrics(server_round, evaluate_metrics)
+        # Set the phase value.
+        phase = "test"
+        # Initialize the testing history files after finishing the first round, if needed.
+        if server_round == 1:
+            self._initialize_history_output_files(phase)
+        # Append the communication round data to the testing history files.
+        self._append_round_data_to_history_files(server_round, phase)
         # Return the aggregated loss and aggregated testing metrics.
         return aggregated_loss, aggregated_evaluate_metrics
 
