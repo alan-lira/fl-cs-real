@@ -22,7 +22,7 @@ from typing import Optional
 from flwr.client import Client, start_client
 from flwr.common import NDArray
 from flwr_datasets import FederatedDataset
-from flwr_datasets.partitioner import DirichletPartitioner, IidPartitioner
+from flwr_datasets.partitioner import DirichletPartitioner, IidPartitioner, PathologicalPartitioner
 
 from fl_cs_real.client.flower_numpy_client import FlowerNumpyClient
 from fl_cs_real.energy_monitor.powerjoular_energy_monitor import PowerJoularEnergyMonitor
@@ -142,6 +142,10 @@ class FlowerClientLauncher:
                 dirichlet_partitioner_section = "DirichletPartitioner Settings"
                 dirichlet_partitioner_settings = parse_config_section(config_file, dirichlet_partitioner_section)
                 federated_dataset_settings.update(dirichlet_partitioner_settings)
+            case "PathologicalPartitioner":
+                pathological_partitioner_section = "PathologicalPartitioner Settings"
+                pathological_partitioner_settings = parse_config_section(config_file, pathological_partitioner_section)
+                federated_dataset_settings.update(pathological_partitioner_settings)
         self._set_attribute("_federated_dataset_settings", federated_dataset_settings)
         # Parse and set the task assignment capacities settings.
         task_assignment_capacities_section = "Task Assignment Capacities Settings"
@@ -339,6 +343,33 @@ class FlowerClientLauncher:
                                                                     self_balancing=test_dataset_self_balancing,
                                                                     shuffle=test_dataset_shuffle,
                                                                     seed=test_dataset_seed)
+                case "PathologicalPartitioner":
+                    # Get the training dataset settings.
+                    training_dataset_partition_by = federated_dataset_settings["training_dataset_partition_by"]
+                    training_num_classes_per_partition = federated_dataset_settings["training_num_classes_per_partition"]
+                    training_class_assignment_mode = federated_dataset_settings["training_class_assignment_mode"]
+                    training_dataset_shuffle = federated_dataset_settings["training_dataset_shuffle"]
+                    training_dataset_seed = federated_dataset_settings["training_dataset_seed"]
+                    # Get the test dataset settings.
+                    test_dataset_partition_by = federated_dataset_settings["test_dataset_partition_by"]
+                    test_num_classes_per_partition = federated_dataset_settings["test_num_classes_per_partition"]
+                    test_class_assignment_mode = federated_dataset_settings["test_class_assignment_mode"]
+                    test_dataset_shuffle = federated_dataset_settings["test_dataset_shuffle"]
+                    test_dataset_seed = federated_dataset_settings["test_dataset_seed"]
+                    # Set the training dataset partitioner.
+                    training_dataset_partitioner = PathologicalPartitioner(num_partitions=num_partitions,
+                                                                           partition_by=training_dataset_partition_by,
+                                                                           num_classes_per_partition=training_num_classes_per_partition,
+                                                                           class_assignment_mode=training_class_assignment_mode,
+                                                                           shuffle=training_dataset_shuffle,
+                                                                           seed=training_dataset_seed)
+                    # Set the test dataset partitioner.
+                    test_dataset_partitioner = PathologicalPartitioner(num_partitions=num_partitions,
+                                                                       partition_by=test_dataset_partition_by,
+                                                                       num_classes_per_partition=test_num_classes_per_partition,
+                                                                       class_assignment_mode=test_class_assignment_mode,
+                                                                       shuffle=test_dataset_shuffle,
+                                                                       seed=test_dataset_seed)
             # Update the dictionary of partitioners.
             partitioners.update({train_partitioner_key: training_dataset_partitioner,
                                  test_partitioner_key: test_dataset_partitioner})
