@@ -36,7 +36,9 @@ def select_clients_using_fedaecs_adapted(comm_round: int,
         # Schedule the tasks to the selected clients.
         schedule_tasks_to_selected_clients(num_tasks_to_schedule,
                                            selected_all_available_clients,
-                                           phase)
+                                           phase,
+                                           True,
+                                           schedule_to_all_clients=True)
         # Append the selected clients into the selected clients list.
         selected_clients.extend(selected_all_available_clients)
         # Update the selection dictionary with the selected clients for the schedule.

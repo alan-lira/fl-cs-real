@@ -40,7 +40,8 @@ def select_clients_using_random(comm_round: int,
     # Schedule the tasks to the selected clients.
     schedule_tasks_to_selected_clients(num_tasks_to_schedule,
                                        selected_clients,
-                                       phase)
+                                       phase,
+                                       False)
     # Update the selection dictionary with the selected clients for the schedule.
     selection.update({"selected_clients": selected_clients})
     # Log a 'number of clients selected' message.
